@@ -7,4 +7,6 @@ __pycache__/
 *.bag
 *.db3
 .colcon/
-
+*.pt
+!isaac_ws/src/isaac_ai/models/mineral_detector.pt
+!isaac_ws/src/isaac_ai/policies/driving_policy.pt

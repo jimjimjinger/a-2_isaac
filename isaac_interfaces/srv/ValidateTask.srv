@@ -1,5 +1,0 @@
-string action_name
----
-bool accepted
-string reason
-

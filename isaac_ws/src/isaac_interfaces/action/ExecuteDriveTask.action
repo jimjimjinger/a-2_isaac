@@ -1,0 +1,7 @@
+string task_name
+float32[] target
+---
+bool success
+string message
+---
+float32 progress

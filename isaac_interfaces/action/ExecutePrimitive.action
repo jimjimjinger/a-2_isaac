@@ -1,8 +1,0 @@
-string primitive_name
-float32[] parameters
----
-bool success
-string message
----
-float32 progress
-

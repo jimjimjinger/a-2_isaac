@@ -1,5 +1,0 @@
-simulation:
-  world_file: worlds/default.usd
-  camera_frame: camera_link
-  robot_frame: base_link
-
