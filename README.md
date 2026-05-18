@@ -5,7 +5,7 @@ Isaac Sim 기반 화성 탐사 로버 자원 채취 시스템의 ROS2 workspace 
 ## Workspace
 
 ```text
-src/
+~/dev_ws/isaac_sim/src/
 ├─ isaac_bringup/
 ├─ isaac_sim/
 ├─ isaac_ai/
@@ -26,7 +26,7 @@ src/
 ## Build
 
 ```bash
-cd ~/dev_ws/isaac_ws
+cd ~/dev_ws/isaac_sim
 colcon build --symlink-install
 ```
 
