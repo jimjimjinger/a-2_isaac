@@ -26,7 +26,7 @@ src/
 ## Build
 
 ```bash
-cd ~/dev_ws/isaac_sim/src/isaac_ws
+cd ~/dev_ws/isaac_ws
 colcon build --symlink-install
 ```
 
