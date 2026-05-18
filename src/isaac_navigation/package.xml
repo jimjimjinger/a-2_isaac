@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>isaac_nodes</name>
+  <name>isaac_navigation</name>
   <version>0.0.1</version>
-  <description>Mission management, battery monitoring, and robot arm execution nodes for the Mars rover.</description>
+  <description>Autonomous navigation, path planning, obstacle avoidance, map management, manual control, and rover driving execution.</description>
   <maintainer email="jimjimjinger@users.noreply.github.com">jimjimjinger</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_python</buildtool_depend>

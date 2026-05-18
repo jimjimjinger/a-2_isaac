@@ -13,6 +13,7 @@ setup(
             "launch/full_system.launch.py",
             "launch/sim.launch.py",
             "launch/ai.launch.py",
+            "launch/navigation.launch.py",
             "launch/nodes.launch.py",
         ]),
     ],

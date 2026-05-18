@@ -1,11 +1,11 @@
 from setuptools import setup
 
-package_name = "isaac_nodes"
+package_name = "isaac_navigation"
 
 setup(
     name=package_name,
     version="0.0.1",
-    packages=[package_name, f"{package_name}.manipulation_primitives"],
+    packages=[package_name, f"{package_name}.navigation_primitives"],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
@@ -14,6 +14,6 @@ setup(
     zip_safe=True,
     maintainer="jimjimjinger",
     maintainer_email="jimjimjinger@users.noreply.github.com",
-    description="Mission management, battery monitoring, and robot arm execution nodes for the Mars rover.",
+    description="Autonomous navigation, path planning, obstacle avoidance, map management, manual control, and rover driving execution.",
     license="MIT",
 )
