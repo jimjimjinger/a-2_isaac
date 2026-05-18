@@ -1,6 +1,6 @@
 from setuptools import setup
 
-package_name = "isaac_bringup"
+package_name = "isaac_launch"
 
 setup(
     name=package_name,
@@ -19,4 +19,3 @@ setup(
     description="Launch and configuration package for the Isaac manipulation pipeline.",
     license="MIT",
 )
-

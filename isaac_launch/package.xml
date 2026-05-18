@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>isaac_bringup</name>
+  <name>isaac_launch</name>
   <version>0.0.1</version>
   <description>Launch and configuration package for the Isaac manipulation pipeline.</description>
   <maintainer email="jimjimjinger@users.noreply.github.com">jimjimjinger</maintainer>
@@ -17,4 +17,3 @@
     <build_type>ament_python</build_type>
   </export>
 </package>
-
