@@ -1,1 +1,1 @@
-# Train the reinforcement learning driving stability policy.
+# Train the reinforcement learning policy for driving stability.

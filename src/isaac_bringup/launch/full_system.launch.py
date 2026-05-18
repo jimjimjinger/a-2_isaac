@@ -1,6 +1,1 @@
-from launch import LaunchDescription
-
-
-def generate_launch_description():
-    # TODO: Include sim, AI, navigation, and node launch files.
-    return LaunchDescription([])
+# TODO: Launch the full Mars rover resource collection system.

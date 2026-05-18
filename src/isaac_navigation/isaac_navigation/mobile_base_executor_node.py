@@ -1,1 +1,1 @@
-# Execute mobile base driving commands.
+# Execute rover driving commands.

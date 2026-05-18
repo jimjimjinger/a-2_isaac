@@ -1,1 +1,1 @@
-# Manage autonomous rover navigation flow.
+# Integrate autonomous navigation flow, path decisions, obstacle avoidance, manual mode, and map management.

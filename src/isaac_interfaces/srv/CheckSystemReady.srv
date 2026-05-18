@@ -1,4 +1,0 @@
-bool request
----
-bool ready
-string message

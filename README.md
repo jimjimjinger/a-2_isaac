@@ -1,6 +1,6 @@
 # Isaac Sim 기반 화성 탐사 로버 자원 채취 시스템
 
-Isaac Sim 기반 화성 탐사 로버 프로젝트의 ROS2 workspace skeleton입니다.
+Isaac Sim 기반 화성 탐사 로버 자원 채취 시스템의 ROS2 workspace 모듈 구조입니다.
 
 ## Workspace
 
@@ -17,11 +17,11 @@ src/
 ## Modules
 
 - `isaac_bringup`: 전체 시스템 launch 실행 관리
-- `isaac_sim`: 화성 지형, 로버, 로봇팔, cargo, 광석, 기지, 센서 환경 구성
-- `isaac_ai`: 광석 인식, 지형 인식, 강화학습 기반 주행 판단
-- `isaac_navigation`: 자율주행, 경로 계획, 장애물 회피, 맵 관리, 수동 조종, 주행 실행
+- `isaac_sim`: Isaac Sim 화성 탐사 환경 구성
+- `isaac_ai`: 광석 인식, 지형/장애물 판단, 강화학습 기반 주행 행동 선택
+- `isaac_navigation`: 자율주행 흐름 관리, 경로 판단, 장애물 회피, 수동 조종, 맵 관리, 주행 실행
 - `isaac_nodes`: 전체 미션 관리, 배터리 감시, 로봇팔 실행
-- `isaac_interfaces`: ROS2 노드 간 msg/srv/action 통신 규격
+- `isaac_interfaces`: ROS2 노드 간 통신 규격 정의 예정 폴더
 
 ## Build
 

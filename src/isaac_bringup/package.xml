@@ -8,10 +8,6 @@
   <buildtool_depend>ament_python</buildtool_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
-  <exec_depend>isaac_ai</exec_depend>
-  <exec_depend>isaac_navigation</exec_depend>
-  <exec_depend>isaac_nodes</exec_depend>
-  <exec_depend>isaac_sim</exec_depend>
   <export>
     <build_type>ament_python</build_type>
   </export>

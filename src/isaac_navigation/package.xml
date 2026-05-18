@@ -2,7 +2,7 @@
 <package format="3">
   <name>isaac_navigation</name>
   <version>0.0.1</version>
-  <description>Autonomous navigation, path planning, obstacle avoidance, map management, manual control, and rover driving execution.</description>
+  <description>Navigation package for autonomous driving flow and rover drive execution.</description>
   <maintainer email="jimjimjinger@users.noreply.github.com">jimjimjinger</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_python</buildtool_depend>

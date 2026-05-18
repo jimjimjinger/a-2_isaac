@@ -14,6 +14,6 @@ setup(
     zip_safe=True,
     maintainer="jimjimjinger",
     maintainer_email="jimjimjinger@users.noreply.github.com",
-    description="Autonomous navigation, path planning, obstacle avoidance, map management, manual control, and rover driving execution.",
+    description="Navigation package for autonomous driving flow and rover drive execution.",
     license="MIT",
 )
