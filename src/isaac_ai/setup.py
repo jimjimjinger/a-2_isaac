@@ -5,7 +5,7 @@ package_name = "isaac_ai"
 setup(
     name=package_name,
     version="0.0.1",
-    packages=[package_name],
+    packages=[package_name, f"{package_name}.vision", f"{package_name}.rl"],
     data_files=[("share/ament_index/resource_index/packages", [f"resource/{package_name}"]), (f"share/{package_name}", ["package.xml"])],
     install_requires=["setuptools"],
     zip_safe=True,
