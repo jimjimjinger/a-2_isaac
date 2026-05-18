@@ -1,0 +1,10 @@
+build/
+install/
+log/
+*.pyc
+__pycache__/
+*.zip
+*.bag
+*.db3
+.colcon/
+
