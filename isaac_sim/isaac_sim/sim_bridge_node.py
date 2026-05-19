@@ -32,6 +32,9 @@ class SimBridgeNode(Node):
         request: CheckSystemReady.Request,
         response: CheckSystemReady.Response,
     ) -> CheckSystemReady.Response:
+        # TODO(real sim readiness): query Isaac Sim/ROS2 Bridge state here.
+        # Typical checks: world loaded, robot spawned, sensors publishing,
+        # control graph active, and required ROS2 nodes discovered.
         response.ready = bool(self.get_parameter("ready").value)
         response.missing_nodes = []
         response.message = f"ready for {request.requester}" if response.ready else "mock bridge not ready"
@@ -42,6 +45,9 @@ class SimBridgeNode(Node):
         request: ResetSimulation.Request,
         response: ResetSimulation.Response,
     ) -> ResetSimulation.Response:
+        # TODO(real sim reset): call Isaac Sim APIs or publish reset commands to
+        # reset world state, robot pose, arm pose, cargo/minerals, and mission
+        # state according to the request flags.
         response.success = True
         response.message = (
             "mock reset accepted "
@@ -55,6 +61,9 @@ class SimBridgeNode(Node):
         request: SaveExplorationMap.Request,
         response: SaveExplorationMap.Response,
     ) -> SaveExplorationMap.Response:
+        # TODO(real map save): serialize the actual exploration map or occupancy
+        # output from the simulation/navigation stack. This placeholder only
+        # returns the path that a real map saver should write.
         target_dir = request.target_path or str(self.get_parameter("default_map_dir").value)
         response.success = True
         response.saved_path = os.path.join(target_dir, f"{request.map_name}.yaml")

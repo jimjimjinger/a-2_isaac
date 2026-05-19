@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/SaveExplorationMap.srv"
   "action/ExecuteArmTask.action"
   "action/ExecuteDriveTask.action"
+  "action/NavigateTask.action"
   DEPENDENCIES builtin_interfaces std_msgs action_msgs
 )
 

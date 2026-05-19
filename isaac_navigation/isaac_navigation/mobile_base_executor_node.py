@@ -58,6 +58,12 @@ class MobileBaseExecutorNode(Node):
         feedback_hz = max(float(self.get_parameter("feedback_hz").value), 0.1)
         steps = max(int(duration_sec * feedback_hz), 1)
 
+        # TODO(real driving): replace this timed mock loop with actual rover
+        # control. Depending on the team's backend, this is where ExecuteDriveTask
+        # should call navigation_primitives, publish /cmd_vel, send a Nav2 goal,
+        # or command Isaac Sim wheel/articulation controllers. Keep action
+        # feedback/result semantics stable for mission_manager and
+        # navigation_manager.
         for step in range(steps):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()

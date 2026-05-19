@@ -57,6 +57,11 @@ class ArmExecutorNode(Node):
         feedback_hz = max(float(self.get_parameter("feedback_hz").value), 0.1)
         steps = max(int(duration_sec * feedback_hz), 1)
 
+        # TODO(real manipulation): replace this timed mock loop with calls into
+        # manipulation_primitives, MoveIt, gripper drivers, or Isaac Sim
+        # articulation control. The supported command names are the stable
+        # mission contract: pick_mineral, place_to_cargo, unload_to_base, and
+        # deploy_solar_panel.
         for step in range(steps):
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()

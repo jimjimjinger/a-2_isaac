@@ -44,6 +44,10 @@ class DrivingPolicyNode(Node):
         if self.last_mission_state and self.last_mission_state != "exploring":
             return
 
+        # TODO(real RL policy): build an observation from mission/perception
+        # state, run the trained policy model, and publish the selected action
+        # through this same SelectedDriveAction message. Navigation manager owns
+        # the final conversion from selected action to executable drive goals.
         msg = SelectedDriveAction()
         msg.action = str(self.get_parameter("default_action").value)
         if self.last_perception is not None and self.last_perception.mineral_detected:

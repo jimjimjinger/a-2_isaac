@@ -116,13 +116,18 @@ SaveExplorationMap.srv
 나중에 추가할 수 있는 액션 파일은 다음과 같습니다.
 
 ```text
+NavigateTask.action
 ExecuteDriveTask.action
 ExecuteArmTask.action
 ```
 
+### `NavigateTask.action`
+
+mission_manager_node가 navigation_manager_node에 보내는 고수준 주행 요청을 정의합니다.
+
 ### `ExecuteDriveTask.action`
 
-목표 지점 이동, 회전, 정지, 장애물 회피 등 시간이 걸리는 주행 작업 실행을 정의합니다.
+navigation_manager_node가 mobile_base_executor_node에 보내는 실제 주행 실행 요청을 정의합니다.
 
 ### `ExecuteArmTask.action`
 
@@ -152,6 +157,7 @@ battery_monitor_node → mission_manager_node
 
 Action:
 mission_manager_node → navigation_manager_node
+navigation_manager_node → mobile_base_executor_node
 mission_manager_node → arm_executor_node
 
 Service:

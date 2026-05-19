@@ -9,12 +9,11 @@ from typing import Any
 
 import rclpy
 from action_msgs.msg import GoalStatus
-from isaac_interfaces.action import ExecuteArmTask, ExecuteDriveTask
+from isaac_interfaces.action import ExecuteArmTask, NavigateTask
 from isaac_interfaces.msg import (
     BatteryState,
     MissionState as MissionStateMsg,
     PerceptionResult,
-    SelectedDriveAction,
 )
 from isaac_interfaces.srv import CheckSystemReady, ResetSimulation, SaveExplorationMap
 from rclpy.action import ActionClient
@@ -69,9 +68,8 @@ class MissionManagerNode(Node):
         self.current_waypoint_index = 0
         self.current_target: PerceptionResult | None = None
         self.pending_action: PendingAction | None = None
-        self.drive_goal_handle: Any | None = None
+        self.navigation_goal_handle: Any | None = None
         self.arm_goal_handle: Any | None = None
-        self.last_drive_action: SelectedDriveAction | None = None
         self.paused_from_state = MissionState.IDLE
         self.last_error = ""
 
@@ -86,9 +84,8 @@ class MissionManagerNode(Node):
         self.create_subscription(String, "/mission_command", self._on_mission_command, 10)
         self.create_subscription(BatteryState, "/battery_state", self._on_battery_state, 10)
         self.create_subscription(PerceptionResult, "/perception_result", self._on_perception_result, 10)
-        self.create_subscription(SelectedDriveAction, "/selected_drive_action", self._on_selected_drive_action, 10)
 
-        self.drive_action_client = ActionClient(self, ExecuteDriveTask, "/execute_drive_task")
+        self.navigation_action_client = ActionClient(self, NavigateTask, "/navigate_task")
         self.arm_action_client = ActionClient(self, ExecuteArmTask, "/execute_arm_task")
 
         self.reset_simulation_client = self.create_client(ResetSimulation, "/reset_simulation")
@@ -109,7 +106,7 @@ class MissionManagerNode(Node):
         self.declare_parameter("low_battery_threshold", 25.0)
         self.declare_parameter("critical_battery_threshold", 10.0)
         self.declare_parameter("resume_battery_threshold", 80.0)
-        self.declare_parameter("drive_action_timeout_sec", 120.0)
+        self.declare_parameter("navigation_action_timeout_sec", 120.0)
         self.declare_parameter("arm_action_timeout_sec", 45.0)
         self.declare_parameter("base_pose", '{"x": 0.0, "y": 0.0, "yaw": 0.0}')
         self.declare_parameter(
@@ -131,11 +128,7 @@ class MissionManagerNode(Node):
         self._handle_action_timeout()
 
         if self.state == MissionState.EXPLORING and self.pending_action is None:
-            if self.last_drive_action is not None:
-                self._dispatch_selected_drive_action(self.last_drive_action)
-                self.last_drive_action = None
-            else:
-                self._dispatch_next_exploration_goal()
+            self._dispatch_next_exploration_goal()
 
         if self.state == MissionState.CHARGING and self.battery_percent >= self._resume_battery_threshold:
             self._publish_event("battery_recovered", battery_percent=self.battery_percent)
@@ -185,12 +178,6 @@ class MissionManagerNode(Node):
             self.low_battery = False
             self.critical_battery = False
 
-    def _on_selected_drive_action(self, msg: SelectedDriveAction) -> None:
-        if self.state != MissionState.EXPLORING or self.pending_action is not None:
-            self.last_drive_action = msg
-            return
-        self._dispatch_selected_drive_action(msg)
-
     def _on_perception_result(self, msg: PerceptionResult) -> None:
         if not msg.mineral_detected or self.state != MissionState.EXPLORING:
             return
@@ -204,9 +191,9 @@ class MissionManagerNode(Node):
             z=msg.z,
             confidence=msg.confidence,
         )
-        self._cancel_active_drive_goal()
+        self._cancel_active_navigation_goal()
         self.pending_action = None
-        self._dispatch_drive_task(
+        self._dispatch_navigation_task(
             MissionState.NAVIGATING_TO_MINERAL,
             "drive_to_mineral",
             msg.x,
@@ -230,7 +217,7 @@ class MissionManagerNode(Node):
         if self.state not in self.ACTIVE_STATES:
             return
         self.paused_from_state = self.state
-        self._cancel_active_drive_goal()
+        self._cancel_active_navigation_goal()
         self._cancel_active_arm_goal()
         self.pending_action = None
         self._transition(MissionState.PAUSED)
@@ -248,7 +235,7 @@ class MissionManagerNode(Node):
             self._transition(MissionState.EXPLORING)
 
     def _abort_mission(self, reason: str) -> None:
-        self._cancel_active_drive_goal()
+        self._cancel_active_navigation_goal()
         self._cancel_active_arm_goal()
         self.pending_action = None
         self._transition(MissionState.ABORTED)
@@ -259,7 +246,7 @@ class MissionManagerNode(Node):
         if not self._valid_pose(base_pose):
             self._set_error("base_pose parameter must include x and y")
             return
-        self._dispatch_drive_task(
+        self._dispatch_navigation_task(
             MissionState.RETURNING_TO_BASE,
             "return_to_base",
             float(base_pose["x"]),
@@ -280,7 +267,7 @@ class MissionManagerNode(Node):
             self._set_error("exploration waypoint must include x and y")
             return
 
-        self._dispatch_drive_task(
+        self._dispatch_navigation_task(
             MissionState.EXPLORING,
             "explore_waypoint",
             float(waypoint["x"]),
@@ -289,24 +276,7 @@ class MissionManagerNode(Node):
             metadata={"source": "mission_waypoint"},
         )
 
-    def _dispatch_selected_drive_action(self, msg: SelectedDriveAction) -> None:
-        action = msg.action.strip() or "policy_action"
-        self._dispatch_drive_task(
-            MissionState.EXPLORING,
-            action,
-            msg.target_x,
-            msg.target_y,
-            msg.target_yaw,
-            metadata={
-                "source": "selected_drive_action",
-                "linear_velocity": msg.linear_velocity,
-                "angular_velocity": msg.angular_velocity,
-                "confidence": msg.confidence,
-                "reason": msg.reason,
-            },
-        )
-
-    def _dispatch_drive_task(
+    def _dispatch_navigation_task(
         self,
         next_state: MissionState,
         command: str,
@@ -318,11 +288,11 @@ class MissionManagerNode(Node):
     ) -> None:
         if self.pending_action is not None:
             return
-        if not self.drive_action_client.server_is_ready():
-            self._set_error("/execute_drive_task action server is not ready")
+        if not self.navigation_action_client.server_is_ready():
+            self._set_error("/navigate_task action server is not ready")
             return
 
-        goal = ExecuteDriveTask.Goal()
+        goal = NavigateTask.Goal()
         goal.command = command
         goal.target_x = float(target_x)
         goal.target_y = float(target_y)
@@ -332,14 +302,14 @@ class MissionManagerNode(Node):
 
         self._transition(next_state)
         self.pending_action = PendingAction(
-            kind="drive",
+            kind="navigation",
             command=command,
             started_sec=self.get_clock().now().nanoseconds / 1e9,
-            timeout_sec=float(self.get_parameter("drive_action_timeout_sec").value),
+            timeout_sec=float(self.get_parameter("navigation_action_timeout_sec").value),
         )
-        send_future = self.drive_action_client.send_goal_async(goal, feedback_callback=self._on_drive_feedback)
-        send_future.add_done_callback(self._on_drive_goal_response)
-        self._publish_event("drive_task_sent", command=command, target_id=target_id)
+        send_future = self.navigation_action_client.send_goal_async(goal, feedback_callback=self._on_navigation_feedback)
+        send_future.add_done_callback(self._on_navigation_goal_response)
+        self._publish_event("navigation_task_sent", command=command, target_id=target_id)
 
     def _dispatch_arm_task(
         self,
@@ -373,42 +343,42 @@ class MissionManagerNode(Node):
         send_future.add_done_callback(self._on_arm_goal_response)
         self._publish_event("arm_task_sent", command=command, target_id=goal.target_id)
 
-    def _on_drive_goal_response(self, future: Any) -> None:
+    def _on_navigation_goal_response(self, future: Any) -> None:
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.pending_action = None
-            self._set_error("drive task goal rejected")
+            self._set_error("navigation task goal rejected")
             return
-        self.drive_goal_handle = goal_handle
+        self.navigation_goal_handle = goal_handle
         goal_handle.get_result_async().add_done_callback(
-            lambda done, handle=goal_handle: self._on_drive_result(done, handle)
+            lambda done, handle=goal_handle: self._on_navigation_result(done, handle)
         )
 
-    def _on_drive_feedback(self, feedback_msg: Any) -> None:
+    def _on_navigation_feedback(self, feedback_msg: Any) -> None:
         feedback = feedback_msg.feedback
         self._publish_event(
-            "drive_task_feedback",
+            "navigation_task_feedback",
             task_state=feedback.state,
             progress=feedback.progress,
             message=feedback.message,
         )
 
-    def _on_drive_result(self, future: Any, goal_handle: Any) -> None:
-        if goal_handle is not self.drive_goal_handle:
-            self._publish_event("stale_drive_result_ignored")
+    def _on_navigation_result(self, future: Any, goal_handle: Any) -> None:
+        if goal_handle is not self.navigation_goal_handle:
+            self._publish_event("stale_navigation_result_ignored")
             return
         result_msg = future.result()
         result = result_msg.result
         status = result_msg.status
         command = self.pending_action.command if self.pending_action else ""
         self.pending_action = None
-        self.drive_goal_handle = None
+        self.navigation_goal_handle = None
 
         if status != GoalStatus.STATUS_SUCCEEDED or not result.success:
-            self._set_error(f"drive task {command} failed: {result.message}")
+            self._set_error(f"navigation task {command} failed: {result.message}")
             return
 
-        self._publish_event("drive_task_completed", command=command, message=result.message)
+        self._publish_event("navigation_task_completed", command=command, message=result.message)
         if command == "drive_to_mineral":
             self._dispatch_arm_task(MissionState.COLLECTING, "pick_mineral", self.current_target)
         elif command == "return_to_base":
@@ -519,7 +489,7 @@ class MissionManagerNode(Node):
         response = future.result()
         self._publish_event("reset_simulation_result", success=response.success, message=response.message)
         if response.success:
-            self._cancel_active_drive_goal()
+            self._cancel_active_navigation_goal()
             self._cancel_active_arm_goal()
             self._clear_runtime_state()
             self._transition(MissionState.IDLE)
@@ -553,7 +523,7 @@ class MissionManagerNode(Node):
 
         if self.critical_battery:
             self._publish_event("critical_battery", battery_percent=self.battery_percent)
-            self._cancel_active_drive_goal()
+            self._cancel_active_navigation_goal()
             self.pending_action = None
             self._dispatch_arm_task(MissionState.CHARGING, "deploy_solar_panel")
             return
@@ -573,16 +543,16 @@ class MissionManagerNode(Node):
             return
         timed_out = self.pending_action
         self.pending_action = None
-        if timed_out.kind == "drive":
-            self._cancel_active_drive_goal()
+        if timed_out.kind == "navigation":
+            self._cancel_active_navigation_goal()
         elif timed_out.kind == "arm":
             self._cancel_active_arm_goal()
         self._set_error(f"{timed_out.kind} action {timed_out.command} timed out")
 
-    def _cancel_active_drive_goal(self) -> None:
-        if self.drive_goal_handle is not None:
-            self.drive_goal_handle.cancel_goal_async()
-            self.drive_goal_handle = None
+    def _cancel_active_navigation_goal(self) -> None:
+        if self.navigation_goal_handle is not None:
+            self.navigation_goal_handle.cancel_goal_async()
+            self.navigation_goal_handle = None
 
     def _cancel_active_arm_goal(self) -> None:
         if self.arm_goal_handle is not None:
@@ -621,14 +591,13 @@ class MissionManagerNode(Node):
         self.current_waypoint_index = 0
         self.current_target = None
         self.pending_action = None
-        self.drive_goal_handle = None
+        self.navigation_goal_handle = None
         self.arm_goal_handle = None
-        self.last_drive_action = None
         self.last_error = ""
 
     def _set_error(self, message: str) -> None:
         self.last_error = message
-        self._cancel_active_drive_goal()
+        self._cancel_active_navigation_goal()
         self._cancel_active_arm_goal()
         self.pending_action = None
         self._transition(MissionState.ERROR)

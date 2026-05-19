@@ -35,6 +35,10 @@ class PerceptionNode(Node):
         if not bool(self.get_parameter("mock_detection_enabled").value):
             return
 
+        # TODO(real perception): replace this mock message with subscribers for
+        # Isaac Sim camera/depth/LiDAR topics. The perception implementation
+        # should fill this same PerceptionResult contract after running mineral
+        # detection, 3D pose estimation, obstacle detection, and terrain checks.
         msg = PerceptionResult()
         msg.mineral_detected = True
         msg.object_id = str(self.get_parameter("mock_object_id").value)

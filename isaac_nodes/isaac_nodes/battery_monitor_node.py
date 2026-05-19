@@ -38,6 +38,9 @@ class BatteryMonitorNode(Node):
         low_threshold = float(self.get_parameter("low_threshold").value)
         critical_threshold = float(self.get_parameter("critical_threshold").value)
 
+        # TODO(real telemetry): replace the parameter-driven mock values with
+        # Isaac Sim battery telemetry or a real BMS bridge. Mission manager only
+        # depends on this BatteryState contract and low/critical flags.
         msg = BatteryState()
         msg.percentage = float(self.percentage)
         msg.is_charging = charging
