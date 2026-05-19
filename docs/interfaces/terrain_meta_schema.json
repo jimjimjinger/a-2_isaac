@@ -1,0 +1,276 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Terrain Meta Schema (I1)",
+  "description": "T1이 생성하는 각 terrain의 meta.json 스키마. T2/T3/T4/T5가 소비.",
+  "type": "object",
+  "required": [
+    "terrain_id",
+    "version",
+    "seed",
+    "size_m",
+    "resolution_m",
+    "origin",
+    "spawn_locations",
+    "basecamp",
+    "minerals",
+    "minimap",
+    "difficulty"
+  ],
+  "properties": {
+    "terrain_id": {
+      "type": "string",
+      "pattern": "^terrain_[0-9]{5}$",
+      "description": "고유 ID, 예: terrain_00001"
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema 버전. 변경 시 마이그레이션 필요"
+    },
+    "seed": {
+      "type": "integer",
+      "description": "PCG 시드. 같은 seed → 같은 지형 재생성"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "생성 timestamp (ISO 8601)"
+    },
+
+    "size_m": {
+      "type": "array",
+      "items": {"type": "number"},
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "지형 전체 크기 [X, Y] (m). 권장: [50.0, 50.0]"
+    },
+    "resolution_m": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Heightmap 픽셀 크기 (m/px). 권장: 0.05"
+    },
+    "origin": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": {"type": "number"},
+        "y": {"type": "number"}
+      },
+      "description": "지형 좌표 원점 (좌하단)"
+    },
+
+    "generation_params": {
+      "type": "object",
+      "description": "생성 파라미터 (재현 + 디버깅용, 런타임 사용 X)",
+      "properties": {
+        "terrain": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string", "enum": ["perlin", "simplex", "ridged"]},
+            "octaves": {"type": "integer", "minimum": 1, "maximum": 8},
+            "frequency": {"type": "number", "exclusiveMinimum": 0},
+            "amplitude_m": {"type": "number", "minimum": 0},
+            "lacunarity": {"type": "number"},
+            "persistence": {"type": "number"}
+          }
+        },
+        "rocks": {
+          "type": "object",
+          "properties": {
+            "count": {"type": "integer", "minimum": 0, "maximum": 200},
+            "size_range_m": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2
+            },
+            "min_spacing_m": {"type": "number", "minimum": 0},
+            "slope_threshold_deg": {"type": "number", "minimum": 0, "maximum": 90},
+            "asset_pool": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "minerals": {
+          "type": "object",
+          "properties": {
+            "count": {"type": "integer", "minimum": 1},
+            "min_spacing_m": {"type": "number", "minimum": 0},
+            "exclude_basecamp_radius_m": {"type": "number", "minimum": 0},
+            "value_distribution": {
+              "type": "object",
+              "patternProperties": {
+                "^(blue|red|yellow)$": {
+                  "type": "object",
+                  "required": ["prob", "score"],
+                  "properties": {
+                    "prob": {"type": "number", "minimum": 0, "maximum": 1},
+                    "score": {"type": "number", "minimum": 0}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "physics_zones": {
+          "type": "object",
+          "properties": {
+            "type": {"type": "string"},
+            "noise_frequency": {"type": "number"},
+            "sand_threshold": {"type": "number"}
+          }
+        }
+      }
+    },
+
+    "spawn_locations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["x", "y", "z", "yaw"],
+        "properties": {
+          "x": {"type": "number"},
+          "y": {"type": "number"},
+          "z": {"type": "number"},
+          "yaw": {"type": "number", "description": "초기 방향 (rad, 0~2π)"},
+          "group": {"type": "string", "default": "default"}
+        }
+      },
+      "description": "안전한 스폰 후보들. reset 시 무작위 선택"
+    },
+
+    "basecamp": {
+      "type": "object",
+      "required": ["center", "radius", "marker_usd"],
+      "properties": {
+        "center": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": {"type": "number"},
+            "y": {"type": "number"}
+          }
+        },
+        "radius": {"type": "number", "exclusiveMinimum": 0},
+        "marker_usd": {"type": "string"},
+        "visual_footprint_m": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Tier 1 시각 영역"
+        },
+        "marker_height_m": {"type": "number"},
+        "shape": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["type"],
+              "properties": {
+                "type": {"type": "string", "enum": ["polygon", "usd_collision"]}
+              }
+            }
+          ],
+          "description": "Tier 2 정밀 영역. Tier 1에선 null"
+        },
+        "entry_points": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "approach_yaw_deg": {"type": "number"}
+            }
+          },
+          "description": "Tier 2 입구 좌표. Tier 1에선 빈 배열"
+        },
+        "collision_usd_path": {
+          "oneOf": [{"type": "null"}, {"type": "string"}],
+          "description": "Tier 2 벽 충돌 USD. Tier 1에선 null"
+        }
+      }
+    },
+
+    "minerals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "position", "value"],
+        "properties": {
+          "id": {"type": "integer", "minimum": 1},
+          "type": {"type": "string", "enum": ["blue", "red", "yellow"]},
+          "position": {
+            "type": "object",
+            "required": ["x", "y", "z"],
+            "properties": {
+              "x": {"type": "number"},
+              "y": {"type": "number"},
+              "z": {"type": "number"}
+            }
+          },
+          "value": {"type": "number", "minimum": 0}
+        }
+      }
+    },
+
+    "physics_zones": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["type", "polygon", "static_friction", "dynamic_friction"],
+        "properties": {
+          "type": {"type": "string", "enum": ["sand", "rocky", "ice", "regolith"]},
+          "polygon": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "static_friction": {"type": "number", "minimum": 0, "maximum": 2.0},
+          "dynamic_friction": {"type": "number", "minimum": 0, "maximum": 2.0}
+        }
+      }
+    },
+
+    "minimap": {
+      "type": "object",
+      "required": ["grid_size", "cell_size_m", "origin"],
+      "properties": {
+        "grid_size": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "cell_size_m": {"type": "number", "exclusiveMinimum": 0},
+        "origin": {
+          "type": "object",
+          "required": ["x", "y"],
+          "properties": {
+            "x": {"type": "number"},
+            "y": {"type": "number"}
+          }
+        }
+      }
+    },
+
+    "difficulty": {
+      "type": "object",
+      "required": ["score", "rock_density", "passable_ratio"],
+      "properties": {
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "rock_density": {"type": "number", "minimum": 0},
+        "max_slope_deg": {"type": "number", "minimum": 0},
+        "mean_slope_deg": {"type": "number", "minimum": 0},
+        "passable_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "longest_corridor_m": {"type": "number", "minimum": 0}
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>isaac_manipulation</name>
+  <version>0.0.1</version>
+  <description>Manipulation package: M0609 arm executor and manipulation primitives (pick, place, unload, deploy_solar).</description>
+  <maintainer email="jimjimjinger@users.noreply.github.com">jimjimjinger</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>action_msgs</exec_depend>
+  <exec_depend>isaac_interfaces</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

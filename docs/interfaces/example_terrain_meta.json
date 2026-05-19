@@ -1,0 +1,108 @@
+{
+  "terrain_id": "terrain_00001",
+  "version": "1.0",
+  "seed": 12345,
+  "generated_at": "2026-05-21T03:45:00",
+
+  "size_m": [50.0, 50.0],
+  "resolution_m": 0.05,
+  "origin": {"x": -25.0, "y": -25.0},
+
+  "generation_params": {
+    "terrain": {
+      "type": "perlin",
+      "octaves": 4,
+      "frequency": 0.08,
+      "amplitude_m": 3.0,
+      "lacunarity": 2.0,
+      "persistence": 0.5
+    },
+    "rocks": {
+      "count": 80,
+      "size_range_m": [0.3, 1.5],
+      "min_spacing_m": 1.0,
+      "slope_threshold_deg": 25,
+      "asset_pool": ["rock_4", "rock_7"]
+    },
+    "minerals": {
+      "count": 12,
+      "min_spacing_m": 3.0,
+      "exclude_basecamp_radius_m": 5.0,
+      "value_distribution": {
+        "blue":   {"prob": 0.5, "score": 10},
+        "red":    {"prob": 0.3, "score": 25},
+        "yellow": {"prob": 0.2, "score": 50}
+      }
+    },
+    "physics_zones": {
+      "type": "noise_based",
+      "noise_frequency": 0.04,
+      "sand_threshold": 0.3
+    }
+  },
+
+  "spawn_locations": [
+    {"x": 5.0, "y": 3.0, "z": 0.2, "yaw": 1.57, "group": "default"},
+    {"x": -3.2, "y": 4.1, "z": 0.18, "yaw": 0.0, "group": "default"},
+    {"x": 8.7, "y": -2.4, "z": 0.22, "yaw": 3.14, "group": "default"},
+    {"x": -7.5, "y": -6.8, "z": 0.19, "yaw": 4.71, "group": "default"},
+    {"x": 2.1, "y": 9.6, "z": 0.21, "yaw": 2.35, "group": "default"}
+  ],
+
+  "basecamp": {
+    "center": {"x": 0.0, "y": 0.0},
+    "radius": 3.0,
+    "marker_usd": "basecamp_dome.usd",
+    "visual_footprint_m": [3.0, 3.0],
+    "marker_height_m": 5.5,
+
+    "shape": null,
+    "entry_points": [],
+    "collision_usd_path": null
+  },
+
+  "minerals": [
+    {"id": 1,  "type": "blue",   "position": {"x":  8.0, "y":  4.0, "z": 0.10}, "value": 10},
+    {"id": 2,  "type": "red",    "position": {"x": -5.2, "y":  7.3, "z": 0.10}, "value": 25},
+    {"id": 3,  "type": "blue",   "position": {"x": 12.5, "y": -8.1, "z": 0.10}, "value": 10},
+    {"id": 4,  "type": "yellow", "position": {"x": -11.0, "y": 11.4, "z": 0.10}, "value": 50},
+    {"id": 5,  "type": "blue",   "position": {"x":  6.2, "y": -11.7, "z": 0.10}, "value": 10},
+    {"id": 6,  "type": "red",    "position": {"x": 15.8, "y":  6.9, "z": 0.10}, "value": 25},
+    {"id": 7,  "type": "blue",   "position": {"x": -8.4, "y": -3.2, "z": 0.10}, "value": 10},
+    {"id": 8,  "type": "yellow", "position": {"x": 18.2, "y": -1.5, "z": 0.10}, "value": 50},
+    {"id": 9,  "type": "blue",   "position": {"x": -14.7, "y": -9.3, "z": 0.10}, "value": 10},
+    {"id": 10, "type": "red",    "position": {"x":  3.5, "y": 16.8, "z": 0.10}, "value": 25},
+    {"id": 11, "type": "blue",   "position": {"x": -2.1, "y": -15.4, "z": 0.10}, "value": 10},
+    {"id": 12, "type": "yellow", "position": {"x": 14.9, "y": 14.2, "z": 0.10}, "value": 50}
+  ],
+
+  "physics_zones": [
+    {
+      "type": "sand",
+      "polygon": [[-10, -10], [10, -10], [10, 0], [-10, 0]],
+      "static_friction": 0.30,
+      "dynamic_friction": 0.25
+    },
+    {
+      "type": "rocky",
+      "polygon": [[-25, -25], [-10, -25], [-10, -10], [-25, -10]],
+      "static_friction": 0.55,
+      "dynamic_friction": 0.50
+    }
+  ],
+
+  "minimap": {
+    "grid_size": [25, 25],
+    "cell_size_m": 2.0,
+    "origin": {"x": -25.0, "y": -25.0}
+  },
+
+  "difficulty": {
+    "score": 0.35,
+    "rock_density": 0.12,
+    "max_slope_deg": 15.0,
+    "mean_slope_deg": 4.2,
+    "passable_ratio": 0.78,
+    "longest_corridor_m": 18.5
+  }
+}

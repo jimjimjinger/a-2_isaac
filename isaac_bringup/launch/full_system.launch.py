@@ -1,4 +1,4 @@
-"""Launch the full Mars rover resource collection ROS2 skeleton."""
+"""Launch the full Mars rover resource collection ROS2 system."""
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
@@ -22,11 +22,14 @@ def generate_launch_description() -> LaunchDescription:
         [
             DeclareLaunchArgument("auto_start", default_value="false"),
             _include("isaac_bringup", "sim.launch.py"),
-            _include("isaac_bringup", "ai.launch.py"),
-            _include("isaac_bringup", "navigation.launch.py"),
+            _include("isaac_bringup", "localization.launch.py"),
+            _include("isaac_bringup", "perception.launch.py"),
+            _include("isaac_bringup", "rl.launch.py"),
+            _include("isaac_bringup", "drive.launch.py"),
+            _include("isaac_bringup", "manipulation.launch.py"),
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    PathJoinSubstitution([FindPackageShare("isaac_bringup"), "launch", "nodes.launch.py"])
+                    PathJoinSubstitution([FindPackageShare("isaac_bringup"), "launch", "supervisor.launch.py"])
                 ),
                 launch_arguments={"auto_start": auto_start}.items(),
             ),
