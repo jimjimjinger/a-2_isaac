@@ -1,0 +1,13 @@
+string command
+string target_id
+float32 target_x
+float32 target_y
+float32 target_z
+string metadata
+---
+bool success
+string message
+---
+string state
+float32 progress
+string message

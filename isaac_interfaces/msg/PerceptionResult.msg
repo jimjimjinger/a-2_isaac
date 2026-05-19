@@ -1,0 +1,11 @@
+bool mineral_detected
+string object_id
+string object_type
+float32 confidence
+float32 x
+float32 y
+float32 z
+bool obstacle_detected
+float32 obstacle_distance
+bool terrain_traversable
+float32 terrain_slope

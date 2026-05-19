@@ -1,0 +1,11 @@
+string state
+string previous_state
+float32 battery_percent
+bool low_battery
+bool critical_battery
+int32 cargo_count
+int32 cargo_capacity
+int32 collected_count
+int32 collection_goal
+string active_task
+string last_error

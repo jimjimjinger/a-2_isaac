@@ -13,4 +13,10 @@ setup(
     maintainer_email="jimjimjinger@users.noreply.github.com",
     description="AI package for mineral perception and reinforcement-learning-based driving decisions.",
     license="MIT",
+    entry_points={
+        "console_scripts": [
+            "perception_node = isaac_ai.perception_node:main",
+            "driving_policy_node = isaac_ai.driving_policy_node:main",
+        ],
+    },
 )

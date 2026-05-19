@@ -16,4 +16,10 @@ setup(
     maintainer_email="jimjimjinger@users.noreply.github.com",
     description="Navigation package for autonomous driving flow and rover drive execution.",
     license="MIT",
+    entry_points={
+        "console_scripts": [
+            "navigation_manager_node = isaac_navigation.navigation_manager_node:main",
+            "mobile_base_executor_node = isaac_navigation.mobile_base_executor_node:main",
+        ],
+    },
 )

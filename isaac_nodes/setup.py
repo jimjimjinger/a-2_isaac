@@ -16,4 +16,11 @@ setup(
     maintainer_email="jimjimjinger@users.noreply.github.com",
     description="Mission management, battery monitoring, and robot arm execution nodes for the Mars rover.",
     license="MIT",
+    entry_points={
+        "console_scripts": [
+            "mission_manager_node = isaac_nodes.mission_manager_node:main",
+            "battery_monitor_node = isaac_nodes.battery_monitor_node:main",
+            "arm_executor_node = isaac_nodes.arm_executor_node:main",
+        ],
+    },
 )
