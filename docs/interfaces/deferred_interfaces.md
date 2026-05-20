@@ -1,24 +1,24 @@
 # ⏳ Deferred Interfaces (I6 ~ I10)
 
-> **Day 1 합의 항목이 아닙니다.** T4(UI) 가 Day 4-5 작업 시 T3와 1:1 협의로 확정.
+> **Day 1 합의 항목이 아닙니다.** T4 (성선규)(UI) 가 Day 4-5 작업 시 T3와 1:1 협의로 확정.
 > 본 문서는 **초안 + 후행 참고용**.
 
 ---
 
 ## 왜 미루는가
 
-이 5개 인터페이스는 **T3 → T4 (UI)** 단방향. T4(사용자/PM) 외에 consumer 없음.
+이 5개 인터페이스는 **T3 (이찬휘) → T4 (성선규) (UI)** 단방향. T4 (성선규)(사용자/PM) 외에 consumer 없음.
 - 다른 트랙 작업 막지 않음
-- T4 owner 본인이 결정 가능
-- T3 시니어와 1:1 협의면 충분
+- T4 (성선규) owner 본인이 결정 가능
+- T3 (이찬휘) 시니어와 1:1 협의면 충분
 
 → Day 1 합의 90분 회의에 욱여넣을 필요 X.
 
-**확정 시점**: Day 4 (T4가 UI 본격 작업 시작할 때).
+**확정 시점**: Day 4 (T4 (성선규)가 UI 본격 작업 시작할 때).
 
 ---
 
-## I6. `/rover/pose_sources` (T5 → T4)
+## I6. `/rover/pose_sources` (T5 (이지민) → T4 (성선규))
 
 각 센서별 추정치를 분리해서 UI에 표시. **UI 디자인용**.
 
@@ -38,7 +38,7 @@ bool[5] source_active                    # 각 센서 활성 여부
 
 ---
 
-## I7. `/mission/status` (T3 → T4)
+## I7. `/mission/status` (T3 (이찬휘) → T4 (성선규))
 
 미션 진행 상황. UI 대시보드의 핵심.
 
@@ -59,7 +59,7 @@ float32 distance_to_goal_m
 
 ---
 
-## I8. `/mission/minimap` (T3 → T4)
+## I8. `/mission/minimap` (T3 (이찬휘) → T4 (성선규))
 
 **ROS2 표준 사용**: `nav_msgs/OccupancyGrid`
 
@@ -83,7 +83,7 @@ int8[] data                    # row-major
 
 ---
 
-## I9. `/mission/path` (T3 → T4)
+## I9. `/mission/path` (T3 (이찬휘) → T4 (성선규))
 
 A*가 계산한 path 시각화용.
 
@@ -99,7 +99,7 @@ geometry_msgs/PoseStamped[] poses    # waypoint 시퀀스
 
 ---
 
-## I10. `/mission/cargo_event` (T3 → T4)
+## I10. `/mission/cargo_event` (T3 (이찬휘) → T4 (성선규))
 
 발표용 알림.
 
@@ -129,7 +129,7 @@ int32 cargo_count_after
 ## 관련 작업물 (Day 4 이후)
 
 ```
-tracks/T4/
+tracks/T4 (성선규)/
 ├── ui/
 │   ├── mission_dashboard.py      # 메인 UI
 │   ├── widgets/

@@ -1,172 +1,104 @@
 # isaac_interfaces
 
-## 1. 모듈 역할
-
-`isaac_interfaces`는 ROS2 노드 간 통신 규격을 정의하기 위한 패키지입니다.
-
-이 모듈은 실행 노드가 아닙니다.  
-각 노드들이 주고받을 메시지, 서비스, 액션 형식을 정의하는 역할을 합니다.
+> **트랙 owner**: 성선규 (T4 — Integration + PM, 인터페이스 PM)
+> **책임**: ROS2 노드 간 통신 규격 (msg/srv/action). 합의 후 freeze.
 
 ---
 
-## 2. 현재 상태
+## 1. 모듈 역할
 
-현재 단계에서는 폴더만 생성해두고, 세부 인터페이스 파일은 나중에 추가합니다.
+ROS2 노드 사이의 통신 데이터 형식을 정의하는 **CMake 인터페이스 패키지**.
 
-예상 구조는 다음과 같습니다.
+- 5개 트랙이 사용할 메시지 타입을 한 곳에 모음
+- Day 1 회의에서 합의 → freeze. 변경은 PM 승인 + 전체 회의 필요.
+
+문서 영역과 빌드 영역이 분리되어 있음:
+- **계약/스펙 문서**: `docs/interfaces/` (INTERFACE_CONTRACTS, I1_TERRAIN_ASSETS, META_JSON_FIELDS, schema 등) — 사람이 읽는 정의
+- **실제 ROS2 빌드 정의**: `isaac_interfaces/{msg,srv,action}/` — colcon이 빌드하는 .msg/.srv/.action 파일
+
+---
+
+## 2. 폴더 구조 (현재 상태)
 
 ```text
 isaac_interfaces/
-├─ msg/
-├─ srv/
-├─ action/
-├─ package.xml
-└─ CMakeLists.txt
+├─ msg/                            ✅ 현재 4개 정의
+│  ├─ PerceptionResult.msg          # I2 — T2 최진우 → T3 이찬휘/T4 성선규
+│  ├─ SelectedDriveAction.msg       # RL → 주행 (내부)
+│  ├─ MissionState.msg              # T3 → T4 UI
+│  └─ BatteryState.msg              # T4 battery monitor
+│
+├─ srv/                            ✅ 현재 3개 정의
+│  ├─ CheckSystemReady.srv
+│  ├─ ResetSimulation.srv
+│  └─ SaveExplorationMap.srv
+│
+├─ action/                         ✅ 현재 3개 정의
+│  ├─ ExecuteArmTask.action         # I3/I4 — T3 이찬휘 ↔ T2 최진우 매니퓰레이션
+│  ├─ ExecuteDriveTask.action       # T3 내부 또는 T4 → T3
+│  └─ NavigateTask.action           # T3 내부
+│
+├─ CMakeLists.txt
+└─ package.xml
 ```
 
 ---
 
-## 3. 인터페이스가 필요한 이유
+## 3. 5개 인터페이스 매핑 (I1 ~ I5)
 
-ROS2 노드들은 Topic, Service, Action을 통해 데이터를 주고받습니다.
+[docs/interfaces/INTERFACE_CONTRACTS.md](../docs/interfaces/INTERFACE_CONTRACTS.md) 의 I1~I5와 본 패키지의 메시지 매핑:
 
-예를 들어 `perception_node`가 광석 위치를 계산했다면, 그 결과를 `mission_manager_node`나 `navigation_manager_node`가 이해할 수 있는 형식으로 전달해야 합니다.
+| ID | 인터페이스 | 본 패키지 매핑 | 비고 |
+|:--:|---|---|---|
+| **I1** | Terrain Asset | (없음, 파일 기반) | `isaac_sim/assets/generated_terrains/`. 풀 가이드 [I1_TERRAIN_ASSETS.md](../docs/interfaces/I1_TERRAIN_ASSETS.md) |
+| **I2** | `/perception/detections` | `msg/PerceptionResult.msg` | `value_score` 필드 추가 협상 필요 |
+| **I3** | `/mission/pick_request` | `action/ExecuteArmTask.action` (goal) | 팀 Action 사용 (더 좋음) |
+| **I4** | `/mission/pick_response` | `action/ExecuteArmTask.action` (result/feedback) | 위와 통합 |
+| **I5** | `/rover/estimated_pose` | (없음, ROS2 표준 사용) | `geometry_msgs/PoseWithCovarianceStamped` |
 
-이때 필요한 것이 메시지 정의입니다.
-
----
-
-## 4. 예상 msg 파일
-
-나중에 추가할 수 있는 메시지 파일은 다음과 같습니다.
-
-```text
-DetectedObject.msg
-ObjectPose.msg
-TerrainState.msg
-RoverStatus.msg
-BatteryState.msg
-MissionState.msg
-RLState.msg
-SelectedAction.msg
-```
-
-각 역할은 다음과 같습니다.
-
-### `DetectedObject.msg`
-
-광석 또는 객체 인식 결과를 정의합니다.
-
-### `ObjectPose.msg`
-
-광석의 3D 위치 정보를 정의합니다.
-
-### `TerrainState.msg`
-
-지형 경사, 장애물 여부, 주행 가능 여부를 정의합니다.
-
-### `RoverStatus.msg`
-
-로버 위치, 속도, 자세, 주행 상태를 정의합니다.
-
-### `BatteryState.msg`
-
-배터리 잔량, 충전 상태, 부족 여부를 정의합니다.
-
-### `MissionState.msg`
-
-현재 미션 단계, 모드, 성공/실패 상태를 정의합니다.
-
-### `RLState.msg`
-
-강화학습 정책 입력으로 사용할 통합 상태값을 정의합니다.
-
-### `SelectedAction.msg`
-
-강화학습 정책이 선택한 다음 주행 행동을 정의합니다.
+→ 자세한 메시지 정의는 [docs/interfaces/msg/](../docs/interfaces/msg/) (현재 작성 중인 .msg 정의, isaac_interfaces/msg/ 로 이관 예정).
 
 ---
 
-## 5. 예상 srv 파일
+## 4. 책임 분리
 
-나중에 추가할 수 있는 서비스 파일은 다음과 같습니다.
-
-```text
-ResetSimulation.srv
-CheckSystemReady.srv
-SaveExplorationMap.srv
-```
-
-### `ResetSimulation.srv`
-
-시뮬레이션 초기화 요청과 응답을 정의합니다.
-
-### `CheckSystemReady.srv`
-
-시스템 준비 상태 확인 요청과 응답을 정의합니다.
-
-### `SaveExplorationMap.srv`
-
-탐사 맵 저장 요청과 응답을 정의합니다.
+| 영역 | 위치 | 담당 |
+|------|------|------|
+| **계약/스펙 문서** | `docs/interfaces/` | 성선규 (T4 PM) — Day 1 합의 + freeze |
+| **빌드 정의 (.msg 등)** | `isaac_interfaces/msg/` | 성선규 (T4) — colcon 빌드용으로 이관 |
+| **메시지 사용** | 각 트랙 노드 | 각 트랙 owner |
 
 ---
 
-## 6. 예상 action 파일
+## 5. 변경 정책
 
-나중에 추가할 수 있는 액션 파일은 다음과 같습니다.
+**Breaking change 금지**:
+- 필드 삭제 ❌
+- 필드 타입 변경 ❌
+- 필드 의미 변경 ❌
+- 토픽 이름 변경 ❌
 
-```text
-NavigateTask.action
-ExecuteDriveTask.action
-ExecuteArmTask.action
-```
+**추가는 OK**:
+- 새 optional 필드 ✅
+- 새 status 값 (default fallback 보장 시) ✅
 
-### `NavigateTask.action`
-
-mission_manager_node가 navigation_manager_node에 보내는 고수준 주행 요청을 정의합니다.
-
-### `ExecuteDriveTask.action`
-
-navigation_manager_node가 mobile_base_executor_node에 보내는 실제 주행 실행 요청을 정의합니다.
-
-### `ExecuteArmTask.action`
-
-광석 집기, cargo 적재, 기지 하역, 태양광판 전개 같은 시간이 걸리는 로봇팔 작업 실행을 정의합니다.
+변경 시 [docs/pm_tools/DECISIONS.md](../docs/pm_tools/DECISIONS.md)에 기록 + [docs/interfaces/INTERFACE_CONTRACTS.md](../docs/interfaces/INTERFACE_CONTRACTS.md) CHANGELOG 갱신.
 
 ---
 
-## 7. Topic, Service, Action 구분
+## 6. 빌드
 
-```text
-Topic
-= 계속 갱신되는 센서/상태/AI 결과 전달
+```bash
+cd ~/dev_ws/rover_ws
+colcon build --packages-select isaac_interfaces
+source install/setup.bash
 
-Service
-= 짧은 요청-응답
-
-Action
-= 시간이 걸리는 작업 실행
-```
-
-예시는 다음과 같습니다.
-
-```text
-Topic:
-perception_node → mission_manager_node
-battery_monitor_node → mission_manager_node
-
-Action:
-mission_manager_node → navigation_manager_node
-navigation_manager_node → mobile_base_executor_node
-mission_manager_node → arm_executor_node
-
-Service:
-mission_manager_node → reset_simulation
-mission_manager_node → check_system_ready
+# 확인
+ros2 interface show isaac_interfaces/msg/PerceptionResult
 ```
 
 ---
 
-## 8. 한 줄 요약
+## 7. 한 줄 요약
 
-`isaac_interfaces`는 프로젝트 노드들이 안정적으로 통신할 수 있도록 msg, srv, action 형식을 정의하는 통신 규격 모듈입니다.
+> **5개 트랙이 합의한 통신 규격의 single source of truth.** docs/interfaces/는 계약/스펙, isaac_interfaces/는 colcon 빌드 정의. Day 1 freeze, 변경은 PM 승인.

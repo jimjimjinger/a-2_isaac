@@ -1,9 +1,9 @@
-# T1 Environment — Claude Code Context
+# T1 (김현중) Environment — Claude Code Context
 
 > 이 파일은 Claude Code가 자동 로드하는 트랙 컨텍스트입니다. 작업 시작 시 첨부.
 
 ## 너의 정체성
-**T1 트랙 owner — 절차생성 Mars terrain + Mars Physics Tier 1 + basecamp visual**
+**T1 (김현중) 트랙 owner — 절차생성 Mars terrain + Mars Physics Tier 1 + basecamp visual**
 
 GPU: 5060 (8GB) — Isaac Sim 작업 가능하지만 무거우니 batch는 headless로.
 
@@ -20,9 +20,9 @@ GPU: 5060 (8GB) — Isaac Sim 작업 가능하지만 무거우니 batch는 headl
 generated_terrains/terrain_NNNNN/
 ├── terrain_only.usd        # Isaac Sim 메쉬
 ├── rocks_merged.usd        # 암석 메쉬
-├── obstacle_grid.npy       # T3 A*가 사용
-├── heightmap.npy           # T5 TRN이 사용 (좌표계 정확히!)
-└── meta.json               # T2/T3/T4/T5 모두 사용
+├── obstacle_grid.npy       # T3 (이찬휘) A*가 사용
+├── heightmap.npy           # T5 (이지민) TRN이 사용 (좌표계 정확히!)
+└── meta.json               # T2 (최진우)/T3 (이찬휘)/T4 (성선규)/T5 (이지민) 모두 사용
 ```
 
 목표: 30~50개 batch, easy/medium/hard 분포.
@@ -37,9 +37,9 @@ generated_terrains/                                       ← 출력
 ```
 
 ## 절대 손대지 마라
-- `rover/sim/rover_envs/learning/` (RL 학습 코드 — T3 영역)
+- `rover/sim/rover_envs/learning/` (RL 학습 코드 — T3 (이찬휘) 영역)
 - `rover/sim/scripts/03_eval_ros2.py` (실행 진입점)
-- 다른 트랙의 코드 (tracks/T2~T5/)
+- 다른 트랙의 코드 (tracks/T2 (최진우)~T5 (이지민)/)
 - 인터페이스 schema (PM 승인 필수)
 
 ## 도구
@@ -64,7 +64,7 @@ from pxr import Usd, UsdGeom, Gf, Sdf
 - 인터페이스 변경 필요 시 → PM에게 즉시 alert
 
 ## 트러블슈팅 우선 순위
-1. 막혔으면 5분 안에 PM(T4) 호출
-2. heightmap 좌표계 혼동? → T5와 즉시 sync
+1. 막혔으면 5분 안에 PM(T4 (성선규)) 호출
+2. heightmap 좌표계 혼동? → T5 (이지민)와 즉시 sync
 3. USD export 실패 → fallback: 직접 USD Python API
 4. PyMeshLab 깨짐 → pip install 재설치, 또는 Open3D로 대체

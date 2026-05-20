@@ -1,4 +1,4 @@
-# 👁️🦾 T2 Perception + M0609 — 담당자 브리프
+# 👁️🦾 T2 (최진우) Perception + M0609 — 담당자 브리프
 
 > **광물 인식 (Vision) + 매니퓰레이션 (M0609)**
 > 단일 트랙이지만 **두 영역**. 본인 페이스로 진행 가능.
@@ -14,7 +14,7 @@
 2. [당신이 만들 2개 큰 모듈](#2-당신이-만들-2개-큰-모듈)
 3. [Vision (광물 인식) — 색 기반](#3-vision-광물-인식--색-기반)
 4. [M0609 매니퓰레이션 — Tier 1.5](#4-m0609-매니퓰레이션--tier-15)
-5. [추가 보조 작업 (T1/T4)](#5-추가-보조-작업-t1t4)
+5. [추가 보조 작업 (T1 (김현중)/T4 (성선규))](#5-추가-보조-작업-t1t4)
 6. [인터페이스](#6-인터페이스)
 7. [일정과 마일스톤](#7-일정과-마일스톤)
 8. [흔한 함정](#8-흔한-함정)
@@ -32,7 +32,7 @@
 | 광물 위치 인지 | **GT 좌표 cheat** | **카메라 → vision detection** |
 | 매니퓰레이션 | **없음** | **M0609로 진짜 pick & place** |
 
-→ T2의 역할 = **"진짜 자율 시스템"의 입증**.
+→ T2 (최진우)의 역할 = **"진짜 자율 시스템"의 입증**.
 
 ### 물류창고 팀 vs 우리
 
@@ -45,7 +45,7 @@
 
 ### 발표 임팩트 포인트
 
-T2가 만들 시연:
+T2 (최진우)가 만들 시연:
 1. 📷 화면에 광물 인식 → 좌표 표시 → 가치 점수 표시
 2. 🦾 로버가 광물 앞에 도달 → M0609이 잡아서 cargo bin으로
 3. 카고에 광물 누적 → 가치 점수 누적
@@ -57,7 +57,7 @@ T2가 만들 시연:
 ## 2. 당신이 만들 2개 큰 모듈
 
 ```
-T2 = Vision (인식) + M0609 (조작)
+T2 (최진우) = Vision (인식) + M0609 (조작)
    │
    ├ 1. Vision 광물 detection      (25h)
    │    └ 카메라 이미지 → 광물 좌표 + 가치 점수
@@ -65,7 +65,7 @@ T2 = Vision (인식) + M0609 (조작)
    ├ 2. M0609 Manipulation Tier 1.5 (30h)
    │    └ scripted trajectory + 광물 텔레포트
    │
-   ├ 3. T1/T4 보조 작업              (15h)
+   ├ 3. T1 (김현중)/T4 (성선규) 보조 작업              (15h)
    │    └ 시간 남으면 다른 트랙 도와줌
    │
    └ 합계: 70h (시간 가용 65h, 살짝 over)
@@ -81,7 +81,7 @@ T2 = Vision (인식) + M0609 (조작)
 
 ## 3. Vision (광물 인식) — 색 기반
 
-### 광물 시각 디자인 — T1과 협의
+### 광물 시각 디자인 — T1 (김현중)과 협의
 
 광물을 **명확한 단색 USD**로 만들면 detection 매우 쉬워짐:
 
@@ -102,7 +102,7 @@ import numpy as np
 def detect_minerals(rgb_image, estimated_pose):
     """
     rgb_image: (480, 640, 3) numpy array
-    estimated_pose: T5의 추정 위치 (x, y, z, yaw)
+    estimated_pose: T5 (이지민)의 추정 위치 (x, y, z, yaw)
     
     returns: list of detection dicts
     """
@@ -190,11 +190,11 @@ def pixel_to_world(px, py, estimated_pose, K, T_cam_robot):
     return intersection
 ```
 
-→ **T5의 estimated_pose 사용** (GT cheat 아님). 위치 추정 정확도에 따라 detection 좌표 정확도 결정.
+→ **T5 (이지민)의 estimated_pose 사용** (GT cheat 아님). 위치 추정 정확도에 따라 detection 좌표 정확도 결정.
 
 ### Mineral ID 매칭
 
-T1의 meta.json에는 각 광물에 unique id가 있음. T2 detection이 같은 광물인지 판정:
+T1 (김현중)의 meta.json에는 각 광물에 unique id가 있음. T2 (최진우) detection이 같은 광물인지 판정:
 
 ```python
 def match_to_meta(detection_world_pos, meta_minerals, threshold=1.0):
@@ -209,7 +209,7 @@ def match_to_meta(detection_world_pos, meta_minerals, threshold=1.0):
     return best_match
 ```
 
-→ 매칭 실패하면 mineral_id = -1 (T3가 처리).
+→ 매칭 실패하면 mineral_id = -1 (T3 (이찬휘)가 처리).
 
 ---
 
@@ -312,18 +312,18 @@ def _joints_extend_above(self, world_pos):
 
 ---
 
-## 5. 추가 보조 작업 (T1/T4)
+## 5. 추가 보조 작업 (T1 (김현중)/T4 (성선규))
 
-T2 본 작업 + 약 15h 여유:
+T2 (최진우) 본 작업 + 약 15h 여유:
 
 | 보조 작업 | 시간 | 누구 도움? |
 |----------|:---:|:--------:|
-| 광물 USD 생성 (3색 단순 메쉬) | 3h | T1 |
-| Replicator 광물 데이터셋 생성 (stretch) | 8h | T1 |
-| UI 광물 마커 위젯 | 5h | T4 |
-| 발표 영상 편집 보조 | 5h | T4 |
+| 광물 USD 생성 (3색 단순 메쉬) | 3h | T1 (김현중) |
+| Replicator 광물 데이터셋 생성 (stretch) | 8h | T1 (김현중) |
+| UI 광물 마커 위젯 | 5h | T4 (성선규) |
+| 발표 영상 편집 보조 | 5h | T4 (성선규) |
 
-→ 본인 작업 끝나면 PM(T4)에게 물어보고 도움.
+→ 본인 작업 끝나면 PM(T4 (성선규))에게 물어보고 도움.
 
 ---
 
@@ -334,16 +334,16 @@ T2 본 작업 + 약 15h 여유:
 | 인터페이스 | Producer | 사용처 |
 |----------|:--------:|--------|
 | **Isaac Sim camera** | Isaac Sim | RGB 이미지 (640×480) |
-| **I5** /rover/estimated_pose | T5 | 2D→3D 투영 시 사용 |
-| **I3** /mission/pick_request | T3 | M0609 시작 트리거 |
-| **I1** meta.json | T1 | 광물 id 매칭 |
+| **I5** /rover/estimated_pose | T5 (이지민) | 2D→3D 투영 시 사용 |
+| **I3** /mission/pick_request | T3 (이찬휘) | M0609 시작 트리거 |
+| **I1** meta.json | T1 (김현중) | 광물 id 매칭 |
 
 ### Produce (출력)
 
 | 인터페이스 | Consumer | 빈도 |
 |----------|:--------:|:----:|
-| **I2** /perception/detections | T3, T4 | 10 Hz |
-| **I4** /mission/pick_response | T3 | event (Pick 완료 시) |
+| **I2** /perception/detections | T3 (이찬휘), T4 (성선규) | 10 Hz |
+| **I4** /mission/pick_response | T3 (이찬휘) | event (Pick 완료 시) |
 
 → 상세는 [interfaces/INTERFACE_CONTRACTS.md](../interfaces/INTERFACE_CONTRACTS.md).
 
@@ -356,7 +356,7 @@ Day 1 (화)
   □ M0609 USD asset 확보 (가장 큰 unknown — spike!)
   □ Vision PoC: 클론 terrain에 단색 sphere 1개 두고 HSV threshold
   → EOD ⚠️ 게이트: "M0609 asset이 Isaac Sim에서 로드되는가?"
-     실패 시 → T1과 함께 단순 모델 직접 생성
+     실패 시 → T1 (김현중)과 함께 단순 모델 직접 생성
 
 Day 2 (수) — Vision 완성
   □ HSV detection 3색 모두 동작
@@ -371,8 +371,8 @@ Day 3 (목) — M0609 통합 시작
   → EOD: 가짜 trigger로 pick 1회 동작
 
 Day 4 (금) — 통합
-  □ T5의 estimated_pose 받아서 detection
-  □ T3의 pick_request 받아서 trigger
+  □ T5 (이지민)의 estimated_pose 받아서 detection
+  □ T3 (이찬휘)의 pick_request 받아서 trigger
   □ I4 response 발행
   → EOD: end-to-end 단일 사이클 (vision → pick) 동작
 
@@ -382,7 +382,7 @@ Day 5 (토)
 
 Day 6 (일) — 폴리싱
   □ Edge case (광물 안 보임, 잘못된 detection)
-  □ 보조 작업 시작 (T1/T4 도움)
+  □ 보조 작업 시작 (T1 (김현중)/T4 (성선규) 도움)
   → 일요일 EOD ⚠️ 게이트: end-to-end 데모 1회
 
 Day 7 (월) — 폴리싱 + 보조
@@ -396,9 +396,9 @@ Day 8 AM (수) — 최종
 | 함정 | 증상 | 대응 |
 |------|------|------|
 | **M0609 USD asset 호환 안 됨** | Day 1에 막힘 | 단순 6-link 매니퓰레이터 직접 모델링 (1h) — 시각 효과는 충분 |
-| **HSV 범위 잘못 설정** | detection 없거나 false positive 많음 | T1과 광물 색 합의 후 광물 표본 캡처 → 색 범위 측정 |
+| **HSV 범위 잘못 설정** | detection 없거나 false positive 많음 | T1 (김현중)과 광물 색 합의 후 광물 표본 캡처 → 색 범위 측정 |
 | **2D→3D 좌표가 GT랑 차이 큼** | 광물 위치 부정확 | 카메라 intrinsic/extrinsic 정확히 설정. Isaac Sim에서 확인 |
-| **`mineral_id` 매칭 실패** | T3가 어떤 광물인지 못 앎 | 매칭 threshold 1m로 적절히, mineral_id=-1도 처리 |
+| **`mineral_id` 매칭 실패** | T3 (이찬휘)가 어떤 광물인지 못 앎 | 매칭 threshold 1m로 적절히, mineral_id=-1도 처리 |
 | **pick_request 중복 수신** | M0609 동작 꼬임 | request_id로 중복 방지 |
 | **scripted trajectory가 부자연** | "로봇팔이 점프하는" 동작 | 보간 step 충분히 (60 step / 1초 권장) |
 | **광물 텔레포트 시 충돌** | PhysX 에러 | mineral_prim의 collision 비활성화 (cargo로 옮길 때) |
@@ -465,7 +465,7 @@ rgb = rgba[..., :3]
 ## 🤝 다른 트랙과 동기화
 
 - **Day 1 spike 결과 즉시 PM에게**: M0609 asset 호환성
-- **T1과 광물 색 합의**: HSV 범위
+- **T1 (김현중)과 광물 색 합의**: HSV 범위
 - **Day 4 T3와 통합 미팅**: I3/I4 메시지 검증
 - **매일 18:00 DIST**: PM이 통합 테스트
 

@@ -1,9 +1,9 @@
-# T5 Localization + Infra — Claude Code Context
+# T5 (이지민) Localization + Infra — Claude Code Context
 
 > 이 파일은 Claude Code가 자동 로드하는 트랙 컨텍스트입니다.
 
 ## 너의 정체성
-**T5 트랙 owner — TRN 기반 GPS-less 위치 추정 + ROS2 인프라 + Eval + Mars Tier 2**
+**T5 (이지민) 트랙 owner — TRN 기반 GPS-less 위치 추정 + ROS2 인프라 + Eval + Mars Tier 2**
 
 GPU: 5080 (16GB)
 
@@ -34,7 +34,7 @@ GPU: 5080 (16GB)
 ### TRN (Terrain Relative Navigation)
 실제 Perseverance가 사용한 기법:
 - RayCaster의 5m×5m 로컬 heightmap 측정
-- T1의 global heightmap.npy와 cross-correlation 매칭
+- T1 (김현중)의 global heightmap.npy와 cross-correlation 매칭
 - EKF 누적 드리프트 보정
 
 ### GT는 어디서도 직접 사용 X
@@ -43,7 +43,7 @@ GPU: 5080 (16GB)
 ## 핵심 작업 영역
 
 ```
-tracks/T5/
+tracks/T5 (이지민)/
   ├ localization/
   │   ├ wheel_odom.py
   │   ├ imu_integration.py
@@ -54,17 +54,17 @@ tracks/T5/
   ├ eval/                    # 데이터 수집 + 차트
   └ mars_physics/            # Tier 2 friction zones
 
-rover/sim/rover_envs/envs/navigation/rover_env_cfg.py   ← gravity (T1과 분담)
+rover/sim/rover_envs/envs/navigation/rover_env_cfg.py   ← gravity (T1 (김현중)과 분담)
 ```
 
 ## 절대 손대지 마라
-- T1, T2, T3, T4 코드
+- T1 (김현중), T2 (최진우), T3 (이찬휘), T4 (성선규) 코드
 - 클론의 PPO 정책
 - 인터페이스 schema (PM 승인 필수)
 - **GT를 정책에 직접 주입** ❌ (시뮬 내부 검증용만)
 
 ## 핵심 의존성
-- **T1 heightmap.npy** (TRN에 사용) — 좌표계 합의 필수
+- **T1 (김현중) heightmap.npy** (TRN에 사용) — 좌표계 합의 필수
 - **Isaac Sim sensors** (IMU, joint_vel, sphere_light pos, RayCaster)
 
 ## 도구
@@ -76,7 +76,7 @@ pip install numpy scipy  # EKF + correlation
 
 | Day | 구현 수준 |
 |:---:|----------|
-| 1 | Stub: GT + 가우시안 노이즈 (T3 사용 가능) |
+| 1 | Stub: GT + 가우시안 노이즈 (T3 (이찬휘) 사용 가능) |
 | 2 | Wheel/IMU/Sun 적분 모듈 |
 | 3 ⭐ | TRN 단독 검증 (합성 데이터로) |
 | 4 | EKF 융합 + T3와 통합 |
@@ -98,6 +98,6 @@ class TerrainRelativeNav:
 
 ## 트러블슈팅
 1. TRN correlation 모든 위치 비슷 → 평탄 지역, EKF가 알아서 처리
-2. TRN 매칭이 GT랑 차이 큼 → 좌표계 (origin, resolution) T1과 재합의
+2. TRN 매칭이 GT랑 차이 큼 → 좌표계 (origin, resolution) T1 (김현중)과 재합의
 3. EKF 발산 → Q, R 보수적 (작은 값)으로 시작
 4. /rover/estimated_pose 발행 멈춤 → watchdog, 항상 publish (stub fallback)

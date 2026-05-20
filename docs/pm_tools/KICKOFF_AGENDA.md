@@ -26,16 +26,16 @@
 □ system_architecture_full.svg 공유
 □ 5 트랙 × 5 인터페이스 한눈에
 □ ML이 들어가는 영역 (T3 PPO 하나)
-□ TRN 컨셉 간단 (T5의 핵심)
+□ TRN 컨셉 간단 (T5 (이지민)의 핵심)
 ```
 
 ### Part 3: 트랙 배정 + 책임 (10분)
 ```
-□ T1 Environment        담당자: _________  (5060)
-□ T2 Perception+M0609   담당자: _________  (5080)
-□ T3 Driving            담당자: _________  (5080)
-□ T4 Integration+PM     사용자 본인          (5070 Ti)
-□ T5 Localization+Infra 담당자: _________  (5080)
+□ T1 Environment        담당자: 김현중  (5060)
+□ T2 Perception+M0609   담당자: 최진우  (5080)
+□ T3 Driving            담당자: 이찬휘  (5080)
+□ T4 Integration+PM     담당자: 성선규 (사용자 본인, 5070 Ti)
+□ T5 Localization+Infra 담당자: 이지민  (5080)
 
 각 담당자에게:
 - 본인 트랙의 BRIEF.md 위치 안내
@@ -48,22 +48,22 @@
 INTERFACE_CONTRACTS.md 함께 검토.
 
 □ [10분] I1 — Terrain meta.json 스키마
-  - T1이 30~50개 batch 생성, 각 디렉터리 5개 파일
-  - heightmap.npy 좌표계 (T1↔T5 합의 critical)
-  - 광물 색 사양 (T1↔T2 합의)
+  - 김현중(T1)이 30~50개 batch 생성, 각 디렉터리 5개 파일
+  - heightmap.npy 좌표계 (김현중↔이지민 합의 critical)
+  - 광물 색 사양 (김현중↔최진우 합의)
   
 □ [10분] I2 — /perception/detections
-  - HSV detection 결과 형식
+  - HSV detection 결과 형식 (최진우 담당)
   - value_score 분포 (blue 10 / red 25 / yellow 50)
   
 □ [10분] I3 + I4 — /mission/pick_request, /mission/pick_response
-  - request_id 중복 방지
+  - request_id 중복 방지 (이찬휘 ↔ 최진우)
   - status: success / failed_grasp / timeout / no_object
   
 □ [10분] I5 — /rover/estimated_pose (TRN 기반)
   - PoseWithCovarianceStamped 표준
-  - T5는 단순 stub부터 점진 TRN
-  - T3는 PoseProvider 추상화로 분리
+  - 이지민(T5)은 단순 stub부터 점진 TRN
+  - 이찬휘(T3)는 PoseProvider 추상화로 분리
 
 ✅ 합의 시 5명 사인 (INTERFACE_CONTRACTS.md 사인란)
 ✅ 변경 freeze 시작
@@ -101,7 +101,7 @@ PM 결정 vs 트랙 owner 자율 vs 회의 필요 명시.
 □ git/Notion 셋업
 □ DAILY_STATUS.md 첫 갱신
 □ Day 1 작업 시작 ping (각 트랙)
-□ T5 담당자와 1:1 (시간 가용성 확인, 옵션 결정)
+□ 이지민(T5)과 1:1 (시간 가용성 확인, 옵션 결정)
 ```
 
 ## 결정 사항 기록 (회의 중)

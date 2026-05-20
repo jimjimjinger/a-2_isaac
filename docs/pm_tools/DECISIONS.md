@@ -11,18 +11,18 @@
 
 ---
 
-## 결정 #001 — 트랙 배정 (T2 ↔ T3 사람 스왑)
+## 결정 #001 — 트랙 배정 (T2 최진우 ↔ T3 이찬휘 사람 스왑)
 
 **일자**: 2026-05-18 (사전 결정)
-**결정자**: PM (사용자)
-**관련 트랙**: T2, T3
+**결정자**: PM (성선규)
+**관련 트랙**: T2 (최진우), T3 (이찬휘)
 
 ### 결정
-T2(Perception+M0609)에 주니어, T3(Driving)에 시니어 배정.
+T2 Perception+M0609에 주니어(최진우), T3 Driving에 시니어(이찬휘) 배정.
 
 ### 이유
-- T2가 실제로는 단순 (HSV + scripted)
-- T3가 critical path + 알고리즘 헤비
+- T2(최진우)가 실제로는 단순 (HSV + scripted)
+- T3(이찬휘)가 critical path + 알고리즘 헤비
 - 스킬-복잡도 매칭
 
 ### 대안
@@ -34,8 +34,8 @@ T2(Perception+M0609)에 주니어, T3(Driving)에 시니어 배정.
 ## 결정 #002 — Localization 방식: TRN 채택
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T5
+**결정자**: PM (성선규)
+**관련 트랙**: T5 (이지민)
 
 ### 결정
 Mock V-SLAM (GT + 노이즈) 대신 TRN (Terrain Relative Navigation) + Multi-sensor Fusion 채택.
@@ -47,15 +47,15 @@ Mock V-SLAM (GT + 노이즈) 대신 TRN (Terrain Relative Navigation) + Multi-se
 - 발표 키워드 ↑
 
 ### 트레이드오프
-- T5 작업량 25h → 70h (시간 budget 안 맞음 → 시간 부족 시 stub fallback)
+- T5 (이지민) 작업량 25h → 70h (시간 budget 안 맞음 → 시간 부족 시 stub fallback)
 
 ---
 
 ## 결정 #003 — 베이스캠프: Tier 1 (시각만)
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T1
+**결정자**: PM (성선규)
+**관련 트랙**: T1 (김현중)
 
 ### 결정
 basecamp = 시각 형상만 (착륙대 + 돔 + 안테나 USD). 충돌 처리 X.
@@ -73,8 +73,8 @@ basecamp = 시각 형상만 (착륙대 + 돔 + 안테나 USD). 충돌 처리 X.
 ## 결정 #004 — 카메라: 마스트 위치
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T2
+**결정자**: PM (성선규)
+**관련 트랙**: T2 (최진우)
 
 ### 결정
 카메라 위치 = (0.0, -0.2, 0.7), 30° pitch down. 마스트 추가.
@@ -89,8 +89,8 @@ basecamp = 시각 형상만 (착륙대 + 돔 + 안테나 USD). 충돌 처리 X.
 ## 결정 #005 — M0609: Tier 1.5
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T2
+**결정자**: PM (성선규)
+**관련 트랙**: T2 (최진우)
 
 ### 결정
 M0609 = Scripted trajectory + 광물 텔레포트 (Tier 1.5). 진짜 IK + force feedback X.
@@ -98,15 +98,15 @@ M0609 = Scripted trajectory + 광물 텔레포트 (Tier 1.5). 진짜 IK + force 
 ### 이유
 - 시각적으로 잡는 동작 시연 충분
 - 8일에 진짜 IK 무리
-- T2 시간 budget 안 맞음
+- T2 (최진우) 시간 budget 안 맞음
 
 ---
 
 ## 결정 #006 — Vision: 색기반 (CNN 아님)
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T2
+**결정자**: PM (성선규)
+**관련 트랙**: T2 (최진우)
 
 ### 결정
 Vision detection = HSV threshold 기반. CNN 학습 X.
@@ -123,20 +123,20 @@ Vision detection = HSV threshold 기반. CNN 학습 X.
 
 ---
 
-## 결정 #007 — 기존 통합 인원: T5로 이동
+## 결정 #007 — 기존 통합 인원: T5(이지민)로 이동
 
 **일자**: 2026-05-18
-**결정자**: PM
-**관련 트랙**: T5
+**결정자**: PM (성선규)
+**관련 트랙**: T5 (이지민)
 
 ### 결정
-기존 통합 담당자(시간 제약) → T5 (Localization + ROS2 Infra + Eval + Mars Tier 2).
-사용자(PM)가 통합 owner.
+기존 통합 담당자(이지민, 시간 제약) → T5 (Localization + ROS2 Infra + Eval + Mars Tier 2).
+성선규(PM)가 통합 owner = T4.
 
 ### 이유
 - 통합 = critical path = 마지막 3일 풀가동 필요
-- 사용자가 가장 많은 시간 투자 가능
-- 기존 담당자의 ROS2 강점 살림
+- 성선규가 가장 많은 시간 투자 가능
+- 이지민의 ROS2 강점 살림
 
 ---
 
@@ -146,8 +146,8 @@ Vision detection = HSV threshold 기반. CNN 학습 X.
 ## 결정 #XXX — 제목
 
 **일자**: YYYY-MM-DD
-**결정자**: PM / 트랙 owner / 전체 회의
-**관련 트랙**: T_
+**결정자**: PM (성선규) / 트랙 owner / 전체 회의
+**관련 트랙**: T_ (담당자명)
 
 ### 결정
 (무엇을 결정했는지)

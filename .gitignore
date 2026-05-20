@@ -13,6 +13,8 @@ __pycache__/
 
 .agents/
 .codex/
+.vscode/
+.claude/
 camera.py
 fisheye.py
 doosan-robot2/

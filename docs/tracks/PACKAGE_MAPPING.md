@@ -3,10 +3,20 @@
 > 우리 T1~T5 트랙이 팀 레포의 9개 패키지 어디에서 작업하는지.
 > 각 BRIEF의 "작업 영역" 섹션과 함께 참조.
 
+## 트랙 ↔ 담당자
+
+| 트랙 | 담당자 | GPU |
+|:----:|:-----:|:---:|
+| T1   | **김현중** | 5060 (8GB) |
+| T2   | **최진우** | 5080 (16GB) |
+| T3   | **이찬휘** | 5080 (16GB) |
+| T4   | **성선규** (사용자 본인) | 5070 Ti (12GB) |
+| T5   | **이지민** | 5080 (16GB) |
+
 ## 전체 매핑
 
 ```
-T1 Environment (5060, 시니어)
+T1 김현중 — Environment (5060, 시니어)
    └─ isaac_sim/                     ← 메인 작업 영역
       ├─ worlds/                       USD 월드 파일
       ├─ assets/generated_terrains/    절차생성 batch 출력
@@ -18,7 +28,7 @@ T1 Environment (5060, 시니어)
    └─ isaac_perception/models/         학습 weights (Replicator 시 사용)
 
 
-T2 Perception + M0609 (5080, 주니어)
+T2 최진우 — Perception + M0609 (5080, 주니어)
    ├─ isaac_perception/                ← Vision 작업 영역
    │  └─ isaac_perception/
    │     ├─ perception_node.py          메인 publisher (이미 존재, 채워야 함)
@@ -40,7 +50,7 @@ T2 Perception + M0609 (5080, 주니어)
             └─ deploy_solar_panel.py
 
 
-T3 Driving (5080, 시니어) — Critical Path
+T3 이찬휘 — Driving (5080, 시니어) — Critical Path
    ├─ isaac_drive/                     ← 주행 메인 영역
    │  └─ isaac_drive/
    │     ├─ drive_manager_node.py       자율/수동 흐름 (rename: nav_manager)
@@ -54,7 +64,7 @@ T3 Driving (5080, 시니어) — Critical Path
    │        ├─ avoid_obstacle.py
    │        └─ stop_rover.py
    │
-   └─ isaac_rl/                        ← PPO 영역 (T3가 함께 다룸)
+   └─ isaac_rl/                        ← PPO 영역 (T3 이찬휘가 함께 다룸)
       └─ isaac_rl/
          ├─ driving_policy_node.py       RL inference 노드
          ├─ policy_loader.py             best_agent_ppo.pt 로드
@@ -64,7 +74,7 @@ T3 Driving (5080, 시니어) — Critical Path
          └─ ppo_wrapper.py              ⭐ 우리 추가 (waypoint → action)
 
 
-T4 Integration + PM (사용자, 5070 Ti)
+T4 성선규 — Integration + PM (사용자 본인, 5070 Ti)
    ├─ isaac_bringup/                   ← launch 통합
    │  └─ launch/                        8개 launch 파일
    │     ├─ full_system.launch.py
@@ -84,7 +94,7 @@ T4 Integration + PM (사용자, 5070 Ti)
    └─ docs/pm_tools/                   PM 운영 도구 (DAILY_STATUS 등)
 
 
-T5 Localization + Infra (5080)
+T5 이지민 — Localization + Infra (5080)
    └─ isaac_localization/              ⭐ 신규 전체
       └─ isaac_localization/
          ├─ localization_node.py        /rover/estimated_pose publisher
@@ -98,13 +108,13 @@ T5 Localization + Infra (5080)
 
 ## 인터페이스 매핑 (우리 I1~I5 ↔ 팀 메시지)
 
-| 우리 I | 팀 메시지 | 위치 | 비고 |
-|:------:|----------|------|------|
-| **I1** | (없음, 파일 기반) | `isaac_sim/assets/generated_terrains/` | 우리 schema 그대로 |
-| **I2** | `PerceptionResult.msg` | `isaac_interfaces/msg/` | 팀 정의 사용. value_score 추가 협상 필요 |
-| **I3** | `ExecuteArmTask.action` | `isaac_interfaces/action/` | 팀 Action 사용 (더 좋음) |
-| **I4** | `ExecuteArmTask.action` result | (same) | Action의 feedback/result로 통합 |
-| **I5** | `PoseWithCovarianceStamped` (ROS2 표준) | (없음, 표준 사용) | T5가 publish, 표준 메시지 |
+| 우리 I | 담당자 | 팀 메시지 | 위치 | 비고 |
+|:------:|:-----:|----------|------|------|
+| **I1** | 김현중 | (없음, 파일 기반) | `isaac_sim/assets/generated_terrains/` | 우리 schema 그대로 |
+| **I2** | 최진우 | `PerceptionResult.msg` | `isaac_interfaces/msg/` | 팀 정의 사용. value_score 추가 협상 필요 |
+| **I3** | 이찬휘 → 최진우 | `ExecuteArmTask.action` | `isaac_interfaces/action/` | 팀 Action 사용 (더 좋음) |
+| **I4** | 최진우 → 이찬휘 | `ExecuteArmTask.action` result | (same) | Action의 feedback/result로 통합 |
+| **I5** | 이지민 | `PoseWithCovarianceStamped` (ROS2 표준) | (없음, 표준 사용) | 이지민이 publish, 표준 메시지 |
 
 ## Day 1 회의에서 합의 필요
 

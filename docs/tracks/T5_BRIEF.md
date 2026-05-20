@@ -1,4 +1,4 @@
-# 📍 T5 Localization + Infra — 담당자 브리프
+# 📍 T5 (이지민) Localization + Infra — 담당자 브리프
 
 > **TRN 기반 위치 추정 + ROS2 인프라 + Eval + Mars Physics Tier 2**
 > 학술적 깊이가 큰 트랙. "GPS 없는 화성에서 어떻게 위치를?" 의 답.
@@ -30,7 +30,7 @@
 
 > **"화성엔 GPS가 없다. 그럼 로봇은 자기 위치를 어떻게 아는가?"**
 
-이 질문에 답하는 게 T5의 일. 실제 NASA Curiosity, Perseverance가 푸는 문제와 동일.
+이 질문에 답하는 게 T5 (이지민)의 일. 실제 NASA Curiosity, Perseverance가 푸는 문제와 동일.
 
 ### 우리의 답 (가짜 아님)
 
@@ -62,7 +62,7 @@ GT cheat ❌    →   IMU + Wheel + Sun + TRN 융합 ✅
 ## 2. 당신이 만들 4개 모듈
 
 ```
-T5 = Localization + Infra + Eval + Mars
+T5 (이지민) = Localization + Infra + Eval + Mars
    │
    ├ 1. Localization (TRN + EKF Fusion)     (40h)
    │    └ Wheel/IMU/Sun + TRN → EKF → estimated_pose
@@ -86,7 +86,7 @@ T5 = Localization + Infra + Eval + Mars
 ### 원리
 
 ```
-[로버 주변 5m × 5m 로컬 heightmap]    [T1 전역 heightmap]
+[로버 주변 5m × 5m 로컬 heightmap]    [T1 (김현중) 전역 heightmap]
                                        
    ◾ ◾ ◽ ◽                              ◽ ◽ ◾ ◾ ◽◽ ◾
    ◾ ◾ ◽ ◽◽          ──── ?? ────→     ◽ ◽◽ ◾ ◾ ◽◽
@@ -94,7 +94,7 @@ T5 = Localization + Infra + Eval + Mars
                                           ◽ ◾ ◽◽ ◾
    ↑                                      
    RayCaster로 측정                       1000 × 1000 heightmap.npy
-                                          (T1 산출물)
+                                          (T1 (김현중) 산출물)
 ```
 
 **알고리즘**: 로컬 패턴을 전역 지도에서 cross-correlation으로 검색.
@@ -321,7 +321,7 @@ publish_estimated_pose(ekf.get_state())
 ### launch 파일
 
 ```python
-# tracks/T5/launch/full_system.launch.py
+# tracks/T5 (이지민)/launch/full_system.launch.py
 import launch
 from launch_ros.actions import Node
 
@@ -365,7 +365,7 @@ ros2 bag record -o demo_$(date +%Y%m%d_%H%M%S) \
 ### 미션 결과 자동 수집
 
 ```python
-# tracks/T5/eval/data_logger.py
+# tracks/T5 (이지민)/eval/data_logger.py
 class MissionLogger:
     def __init__(self, terrain_id):
         self.records = {
@@ -399,7 +399,7 @@ class MissionLogger:
 ### 차트 자동 생성
 
 ```python
-# tracks/T5/eval/charts.py
+# tracks/T5 (이지민)/eval/charts.py
 def plot_mission_summary(records, output_path):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     
@@ -424,7 +424,7 @@ def plot_mission_summary(records, output_path):
 
 ### Friction Zone 적용
 
-T1의 meta.json에 `physics_zones` 정의됨. T5가 PhysX에 적용:
+T1 (김현중)의 meta.json에 `physics_zones` 정의됨. T5 (이지민)가 PhysX에 적용:
 
 ```python
 from isaaclab.sim import RigidBodyMaterialCfg
@@ -465,15 +465,15 @@ Earth (gravity 9.81, friction 0.5) vs Mars (gravity 3.72, friction zone)
 | Wheel joint vel | `env.scene["robot"].data.joint_vel` |
 | Sun direction | `env.scene["sphere_light"].pos` |
 | RayCaster heightmap | `env.scene["height_scanner"].data.ray_hits_w` |
-| **I1** heightmap.npy | T1 산출물 (TRN용) |
+| **I1** heightmap.npy | T1 (김현중) 산출물 (TRN용) |
 
 ### Produce (출력)
 
 | 인터페이스 | Consumer | 빈도 |
 |----------|:--------:|:----:|
-| **I5** /rover/estimated_pose | T3, T4 | 30 Hz |
-| (deferred) /rover/pose_sources | T4 UI | 30 Hz |
-| (internal) eval CSV | T5 Eval | 매 미션 종료 시 |
+| **I5** /rover/estimated_pose | T3 (이찬휘), T4 (성선규) | 30 Hz |
+| (deferred) /rover/pose_sources | T4 (성선규) UI | 30 Hz |
+| (internal) eval CSV | T5 (이지민) Eval | 매 미션 종료 시 |
 
 → 상세는 [interfaces/INTERFACE_CONTRACTS.md](../interfaces/INTERFACE_CONTRACTS.md).
 
@@ -485,8 +485,8 @@ Earth (gravity 9.81, friction 0.5) vs Mars (gravity 3.72, friction zone)
 Day 1 (화)
   □ Mock 1차 stub: GT + 가우시안 노이즈
   □ ROS2 publish (/rover/estimated_pose) 시작
-  □ T1 heightmap.npy 형식 확인 (T1과 sync)
-  → EOD: T3 사용 가능 (stub 수준)
+  □ T1 (김현중) heightmap.npy 형식 확인 (T1 (김현중)과 sync)
+  → EOD: T3 (이찬휘) 사용 가능 (stub 수준)
 
 Day 2 (수)
   □ Wheel Odometry 모듈
@@ -495,7 +495,7 @@ Day 2 (수)
   □ ROS2 launch 파일 골격
 
 Day 3 (목) ⭐ TRN 핵심
-  □ tracks/T5/trn.py 구현
+  □ tracks/T5 (이지민)/trn.py 구현
   □ 합성 데이터로 검증 (gt pose에 노이즈 주고 TRN으로 보정)
   □ correlation_threshold 튜닝
   → EOD: TRN 단독 검증
@@ -532,8 +532,8 @@ Day 8 AM (수)
 | **TRN 평탄 지역에서 매칭 실패** | confidence 낮음 | threshold 0.7 미만이면 EKF에 반영 안 함 |
 | **EKF 발산** | 공분산 폭발 | Q, R 매트릭스 보수적으로 시작 |
 | **IMU만으로 position 적분** | 드리프트 폭발 | 자이로만 사용, 위치는 Wheel/TRN에 의존 |
-| **heightmap 좌표계 혼동** | TRN 매칭 좌표 엉뚱 | T1과 origin/resolution 합의 |
-| **/rover/estimated_pose 발행 멈춤** | T3 멈춤 | watchdog 모니터, 항상 publish |
+| **heightmap 좌표계 혼동** | TRN 매칭 좌표 엉뚱 | T1 (김현중)과 origin/resolution 합의 |
+| **/rover/estimated_pose 발행 멈춤** | T3 (이찬휘) 멈춤 | watchdog 모니터, 항상 publish |
 | **Mars Tier 2가 PPO 깨트림** | PPO 잘 안 따라감 | friction 너무 낮게 잡지 말 것 (0.3 이상) |
 
 ---
@@ -562,7 +562,7 @@ Day 8 AM (수)
 
 ## 🤝 다른 트랙과 동기화
 
-- **Day 1 T1과 합의**: heightmap.npy 형식, origin, resolution
+- **Day 1 T1 (김현중)과 합의**: heightmap.npy 형식, origin, resolution
 - **Day 4 T3와 통합 미팅**: estimated_pose subscribe 확인
 - **매일 18:00 DIST**: PM이 통합 테스트
 

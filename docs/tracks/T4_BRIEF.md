@@ -1,4 +1,4 @@
-# 🔌 T4 Integration + PM — 본인용 브리프
+# 🔌 T4 (성선규) Integration + PM — 본인용 브리프
 
 > **사용자 본인의 트랙 — Integration 통합 + UI + 데모 + PM 역할**
 > 코딩 작업 + PM 역할 듀얼. 시간 분배가 가장 중요.
@@ -28,7 +28,7 @@
 ## 1. 듀얼 역할의 무게
 
 ```
-T4 = 코딩 ~58h + PM ~15h = 약 75h
+T4 (성선규) = 코딩 ~58h + PM ~15h = 약 75h
                         ↑
               본인 가용 시간 89h
               버퍼 14h
@@ -44,14 +44,14 @@ T4 = 코딩 ~58h + PM ~15h = 약 75h
 
 > **"인기를 사는 자리가 아니라 프로젝트가 성공하게 만드는 자리"**
 
-T4가 못 하면 다른 모든 사람의 노력이 발표에 안 보임.
+T4 (성선규)가 못 하면 다른 모든 사람의 노력이 발표에 안 보임.
 
 ---
 
 ## 2. 당신이 만들 4개 모듈
 
 ```
-T4 (총 75h)
+T4 (성선규) (총 75h)
    │
    ├ 1. ROS2 Wiring + 통합 (20h)
    │    └ 모든 트랙 토픽 연결, launch 파일 통합
@@ -114,19 +114,19 @@ Day 8 AM: final freeze, 백업 영상 녹화
 
 ```
 모든 트랙의 토픽 통합:
-   /perception/detections        ← T2 publish
-   /rover/estimated_pose         ← T5 publish
-   /mission/pick_request         ← T3 publish
-   /mission/pick_response        ← T2 publish
-   /mission/status (deferred)    ← T3 → T4
-   /mission/minimap (deferred)   ← T3 → T4
-   /mission/path (deferred)      ← T3 → T4
+   /perception/detections        ← T2 (최진우) publish
+   /rover/estimated_pose         ← T5 (이지민) publish
+   /mission/pick_request         ← T3 (이찬휘) publish
+   /mission/pick_response        ← T2 (최진우) publish
+   /mission/status (deferred)    ← T3 (이찬휘) → T4 (성선규)
+   /mission/minimap (deferred)   ← T3 (이찬휘) → T4 (성선규)
+   /mission/path (deferred)      ← T3 (이찬휘) → T4 (성선규)
    /mission/cargo_event (deferred)
    /robot/camera/image_raw       ← Isaac Sim
 ```
 
 작업:
-- launch 파일 master (T5의 launch와 통합)
+- launch 파일 master (T5 (이지민)의 launch와 통합)
 - 토픽 모니터링 도구 (`ros2 topic echo` 자동화)
 - 에러 핸들링 (어떤 노드가 멈췄나)
 
@@ -182,11 +182,11 @@ RViz 디스플레이:
 
 ```
 09:30 ~ 10:00  Daily standup + 어제 DIST 리뷰          [PM]
-10:00 ~ 12:30  T4 코딩 (방해 금지 시간)                [CODE]
+10:00 ~ 12:30  T4 (성선규) 코딩 (방해 금지 시간)                [CODE]
 12:30 ~ 13:30  점심
-13:30 ~ 17:00  T4 코딩 + 트랙 1:1 sync (필요시)         [CODE+PM]
+13:30 ~ 17:00  T4 (성선규) 코딩 + 트랙 1:1 sync (필요시)         [CODE+PM]
 17:00 ~ 17:30  팀 통합 테스트 (DIST) + 블로커 해결      [PM]
-17:30 ~ 22:00  T4 코딩 + 다음날 계획                   [CODE]
+17:30 ~ 22:00  T4 (성선규) 코딩 + 다음날 계획                   [CODE]
 ```
 
 ### 핵심 규칙
@@ -208,7 +208,7 @@ PM이 모든 결정 자기 통과 시키면 본인이 병목.
 |----------|------|-----|
 | 인터페이스 변경 | **PM 승인 필수** | meta.json 필드 추가 |
 | 트랙 내부 구현 | **트랙 owner 자율** | A* vs RRT 선택 |
-| 시각 / UX | **사용자 (T4)** | 색상, 폰트 |
+| 시각 / UX | **사용자 (T4 (성선규))** | 색상, 폰트 |
 | 일정 변경 | **PM 결정** | 트랙 X 완료 늦어짐 |
 | 신규 기능 | **PM 거부** (Day 4+) | "이것도 넣으면 좋을 듯" |
 | 시연 시나리오 | **PM 결정** | 데모 흐름 |
@@ -357,10 +357,10 @@ Day 3 (목)
   □ DAILY_STATUS, RISK_REGISTER 운영 시작
 
 Day 4 (금) ⭐ 첫 통합
-  □ T3 + T5 통합 sync 미팅 주관
+  □ T3 (이찬휘) + T5 (이지민) 통합 sync 미팅 주관
   □ ROS2 토픽 전체 흐름 검증
   □ UI에 estimated_pose 표시
-  □ Pick 시연 (T2 + T3)
+  □ Pick 시연 (T2 (최진우) + T3 (이찬휘))
 
 Day 5 (토)
   □ 데모 시나리오 A 초안
@@ -398,7 +398,7 @@ Day 9 (목)
 | **모든 결정 본인 통과** | PM이 줄 섬 | Day 1에 위임 매트릭스 배포 |
 | **late integration** | 마지막 날 통합 실패 | 매일 DIST, 게이트 강제 |
 | **인터페이스 변경 누적** | meta.json 매일 바뀜 | Day 2 이후 변경 freeze |
-| **PM 코딩시간 소실** | T4 트랙 진척 저조 | 오전 방해금지 박스 |
+| **PM 코딩시간 소실** | T4 (성선규) 트랙 진척 저조 | 오전 방해금지 박스 |
 | **번아웃 감지 실패** | 트랙 owner 침묵 | 1:1 sync 주 2회 |
 | **fallback 없음** | 데모 직전 망함 | Day 6 EOD에 git tag |
 | **PM이 critical path 모름** | "어디 막혔는지 모름" | 매일 burndown |
@@ -432,7 +432,7 @@ Day 9 (목)
 
 PM의 80% = **인터페이스 정의 + 데모 경로 보호**. 1일차에 이 두 가지 잘 박으면 나머지 7일이 안정적.
 
-본인이 T4(통합)이라 자연스럽게 모든 트랙 상황 파악됨 — 이게 다른 트랙(예: T2) 잡았으면 PM 매우 어려웠을 거. 운 좋음.
+본인이 T4 (성선규)(통합)이라 자연스럽게 모든 트랙 상황 파악됨 — 이게 다른 트랙(예: T2 (최진우)) 잡았으면 PM 매우 어려웠을 거. 운 좋음.
 
 뭔가 막힌 트랙 owner 보이면 **즉시 1:1**. 5분 대화로 30분 손실 막을 수 있음.
 

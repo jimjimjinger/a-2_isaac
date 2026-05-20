@@ -1,148 +1,99 @@
 # isaac_bringup
 
-## 1. 모듈 역할
-
-`isaac_bringup`은 전체 ROS2 시스템을 실행하기 위한 launch 관리 모듈입니다.
-
-이 모듈에는 실제 로봇 제어, AI 추론, 주행 판단, 로봇팔 동작 구현 코드를 넣지 않습니다.  
-각 패키지에 흩어져 있는 노드들을 한 번에 실행하거나, 기능별로 나누어 실행하기 위한 launch 파일을 관리합니다.
-
-즉, `isaac_bringup`은 시스템의 **실행 진입점** 역할을 합니다.
+> **트랙 owner**: 성선규 (T4 — Integration + PM)
+> **책임**: 시스템 진입점 — launch 파일 8개로 트랙별/전체 실행 묶음
 
 ---
 
-## 2. 예상 폴더 구조
+## 1. 모듈 역할
+
+`isaac_bringup`은 시스템의 **launch 진입점**. 다른 8개 패키지의 노드를 묶어 실행.
+
+- 전체 통합 실행 (`full_system.launch.py`) 또는 부분 실행 (트랙별)
+- 트랙 owner가 자기 영역만 개발/디버그할 때 부분 launch 사용
+- T4 성선규의 PM 책임 영역. ROS2 wiring + DIST(Daily Integration Smoke Test)의 entry point.
+
+---
+
+## 2. 폴더 구조 (현재 상태)
 
 ```text
 isaac_bringup/
-├─ launch/
-│  ├─ full_system.launch.py
-│  ├─ sim.launch.py
-│  ├─ ai.launch.py
-│  ├─ navigation.launch.py
-│  └─ nodes.launch.py
+├─ launch/                       ✅ 8개 launch 파일 골격 존재 (내용은 stub 또는 미완성)
+│  ├─ full_system.launch.py       # 전체 통합
+│  ├─ sim.launch.py               # Isaac Sim bridge만
+│  ├─ perception.launch.py        # T2 최진우 perception만
+│  ├─ rl.launch.py                # T3 이찬휘 RL inference만
+│  ├─ drive.launch.py             # T3 이찬휘 driving만
+│  ├─ supervisor.launch.py        # T4 성선규 mission supervisor만
+│  ├─ manipulation.launch.py      # T2 최진우 M0609만
+│  └─ localization.launch.py      # T5 이지민 TRN/EKF만
 ├─ package.xml
 └─ setup.py
 ```
 
+**현재 상태**: launch 파일들이 골격(파일은 존재)만 있고, 각 트랙 노드가 실제 채워지면 launch 내용도 같이 작성됨.
+
 ---
 
-## 3. 주요 파일 설명
+## 3. 실행 패턴
 
-### `full_system.launch.py`
-
-전체 시스템을 한 번에 실행하는 최종 launch 파일입니다.
-
-실제 프로젝트에서는 다음과 같은 launch 파일들을 내부에서 함께 실행하도록 구성할 수 있습니다.
-
-```text
-sim.launch.py
-ai.launch.py
-navigation.launch.py
-nodes.launch.py
-```
-
-최종 실행 명령 예시는 다음과 같습니다.
-
+### 전체 통합 (Day 5 이후)
 ```bash
 ros2 launch isaac_bringup full_system.launch.py
 ```
 
----
-
-### `sim.launch.py`
-
-Isaac Sim 연동 또는 시뮬레이션 관련 실행을 관리하는 launch 파일입니다.
-
-주요 목적은 다음과 같습니다.
-
-```text
-- Isaac Sim 관련 설정 실행
-- ROS2 Bridge 연동 확인
-- 시뮬레이션 환경과 ROS2 노드 연결 준비
-```
-
-단, Isaac Sim 프로그램 자체를 반드시 이 launch 파일에서 실행해야 하는 것은 아닙니다.  
-초기 단계에서는 Isaac Sim을 직접 실행하고, ROS2 노드만 launch로 관리해도 됩니다.
-
----
-
-### `ai.launch.py`
-
-AI 관련 노드를 실행하는 launch 파일입니다.
-
-실행 대상 예시는 다음과 같습니다.
-
-```text
-perception_node
-driving_policy_node
-```
-
-이 launch 파일은 카메라/Depth 데이터를 분석하는 AI 노드와 강화학습 기반 주행 판단 노드를 실행하는 역할을 합니다.
-
----
-
-### `navigation.launch.py`
-
-주행 관련 노드를 실행하는 launch 파일입니다.
-
-실행 대상 예시는 다음과 같습니다.
-
-```text
-navigation_manager_node
-mobile_base_executor_node
-```
-
-`navigation_manager_node`는 주행 흐름을 관리하고, `mobile_base_executor_node`는 실제 로버 주행 명령을 실행합니다.
-
----
-
-### `nodes.launch.py`
-
-미션 관리, 배터리 감시, 로봇팔 실행 관련 노드를 실행하는 launch 파일입니다.
-
-실행 대상 예시는 다음과 같습니다.
-
-```text
-mission_manager_node
-battery_monitor_node
-arm_executor_node
+### 트랙별 부분 실행 (Day 1-4 개발용)
+```bash
+ros2 launch isaac_bringup sim.launch.py            # 김현중 환경 검증
+ros2 launch isaac_bringup perception.launch.py     # 최진우 vision 단독
+ros2 launch isaac_bringup drive.launch.py          # 이찬휘 주행 단독
+ros2 launch isaac_bringup localization.launch.py   # 이지민 TRN 단독
+ros2 launch isaac_bringup manipulation.launch.py   # 최진우 M0609 단독
+ros2 launch isaac_bringup supervisor.launch.py     # 성선규 mission 단독
+ros2 launch isaac_bringup rl.launch.py             # 이찬휘 RL inference
 ```
 
 ---
 
-## 4. 이 모듈에 들어가면 안 되는 것
+## 4. Day별 우선순위 (성선규 작업)
 
-`isaac_bringup`에는 아래 기능을 직접 구현하지 않습니다.
+| Day | 작업 | 상태 |
+|:---:|------|:---:|
+| 1 | git/Notion 셋업, kickoff 진행 | ⏳ |
+| 2 | 각 트랙 hello-world launch 검증 (DIST) | ⏳ |
+| 3-4 | ROS2 wiring (토픽 전체 흐름 검증), RViz config 1차 | ⏳ |
+| 5 | end-to-end 통합 (full_system.launch.py) ⚠️ 게이트 | ⏳ |
+| 6 | `demo-stable-v1` git tag | ⏳ |
+| 7-8 | 발표 자료, dry-run | ⏳ |
 
-```text
-- 광석 인식 AI 코드
-- 강화학습 정책 코드
-- 로버 주행 제어 코드
-- 로봇팔 pick & place 코드
-- Isaac Sim 월드 구성 파일
-```
-
-이 모듈은 오직 **실행 구성**을 담당합니다.
-
----
-
-## 5. 설계 의도
-
-프로젝트가 커지면 노드가 많아집니다.  
-각 노드를 터미널에서 하나씩 실행하면 실수가 많아지고, 실행 순서 관리도 어렵습니다.
-
-따라서 `isaac_bringup`에서 launch 파일을 관리하면 다음 장점이 있습니다.
-
-```text
-- 전체 시스템을 한 번에 실행 가능
-- 기능별 실행 파일 분리 가능
-- 팀원 간 실행 방식 통일
-- 발표 시 재현성 향상
-```
+자세한 일정: [docs/tracks/T4_BRIEF.md §10](../docs/tracks/T4_BRIEF.md)
 
 ---
 
-## 6. 한 줄 요약
+## 5. 다른 패키지 의존성
 
-`isaac_bringup`은 전체 ROS2 노드를 실행하기 위한 launch 관리 모듈입니다.
+이 패키지는 **모든 9개 패키지의 launch dependency**. 따라서 `package.xml`의 `<exec_depend>`에 모두 명시:
+
+```xml
+<exec_depend>isaac_sim</exec_depend>
+<exec_depend>isaac_perception</exec_depend>
+<exec_depend>isaac_rl</exec_depend>
+<exec_depend>isaac_drive</exec_depend>
+<exec_depend>isaac_supervisor</exec_depend>
+<exec_depend>isaac_manipulation</exec_depend>
+<exec_depend>isaac_localization</exec_depend>
+<exec_depend>isaac_interfaces</exec_depend>
+```
+
+---
+
+## 6. DIST 도구 연계
+
+매일 18:00 실행되는 [docs/pm_tools/run_dist.sh](../docs/pm_tools/run_dist.sh)가 본 패키지의 launch를 호출해 통합 검증. 깨지면 그날 안에 fix.
+
+---
+
+## 7. 한 줄 요약
+
+> **시스템의 entry point. 8개 launch 파일로 전체/부분 실행 분리.** T4 성선규의 ROS2 wiring 통합 책임 영역. DIST가 매일 여기서 시작.

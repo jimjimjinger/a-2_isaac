@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Terrain Meta Schema (I1)",
-  "description": "T1이 생성하는 각 terrain의 meta.json 스키마. T2/T3/T4/T5가 소비.",
+  "description": "T1 (김현중)이 생성하는 각 terrain의 meta.json 스키마. T2~T5 (최진우/이찬휘/성선규/이지민)가 소비.",
   "type": "object",
   "required": [
     "terrain_id",

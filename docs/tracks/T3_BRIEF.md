@@ -1,4 +1,4 @@
-# 🚗 T3 Driving — 담당자 브리프
+# 🚗 T3 (이찬휘) Driving — 담당자 브리프
 
 > **Mission Brain + 자율 주행 — Critical Path**
 > 시니어 배치. 본 트랙이 늦으면 전체 일정 흔들림. 가장 중요.
@@ -13,7 +13,7 @@
 1. [왜 이 트랙이 Critical Path인가](#1-왜-이-트랙이-critical-path인가)
 2. [당신이 만들 4개 모듈](#2-당신이-만들-4개-모듈)
 3. [⭐ 핵심 빌드업 전략 — Vacuum Cleaner First](#3--핵심-빌드업-전략--vacuum-cleaner-first)
-4. [PoseProvider 패턴 — T5와 분리](#4-poseprovider-패턴--t5와-분리)
+4. [PoseProvider 패턴 — T5 (이지민)와 분리](#4-poseprovider-패턴--t5와-분리)
 5. [Coverage Planner 알고리즘](#5-coverage-planner-알고리즘)
 6. [A* Path Planner](#6-a-path-planner)
 7. [Mission FSM 설계](#7-mission-fsm-설계)
@@ -31,13 +31,13 @@
 ### Mission Brain = 시스템의 두뇌
 
 ```
-T1 지도 ─────┐
-              ├──→ T3가 모든 결정 ──→ T2/Ackermann/Isaac Sim
-T5 위치 ─────┤
-T2 광물 ─────┘
+T1 (김현중) 지도 ─────┐
+              ├──→ T3 (이찬휘)가 모든 결정 ──→ T2 (최진우)/Ackermann/Isaac Sim
+T5 (이지민) 위치 ─────┤
+T2 (최진우) 광물 ─────┘
 ```
 
-→ 다른 모든 트랙의 결과가 T3로 모임. **T3가 멈추면 시스템 멈춤**.
+→ 다른 모든 트랙의 결과가 T3로 모임. **T3 (이찬휘)가 멈추면 시스템 멈춤**.
 
 ### 머신러닝의 의미 있는 영역
 
@@ -46,23 +46,23 @@ T2 광물 ─────┘
 - 거친 화성 지형에서 슬립·슬로프 대응
 - 클래식 컨트롤러로는 어려운 영역
 
-→ T3가 시스템에서 ML의 정당성을 만들어냄.
+→ T3 (이찬휘)가 시스템에서 ML의 정당성을 만들어냄.
 
 ### 발표 핵심 시연
 
-발표의 라이브 데모 = T3의 동작 그 자체:
+발표의 라이브 데모 = T3 (이찬휘)의 동작 그 자체:
 - 미니맵 셀이 채워짐 (Coverage)
 - 로버가 자율로 광물 접근 (FSM + A* + PPO)
 - 베이스캠프 복귀
 
-→ **T3가 안 돌면 발표 망함**. 그래서 critical path.
+→ **T3 (이찬휘)가 안 돌면 발표 망함**. 그래서 critical path.
 
 ---
 
 ## 2. 당신이 만들 4개 모듈
 
 ```
-T3 = 4개 모듈을 한 person이 모두
+T3 (이찬휘) = 4개 모듈을 한 person이 모두
    │
    ├ 1. Mission FSM         (25h)
    │    └ EXPLORE / APPROACH / PICK / RETURN 상태 전환
@@ -114,7 +114,7 @@ Day 2 (수):
   
 Day 3 (목):
   ┌────────────────────────────────────┐
-  │ T1의 첫 5개 terrain 받아 사용        │
+  │ T1 (김현중)의 첫 5개 terrain 받아 사용        │
   │ + A* 추가 (장애물 회피)              │
   │ → 장애물 있는 곳에서 sweep           │
   └────────────────────────────────────┘
@@ -122,13 +122,13 @@ Day 3 (목):
 Day 4 (금):
   ┌────────────────────────────────────┐
   │ Mission FSM 추가                    │
-  │ + T2 stub detection 받아 APPROACH   │
-  │ + T5 pose 연결 (Day 4 통합)          │
+  │ + T2 (최진우) stub detection 받아 APPROACH   │
+  │ + T5 (이지민) pose 연결 (Day 4 통합)          │
   └────────────────────────────────────┘
   
 Day 5 (토):
   ┌────────────────────────────────────┐
-  │ PICK phase 추가 (T2 M0609 트리거)    │
+  │ PICK phase 추가 (T2 (최진우) M0609 트리거)    │
   │ + RETURN phase                       │
   └────────────────────────────────────┘
        ↓ ⚠️ 게이트: end-to-end 1회 성공
@@ -148,27 +148,27 @@ Day 8: 발표 보조
 
 ---
 
-## 4. PoseProvider 패턴 — T5와 분리
+## 4. PoseProvider 패턴 — T5 (이지민)와 분리
 
-T5가 위치 추정 담당. T3는 받기만. **둘 사이 코드 결합 X**.
+T5 (이지민)가 위치 추정 담당. T3 (이찬휘)는 받기만. **둘 사이 코드 결합 X**.
 
 ### 잘못된 예 ❌
 
 ```python
-# T3 안에서 직접 GT 접근 또는 T5 코드 import
+# T3 (이찬휘) 안에서 직접 GT 접근 또는 T5 (이지민) 코드 import
 def update_coverage(env):
     pose = env.unwrapped.scene["robot"].data.root_pos_w[0]  # ❌
     coverage.mark(pose)
 ```
 
-→ T5 통합 시 모든 곳 수정 필요. T5 깨지면 T3 깨짐.
+→ T5 (이지민) 통합 시 모든 곳 수정 필요. T5 (이지민) 깨지면 T3 (이찬휘) 깨짐.
 
 ### 올바른 예 ✅
 
 ```python
-# tracks/T3/pose_provider.py
+# tracks/T3 (이찬휘)/pose_provider.py
 class PoseProvider:
-    """T3 안의 모든 모듈이 pose 접근 시 이걸 사용"""
+    """T3 (이찬휘) 안의 모든 모듈이 pose 접근 시 이걸 사용"""
     
     def __init__(self, source="gt_stub", env=None):
         self.source = source
@@ -177,7 +177,7 @@ class PoseProvider:
     
     def get_pose(self):
         if self.source == "ros2":
-            # T5가 publish한 /rover/estimated_pose
+            # T5 (이지민)가 publish한 /rover/estimated_pose
             return self.latest_ros2_pose
         elif self.source == "gt_stub":
             # Day 1-3 개발 단계: GT 직접 사용
@@ -191,7 +191,7 @@ class PoseProvider:
 ### 사용 패턴
 
 ```python
-# T3의 모든 모듈
+# T3 (이찬휘)의 모든 모듈
 class CoveragePlanner:
     def update(self, pose_provider):
         pose = pose_provider.get_pose()  # source 무관
@@ -210,7 +210,7 @@ provider = PoseProvider(source="ros2")
 # subscriber 설정 추가
 ```
 
-→ **T5와 완전 decoupled**. Day 1-3에 T5 없이도 풀가동 가능.
+→ **T5 (이지민)와 완전 decoupled**. Day 1-3에 T5 (이지민) 없이도 풀가동 가능.
 
 ---
 
@@ -224,7 +224,7 @@ class CoveragePlanner:
         grid_size = meta_json["minimap"]["grid_size"]  # [25, 25]
         cell_size = meta_json["minimap"]["cell_size_m"]  # 2.0
         origin = meta_json["minimap"]["origin"]  # {-25, -25}
-        obstacle_grid = np.load(...)  # T1의 obstacle_grid.npy
+        obstacle_grid = np.load(...)  # T1 (김현중)의 obstacle_grid.npy
         
         # 0=미방문, 1=방문, -1=장애물
         self.grid = np.zeros(grid_size, dtype=np.int8)
@@ -279,7 +279,7 @@ class CoveragePlanner:
 ```python
 class AStarPlanner:
     def __init__(self, obstacle_grid):
-        self.obstacle_grid = obstacle_grid  # T1의 obstacle_grid.npy
+        self.obstacle_grid = obstacle_grid  # T1 (김현중)의 obstacle_grid.npy
         self.resolution = 0.05  # m/cell
     
     def plan(self, start_world, goal_world):
@@ -339,7 +339,7 @@ path = pyastar2d.astar_path(weights, start, goal, allow_diagonal=True)
               │   EXPLORE    │ ← 기본 상태, Coverage Planner 사용
               └──┬─────────┬─┘
                  │         │
-   T2 detection  │         │ Coverage 100%
+   T2 (최진우) detection  │         │ Coverage 100%
                  ▼         ▼
         ┌────────────┐  ┌──────────┐
         │  APPROACH  │  │   DONE   │
@@ -492,18 +492,18 @@ class PPODriver:
 
 | 인터페이스 | Producer | 형식 |
 |----------|:--------:|------|
-| **I1** | T1 | terrain meta.json + obstacle_grid.npy + heightmap.npy |
-| **I2** | T2 | `/perception/detections` (DetectionArray) |
-| **I4** | T2 | `/mission/pick_response` (PickResponse) |
-| **I5** | T5 | `/rover/estimated_pose` (PoseWithCovarianceStamped) |
+| **I1** | T1 (김현중) | terrain meta.json + obstacle_grid.npy + heightmap.npy |
+| **I2** | T2 (최진우) | `/perception/detections` (DetectionArray) |
+| **I4** | T2 (최진우) | `/mission/pick_response` (PickResponse) |
+| **I5** | T5 (이지민) | `/rover/estimated_pose` (PoseWithCovarianceStamped) |
 
 ### Produce (출력)
 
 | 인터페이스 | Consumer | 형식 |
 |----------|:--------:|------|
-| **I3** | T2 (M0609) | `/mission/pick_request` (PickRequest) |
+| **I3** | T2 (최진우) (M0609) | `/mission/pick_request` (PickRequest) |
 | **(internal)** | Ackermann | `action[:, 2]` torch tensor |
-| **(deferred)** | T4 UI | `/mission/status`, `/mission/minimap`, `/mission/path` (Day 4+) |
+| **(deferred)** | T4 (성선규) UI | `/mission/status`, `/mission/minimap`, `/mission/path` (Day 4+) |
 
 → 상세는 [interfaces/INTERFACE_CONTRACTS.md](../interfaces/INTERFACE_CONTRACTS.md) 참조.
 
@@ -513,24 +513,24 @@ class PPODriver:
 
 ```
 Day 1 (화) ⚠️ Coverage Planner 단독 검증
-  □ tracks/T3/coverage_planner.py
-  □ tracks/T3/test_coverage_anim.py (matplotlib 영상)
+  □ tracks/T3 (이찬휘)/coverage_planner.py
+  □ tracks/T3 (이찬휘)/test_coverage_anim.py (matplotlib 영상)
   → EOD: 10×10 grid 100% 도달 영상
 
 Day 2 (수) ⚠️ Isaac Sim 첫 통합
-  □ tracks/T3/sweep_demo.py (Isaac Sim 안에서 sweep)
+  □ tracks/T3 (이찬휘)/sweep_demo.py (Isaac Sim 안에서 sweep)
   □ pose_provider.py (source="gt_stub")
   □ 클론 terrain1 + 클론 PPO 사용
   → EOD: 빈 영역 sweep 1회 완주
 
 Day 3 (목) A* + 장애물
-  □ tracks/T3/path_planner.py
-  □ T1의 첫 5개 terrain 받아 테스트
+  □ tracks/T3 (이찬휘)/path_planner.py
+  □ T1 (김현중)의 첫 5개 terrain 받아 테스트
   → 장애물 있는 곳에서 sweep
 
-Day 4 (금) FSM + T5 통합
-  □ tracks/T3/mission_fsm.py
-  □ T2 stub detection 받아 APPROACH
+Day 4 (금) FSM + T5 (이지민) 통합
+  □ tracks/T3 (이찬휘)/mission_fsm.py
+  □ T2 (최진우) stub detection 받아 APPROACH
   □ pose_provider source="ros2"로 swap
   □ Mission FSM의 5개 phase 골격
 
@@ -541,7 +541,7 @@ Day 5 (토) PICK + RETURN ⭐
   → 일요일 EOD ⚠️ 게이트: End-to-end 1회 성공
 
 Day 6 (일) 통합 안정화
-  □ T2 진짜 detection 받음
+  □ T2 (최진우) 진짜 detection 받음
   □ Edge case (충돌, 막다른 길)
   □ 미션 1회 성공률 측정
 
@@ -560,7 +560,7 @@ Day 8 AM (수) 최종 점검
 | 함정 | 증상 | 대응 |
 |------|------|------|
 | **Day 1부터 Isaac Sim 띄움** | Coverage 알고리즘 디버깅 어려움 | numpy + matplotlib으로 단독 검증 |
-| **PoseProvider 안 씀** | T5 통합 시 모든 곳 수정 | Day 1부터 추상화 적용 |
+| **PoseProvider 안 씀** | T5 (이지민) 통합 시 모든 곳 수정 | Day 1부터 추상화 적용 |
 | **A* 매 step 호출** | 시뮬 멈춤 | 이벤트 기반으로만 (goal 변경 시) |
 | **FSM 코드 spaghetti** | phase 분기 곳곳 흩어짐 | `class MissionFSM` 한 곳에 모음 |
 | **PPO waypoint 인터페이스 잘못** | 로버가 잘못된 곳 감 | `override_command_target` 사용, world frame 통일 |
@@ -593,15 +593,15 @@ Day 8 AM (수) 최종 점검
 ## 🤝 다른 트랙과 동기화
 
 - **매일 09:30 standup**: 어제 진척, 오늘 계획, 블로커
-- **Day 4 첫 통합 미팅** (T5와 30분): pose source swap 검증
-- **Day 5 통합 미팅** (T2와 30분): pick_request/response 동기 확인
+- **Day 4 첫 통합 미팅** (T5 (이지민)와 30분): pose source swap 검증
+- **Day 5 통합 미팅** (T2 (최진우)와 30분): pick_request/response 동기 확인
 - **매일 18:00 DIST**: PM이 통합 테스트
 
 ---
 
 ## 💪 한 마디
 
-T3가 critical path. 늦으면 발표 미스. **Day 2 EOD까지 Isaac Sim 안 sweep 동작**이 가장 중요한 마일스톤. 거기 도달하면 다음 7일이 자동주행.
+T3 (이찬휘)가 critical path. 늦으면 발표 미스. **Day 2 EOD까지 Isaac Sim 안 sweep 동작**이 가장 중요한 마일스톤. 거기 도달하면 다음 7일이 자동주행.
 
 질문 / 막힐 시 PM에게 즉시 ping. 혼자 1시간 vs PM에게 5분.
 

@@ -1,9 +1,9 @@
-# T4 Integration + PM — Claude Code Context (사용자 본인용)
+# T4 (성선규) Integration + PM — Claude Code Context (사용자 본인용)
 
 > 이 파일은 Claude Code가 자동 로드하는 본인용 컨텍스트입니다.
 
 ## 너의 정체성
-**T4 owner = 통합 + UI + 데모 + PM 역할 (듀얼)**
+**T4 (성선규) owner = 통합 + UI + 데모 + PM 역할 (듀얼)**
 
 GPU: 5070 Ti (12GB)
 
@@ -42,11 +42,11 @@ GPU: 5070 Ti (12GB)
 
 ```
 09:30 ~ 10:00  Daily standup + DIST 리뷰        [PM]
-10:00 ~ 12:30  T4 코딩 (방해 금지)               [CODE]
+10:00 ~ 12:30  T4 (성선규) 코딩 (방해 금지)               [CODE]
 12:30 ~ 13:30  점심
-13:30 ~ 17:00  T4 코딩 + 트랙 1:1 sync          [CODE+PM]
+13:30 ~ 17:00  T4 (성선규) 코딩 + 트랙 1:1 sync          [CODE+PM]
 17:00 ~ 17:30  DIST + 블로커 해결                [PM]
-17:30 ~ 22:00  T4 코딩 + 다음날 계획             [CODE]
+17:30 ~ 22:00  T4 (성선규) 코딩 + 다음날 계획             [CODE]
 ```
 
 **PM 시간 하루 2시간 이하 목표**. 넘으면 위임 부족 신호.
@@ -54,7 +54,7 @@ GPU: 5070 Ti (12GB)
 ## 핵심 작업 영역
 
 ```
-tracks/T4/
+tracks/T4 (성선규)/
   ├ ros2_wiring/        # 토픽 통합, launch
   ├ ui/                 # 대시보드, RViz config
   ├ demo/               # 시나리오 스크립트
@@ -68,7 +68,7 @@ pm_tools/
 ```
 
 ## 절대 손대지 마라 (다른 트랙)
-- tracks/T1~T3, T5 의 내부 코드
+- tracks/T1 (김현중)~T3 (이찬휘), T5 (이지민) 의 내부 코드
 - 인터페이스 schema는 변경 가능하지만, 변경 시 모두에게 alert
 
 ## 도구

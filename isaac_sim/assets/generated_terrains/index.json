@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-05-20T00:12:04",
+  "terrains": [
+    {
+      "id": "terrain_00001",
+      "split": "train",
+      "difficulty": 0.528,
+      "seed": 12345
+    }
+  ]
+}

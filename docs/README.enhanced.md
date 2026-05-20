@@ -1,3 +1,9 @@
+> ⚠️ **이 문서는 클론한 기존 프로젝트(June2December/RLRoverLab)의 enhanced README입니다.**
+> 우리 프로젝트(restructure 후)의 진입점은 리포지토리 루트의 [README.md](../README.md)입니다.
+> 본 문서는 클론 분석/참조용으로 보관 — 삭제 또는 archive/ 폴더로 이동 검토 필요.
+
+---
+
 # 🚀 Rokey6 — Mars Mineral Collection Rover
 
 **Isaac Sim 기반, PPO 강화학습 + Ackermann 조향으로 자율주행하는 6륜 화성 탐사 로버 시뮬레이션**

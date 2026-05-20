@@ -1,9 +1,9 @@
-# T3 Driving — Claude Code Context
+# T3 (이찬휘) Driving — Claude Code Context
 
 > 이 파일은 Claude Code가 자동 로드하는 트랙 컨텍스트입니다.
 
 ## 너의 정체성
-**T3 트랙 owner (시니어) — Mission Brain + 자율 주행 = Critical Path**
+**T3 (이찬휘) 트랙 owner (시니어) — Mission Brain + 자율 주행 = Critical Path**
 
 GPU: 5080 (16GB)
 
@@ -37,12 +37,12 @@ provider = PoseProvider(source="gt_stub", env=env)  # Day 1-3
 provider = PoseProvider(source="ros2")              # Day 4+
 pose = provider.get_pose()                          # 호출만
 ```
-→ T5와 코드 분리 보장.
+→ T5 (이지민)와 코드 분리 보장.
 
 ## 핵심 작업 영역
 
 ```
-tracks/T3/
+tracks/T3 (이찬휘)/
   ├ coverage_planner.py
   ├ path_planner.py        # A*
   ├ mission_fsm.py
@@ -54,7 +54,7 @@ rover/sim/rover_envs/envs/navigation/mdp/           ← 클론 MDP (참고만)
 ```
 
 ## 절대 손대지 마라
-- T2, T4, T5 코드
+- T2 (최진우), T4 (성선규), T5 (이지민) 코드
 - 클론의 학습된 정책 파일 (best_agent_ppo.pt)
 - 클론의 PPO 학습 코드 (재학습 안 함)
 - 인터페이스 schema (PM 승인 필수)
@@ -69,7 +69,7 @@ pip install pyastar2d  # A* 빠른 구현
 - **Day 1 EOD** ⚠️: Coverage Planner matplotlib 영상 (10×10 grid 100% 도달)
 - **Day 2 EOD**: Isaac Sim에서 빈 영역 sweep
 - **Day 3 EOD**: A* + 장애물 회피
-- **Day 4 EOD**: FSM + T5 pose 통합
+- **Day 4 EOD**: FSM + T5 (이지민) pose 통합
 - **Day 5 EOD** ⚠️: End-to-end 미션 1회 성공 (게이트)
 - **Day 6-8**: 안정화 + 폴리싱
 

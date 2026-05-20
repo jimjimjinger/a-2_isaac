@@ -1,7 +1,7 @@
 # PickResponse.msg
-# T2가 PickRequest 처리 완료 후 T3에 응답
-# Producer: T2 M0609 Manipulator
-# Consumer: T3 Mission Brain
+# T2 (최진우)가 PickRequest 처리 완료 후 T3에 응답
+# Producer: T2 (최진우) M0609 Manipulator
+# Consumer: T3 (이찬휘) Mission Brain
 # Topic: /mission/pick_response
 # Rate: event-based (PickRequest 1개당 1개)
 # Latency: timeout_s 안에 반드시 응답

@@ -71,10 +71,10 @@ EOF
 } 2>&1 | tee -a "$LOG_FILE"
 
 # ────────────────────────────────────────────────────────────
-# Step 3: T1 출력물 점검 (terrain 생성됐는지)
+# Step 3: T1 김현중 출력물 점검 (terrain 생성됐는지)
 # ────────────────────────────────────────────────────────────
 echo ""
-echo "[3/6] T1 outputs check..."
+echo "[3/6] T1 (김현중) outputs check..."
 {
     if [ -d "generated_terrains" ]; then
         COUNT=$(ls -1 generated_terrains/terrain_* 2>/dev/null | wc -l)

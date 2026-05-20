@@ -1,6 +1,6 @@
-# 🗺️ T1 Environment — 담당자 브리프
+# 🗺️ T1 (김현중) — Environment 브리프
 
-> **트랙 owner를 위한 onboarding 자료**
+> **담당자: 김현중** (트랙 owner)
 > 이 문서를 읽고 나면: 무엇을 만들지, 왜 만들지, 어떻게 만들지, 언제까지 만들지 명확해집니다.
 
 ---
@@ -45,9 +45,9 @@
 
 ### 우리 프로젝트의 코어
 
-> **T1이 진짜 화성 환경을 다양하게 만들어내는 게, 이 프로젝트가 클론과 본질적으로 다른 시뮬레이션 프로젝트가 되는 이유.**
+> **김현중 (T1)이 진짜 화성 환경을 다양하게 만들어내는 게, 이 프로젝트가 클론과 본질적으로 다른 시뮬레이션 프로젝트가 되는 이유.**
 
-당신(T1)이 하는 일:
+당신(김현중 (T1))이 하는 일:
 1. **절차생성으로 N개의 서로 다른 화성 지형** (Perlin noise 기반)
 2. **진짜 화성 물리** (gravity 3.72, regolith 마찰)
 3. **광물 / 암석 / 베이스캠프의 무작위 배치**
@@ -59,7 +59,7 @@
 - 클론과 차별점 사라짐
 - **물류창고 팀에게 밀림**
 
-→ T1의 결과물은 단순한 asset이 아니라 **프로젝트의 raison d'être**입니다.
+→ 김현중 (T1)의 결과물은 단순한 asset이 아니라 **프로젝트의 raison d'être**입니다.
 
 ---
 
@@ -70,9 +70,9 @@ generated_terrains/
 ├── terrain_00001/
 │   ├── terrain_only.usd        ← 지형 메쉬 (Isaac Sim 로드)
 │   ├── rocks_merged.usd        ← 암석 메쉬 (Isaac Sim 로드)
-│   ├── obstacle_grid.npy       ← A* path planner용 (T3가 사용)
-│   ├── heightmap.npy           ← 정밀 높이맵 (T3가 사용)
-│   └── meta.json               ← 모든 메타데이터 (T2/T3/T4/T5가 사용)
+│   ├── obstacle_grid.npy       ← A* path planner용 (이찬휘 (T3)가 사용)
+│   ├── heightmap.npy           ← 정밀 높이맵 (이지민 (T5) TRN이 사용)
+│   └── meta.json               ← 모든 메타데이터 (최진우/이찬휘/성선규/이지민이 사용)
 ├── terrain_00002/
 │   └── ...
 └── ...
@@ -272,7 +272,7 @@ heightmap = Σ_{i=0..octaves} (amplitude * persistence^i) × perlin(freq * lacun
 | `count` | 광물 총 개수 — 미션 길이 결정 |
 | `min_spacing_m` | 광물 간 최소 거리 |
 | `exclude_basecamp_radius_m` | 베이스 근처 제외 → 탐사 강제 |
-| `value_distribution` | **가치 점수 시스템** ⭐ — T2의 우선순위 결정 |
+| `value_distribution` | **가치 점수 시스템** ⭐ — 최진우 (T2)의 우선순위 결정 |
 
 **가치 분포 의미**:
 ```
@@ -281,17 +281,17 @@ red    (30%, 25점)  ← 보통
 yellow (20%, 50점)  ← 희귀
 ```
 
-→ T2 vision이 같은 거리에 여러 광물 보면 **노랑 우선** 수집하도록 학습 가능.
+→ 최진우 (T2) vision이 같은 거리에 여러 광물 보면 **노랑 우선** 수집하도록 학습 가능.
 → 발표 멘트: *"단순 수집이 아니라 과학적 우선순위 기반 자율 탐사"*
 
-#### C-4. Physics Zones (Mars Tier 2, T5가 이어받음)
+#### C-4. Physics Zones (Mars Tier 2, 이지민 (T5)가 이어받음)
 
 | 필드 | 효과 |
 |------|------|
 | `noise_frequency` | 모래/암반 패치 크기 (작으면 큰 영역) |
 | `sand_threshold` | 모래 영역 비율 (높으면 모래 적음) |
 
-→ 이 정보로 T5가 PhysX physics material 적용. T1은 영역 폴리곤만 생성하고 넘김.
+→ 이 정보로 이지민 (T5)이 PhysX physics material 적용. 김현중 (T1)은 영역 폴리곤만 생성하고 넘김.
 
 ### D. 런타임 데이터 (출력)
 
@@ -316,14 +316,14 @@ generation_params로부터 알고리즘이 산출한 결과:
 ```json
 {"id": 1, "type": "blue", "position": {...}, "value": 10}
 ```
-- **id는 T1이 1부터 순차 발급** (T2가 이 ID로 detection 매칭)
+- **id는 김현중 (T1)이 1부터 순차 발급** (최진우 (T2)가 이 ID로 detection 매칭)
 - 광물 USD는 별도 디렉터리에 색별 (mineral_blue.usd 등) 미리 준비
 
 #### physics_zones (출력)
-generation_params의 noise로부터 추출한 폴리곤 리스트. T5가 이걸 받아서 PhysX에 적용.
+generation_params의 noise로부터 추출한 폴리곤 리스트. 이지민 (T5)이 이걸 받아서 PhysX에 적용.
 
 #### minimap
-T3 Coverage Planner가 사용. 25×25 grid, 셀당 2m → 50m 영역 커버.
+이찬휘 (T3) Coverage Planner가 사용. 25×25 grid, 셀당 2m → 50m 영역 커버.
 
 ### E. 사후 분석 (출력)
 
@@ -347,7 +347,7 @@ score = (
 )
 ```
 
-→ E 트랙(eval)이 holdout 분석할 때 사용. Curriculum 학습에도 사용.
+→ E 트랙(이지민, eval)이 holdout 분석할 때 사용. Curriculum 학습에도 사용.
 
 ---
 
@@ -409,19 +409,19 @@ Output: 1개 terrain 디렉터리 완성
 
 ## 6. 다른 트랙이 당신 출력을 어떻게 쓰나
 
-| 트랙 | 무엇을 읽나 | 어떻게 쓰나 |
+| 트랙 (담당자) | 무엇을 읽나 | 어떻게 쓰나 |
 |------|------------|-----------|
-| **T2 Perception** | `minerals` 배열, `terrain_only.usd` | detection ↔ ID 매칭 / Replicator 합성 데이터 생성 |
-| **T2 M0609** | `minerals[i].position` | pick 좌표 |
-| **T3 Coverage** | `minimap.grid_size`, `basecamp` | 미니맵 셀 초기화 / 베이스 영역 제외 |
-| **T3 A\*** | `obstacle_grid.npy`, `heightmap.npy` | path 계산 입력 |
-| **T3 FSM** | `basecamp.center`, `basecamp.radius` | "is rover home?" 판정 |
-| **T3 PPO** | `terrain_only.usd`, `rocks_merged.usd` | Isaac Sim 로드 (그대로) |
-| **T4 UI** | `minimap`, `basecamp`, `minerals` | 시각화 렌더링 |
-| **T5 Mars** | `physics_zones` | PhysX material 적용 |
-| **T5 Eval** | `difficulty`, `terrain_id` | 평가 분류 / 차트 |
+| **T2 (최진우) Perception** | `minerals` 배열, `terrain_only.usd` | detection ↔ ID 매칭 / Replicator 합성 데이터 생성 |
+| **T2 (최진우) M0609** | `minerals[i].position` | pick 좌표 |
+| **T3 (이찬휘) Coverage** | `minimap.grid_size`, `basecamp` | 미니맵 셀 초기화 / 베이스 영역 제외 |
+| **T3 (이찬휘) A\*** | `obstacle_grid.npy`, `heightmap.npy` | path 계산 입력 |
+| **T3 (이찬휘) FSM** | `basecamp.center`, `basecamp.radius` | "is rover home?" 판정 |
+| **T3 (이찬휘) PPO** | `terrain_only.usd`, `rocks_merged.usd` | Isaac Sim 로드 (그대로) |
+| **T4 (성선규) UI** | `minimap`, `basecamp`, `minerals` | 시각화 렌더링 |
+| **T5 (이지민) Mars** | `physics_zones` | PhysX material 적용 |
+| **T5 (이지민) Eval** | `difficulty`, `terrain_id` | 평가 분류 / 차트 |
 
-→ **출력 호환성이 깨지면 4명이 막힘**. meta.json schema 변경 시 PM(T4)에게 즉시 alert.
+→ **출력 호환성이 깨지면 4명이 막힘**. meta.json schema 변경 시 PM(성선규 (T4))에게 즉시 alert.
 
 ---
 
@@ -550,7 +550,7 @@ stage.GetRootLayer().Save()
 
 - **매일 09:30 standup**: 어제 진척, 오늘 계획, 블로커 공유
 - **매일 18:00 DIST** (Daily Integration Smoke Test): 본인 결과물 + 다른 트랙 통합 검증
-- **인터페이스 변경 발생 시 즉시**: PM(T4)에게 alert → 전체 회의
+- **인터페이스 변경 발생 시 즉시**: PM(T4 (성선규))에게 alert → 전체 회의
 
 ---
 
