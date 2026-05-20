@@ -11,6 +11,7 @@ terrain_meta_schema.json)을 100% 따른다.
   - 피처 크기를 월드 span 비율로 파라미터화 → 50 m 아레나에 맞게 재조준
   - basecamp은 (0,0) 고정 — base-candidate 자동선택은 흡수 안 함
     (소비 트랙 T3/T4가 가정할 수 있는 유일한 '값'이라 팀 영향 0 유지)
+  - terrain_only.usd 에 50 m 아레나 경계 충돌벽 4면 내장 → 로버 맵 밖 낙하 방지
 
 I1 출력:
   generated_terrains/terrain_NNNNN/{heightmap.npy, obstacle_grid.npy,
@@ -90,6 +91,10 @@ CFG = {
     "basecamp_center": (0.0, 0.0),  # I1 Tier 1 — (0,0) 고정
     "basecamp_radius": 3.0,
     "mesh_stride": 5,             # USD 시각 메시 다운샘플 (npy는 풀해상도 유지)
+    # ─ 맵경계 낙하 방지 — 50 m 아레나 둘레 정적 충돌벽 ─
+    "boundary_wall_thickness_m": 0.5,      # 벽 두께
+    "boundary_wall_height_above_m": 3.0,   # 지형 최고점 위로 솟는 높이 (점프 차단)
+    "boundary_wall_depth_below_m": 1.0,    # 지형 최저점 아래로 묻히는 깊이 (빈틈 차단)
 }
 
 
@@ -657,6 +662,64 @@ def build_terrain_prim(stage, heightmap, x_coords, y_coords, texture_dir,
     return mesh
 
 
+def build_boundary_walls(stage, terrain_z_min, terrain_z_max,
+                         walls_path="/Terrain/BoundaryWalls"):
+    """50 m 아레나 경계에 투명 정적 충돌벽 4면을 세운다 — 로버 맵 밖 낙하 방지.
+
+    벽 특성:
+      - 보이지 않음 (visibility=invisible) — collision-only. 화성 지형 몰입을
+        해치지 않으면서 로버를 물리적으로만 막는다. PhysX 충돌은 visibility 와
+        무관히 동작한다.
+      - static (RigidBodyAPI 없음 = 고정). UsdGeom.Cube 라 PhysX 가 analytic
+        box collider 로 처리 — mesh 근사 불요.
+      - 수직 범위는 지형 min/max 에서 유도: 최저점 아래로 묻고(빈틈 차단)
+        최고점 위로 솟게 한다(점프 차단). 어떤 지형 기복에서도 안전.
+      - 남/북 벽을 ±두께만큼 연장해 동/서 벽과 코너에서 겹침 → 모서리 갭 없음.
+
+    walls_path 는 terrain_only.usd 의 defaultPrim(/Terrain) 하위 → world 합성
+    시 reference 한 번으로 지형 메시와 함께 따라온다. master scene 수정 불요.
+
+    재실행 안전: Define 은 기존 prim 을 반환하므로 idempotent.
+    반환: 생성한 벽 개수(4).
+    """
+    thickness = float(CFG["boundary_wall_thickness_m"])
+    z_bottom = float(terrain_z_min) - float(CFG["boundary_wall_depth_below_m"])
+    z_top = float(terrain_z_max) + float(CFG["boundary_wall_height_above_m"])
+    z_center = 0.5 * (z_bottom + z_top)
+    height = z_top - z_bottom
+
+    x_min, x_max = ORIGIN[0], ORIGIN[0] + SIZE_M       # -25, +25
+    y_min, y_max = ORIGIN[1], ORIGIN[1] + SIZE_M       # -25, +25
+    x_mid = 0.5 * (x_min + x_max)
+    y_mid = 0.5 * (y_min + y_max)
+
+    UsdGeom.Xform.Define(stage, walls_path)
+    # (이름, 중심, scale=박스 크기). 남/북 벽은 SIZE_M+2*두께 → 코너 겹침.
+    walls = (
+        ("wall_y_max", (x_mid, y_max, z_center),
+         (SIZE_M + 2.0 * thickness, thickness, height)),
+        ("wall_y_min", (x_mid, y_min, z_center),
+         (SIZE_M + 2.0 * thickness, thickness, height)),
+        ("wall_x_max", (x_max, y_mid, z_center),
+         (thickness, SIZE_M, height)),
+        ("wall_x_min", (x_min, y_mid, z_center),
+         (thickness, SIZE_M, height)),
+    )
+    for name, center, scale in walls:
+        cube = UsdGeom.Cube.Define(stage, f"{walls_path}/{name}")
+        cube.CreateSizeAttr(1.0)                       # 단위 큐브 → scale 로 박스화
+        cube.CreateExtentAttr([Gf.Vec3f(-0.5, -0.5, -0.5),
+                               Gf.Vec3f(0.5, 0.5, 0.5)])
+        xf = UsdGeom.XformCommonAPI(cube.GetPrim())
+        xf.SetTranslate(Gf.Vec3d(*center))
+        xf.SetScale(Gf.Vec3f(*scale))
+        # 정적 collider — RigidBodyAPI 없음 = static.
+        UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+        # collision-only — 렌더링에서 숨김 (충돌은 그대로 유지).
+        UsdGeom.Imageable(cube.GetPrim()).MakeInvisible()
+    return len(walls)
+
+
 def build_rocks_prim(stage, rocks, terrain_height_at, rocks_path="/Rocks"):
     UsdGeom.Xform.Define(stage, rocks_path)
     for idx, rock in enumerate(rocks):
@@ -681,14 +744,22 @@ def build_light_rig(stage):
     sky.CreateColorAttr(Gf.Vec3f(0.95, 0.73, 0.57))
 
 
-def export_terrain_usd(heightmap, x_coords, y_coords, out_path, texture_dir):
-    """terrain_only.usd — defaultPrim=/Terrain (reference 가능하도록)."""
+def export_terrain_usd(heightmap, x_coords, y_coords, out_path, texture_dir,
+                       terrain_z_min, terrain_z_max):
+    """terrain_only.usd — defaultPrim=/Terrain (reference 가능하도록).
+
+    지형 메시 + 맵경계 충돌벽을 모두 /Terrain 하위에 둔다 → world 합성 시
+    reference 한 번으로 둘 다 따라온다. terrain_z_min/max 는 풀해상도 heightmap
+    에서 구한 값(다운샘플 메시가 아닌) — 벽 수직 범위를 정확히 잡기 위함.
+    """
     require_pxr()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     stage = Usd.Stage.CreateNew(str(out_path))
     _configure_stage(stage)
     build_terrain_prim(stage, heightmap, x_coords, y_coords, texture_dir,
                        terrain_path="/Terrain")
+    build_boundary_walls(stage, terrain_z_min, terrain_z_max,
+                         walls_path="/Terrain/BoundaryWalls")
     stage.SetDefaultPrim(stage.GetPrimAtPath("/Terrain"))
     stage.GetRootLayer().Save()
 
@@ -771,7 +842,8 @@ def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
     latest_world = WORLDS_DIR / "mars_exploration_world.usd"
     try:
         export_terrain_usd(hm[::s, ::s], xs[::s], ys[::s], terrain_usd,
-                           TEXTURE_DIR if TEXTURE_DIR.exists() else None)
+                           TEXTURE_DIR if TEXTURE_DIR.exists() else None,
+                           float(hm.min()), float(hm.max()))
         export_rocks_usd(rocks, rocks_usd, lambda x, y: sample(hm, x, y))
         # master scene — terrain별 보존본
         compose_world(per_terrain_world, terrain_usd, rocks_usd,
@@ -784,7 +856,7 @@ def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
               f"({type(exc).__name__}: {exc})")
         return False
     print(f"[usd] terrain_only.usd / rocks_merged.usd "
-          f"(시각 메시 {GRID // s}×{GRID // s}, PBR 화성 텍스처)")
+          f"(시각 메시 {GRID // s}×{GRID // s}, PBR 화성 텍스처, 경계 충돌벽 4면)")
     print(f"[usd] master scene → worlds/{terrain_id}.usd (보존) "
           f"+ worlds/mars_exploration_world.usd (최신 alias)")
     return True
