@@ -28,12 +28,22 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Dict, Iterable, Optional
 
 import numpy as np
+
+try:
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade
+    PXR_AVAILABLE = True
+except Exception:  # pragma: no cover - Isaac Sim 런타임에서만 동작
+    Gf = Sdf = Usd = UsdGeom = UsdLux = UsdShade = None
+    PXR_AVAILABLE = False
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -464,7 +474,276 @@ def write_index(terrain_id, split, difficulty_score, seed):
     return index, dropped
 
 
-# ─── 7. USD (옵션 — pxr 필요. T1 world_composer 재사용) ──────────────────
+# ─── 7. USD 출력 (pxr 필요 — Isaac Sim 런타임. plain python3에선 건너뜀) ──
+# v1처럼 USD 출력을 이 파일에 자체 구현 (별도 world_composer 모듈 없이 단일 파일).
+def require_pxr() -> None:
+    if not PXR_AVAILABLE:
+        raise RuntimeError(
+            "USD 출력은 Isaac Sim의 pxr 런타임이 필요합니다. terrain_only.usd / "
+            "rocks_merged.usd / master scene가 필요하면 plain python3 대신 "
+            "isaac-python으로 실행하세요."
+        )
+
+
+def _relpath(target: Path, start: Path) -> str:
+    return os.path.relpath(str(Path(target).resolve()), start=str(Path(start).resolve()))
+
+
+def _relpath_safe(target: Path, start: Path) -> str:
+    try:
+        return _relpath(target, start)
+    except Exception:
+        return Path(target).resolve().as_posix()
+
+
+def _asset_ref(target: Path, base_dir: Optional[Path]) -> str:
+    if base_dir is None:
+        return Path(target).resolve().as_posix()
+    return _relpath_safe(target, base_dir)
+
+
+def _create_preview_material(stage, material_path, texture_dir, base_dir):
+    """UsdPreviewSurface + 화성 PBR 텍스처 (albedo / roughness / normal)."""
+    material = UsdShade.Material.Define(stage, material_path)
+    surface = UsdShade.Shader.Define(stage, f"{material_path}/PreviewSurface")
+    surface.CreateIdAttr("UsdPreviewSurface")
+    surface.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.9)
+    surface.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(0.0)
+    surface.CreateOutput("surface", Sdf.ValueTypeNames.Token)
+
+    if texture_dir is not None:
+        albedo = texture_dir / "mars_albedo.png"
+        roughness = texture_dir / "mars_roughness.png"
+        normal = texture_dir / "mars_normal.png"
+        has_textures = albedo.exists() and roughness.exists() and normal.exists()
+    else:
+        has_textures = False
+
+    if has_textures:
+        reader = UsdShade.Shader.Define(stage, f"{material_path}/PrimvarReader")
+        reader.CreateIdAttr("UsdPrimvarReader_float2")
+        reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set("st")
+        reader.CreateOutput("result", Sdf.ValueTypeNames.Float2)
+
+        diffuse_tex = UsdShade.Shader.Define(stage, f"{material_path}/AlbedoTex")
+        diffuse_tex.CreateIdAttr("UsdUVTexture")
+        diffuse_tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(
+            Sdf.AssetPath(_asset_ref(albedo, base_dir)))
+        diffuse_tex.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat")
+        diffuse_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
+        diffuse_tex.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
+        diffuse_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
+            reader.ConnectableAPI(), "result")
+
+        rough_tex = UsdShade.Shader.Define(stage, f"{material_path}/RoughnessTex")
+        rough_tex.CreateIdAttr("UsdUVTexture")
+        rough_tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(
+            Sdf.AssetPath(_asset_ref(roughness, base_dir)))
+        rough_tex.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat")
+        rough_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
+        rough_tex.CreateOutput("r", Sdf.ValueTypeNames.Float)
+        rough_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
+            reader.ConnectableAPI(), "result")
+
+        # UsdPreviewSurface 표준: UsdUVTexture를 normal에 직결 ('UsdNormalMap'은
+        # 표준 셰이더 아님). raw 색공간 + scale(2,2,2)/bias(-1,-1,-1)로 [0,1]
+        # 텍셀을 [-1,1] 법선으로 remap.
+        normal_tex = UsdShade.Shader.Define(stage, f"{material_path}/NormalTex")
+        normal_tex.CreateIdAttr("UsdUVTexture")
+        normal_tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(
+            Sdf.AssetPath(_asset_ref(normal, base_dir)))
+        normal_tex.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("raw")
+        normal_tex.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat")
+        normal_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
+        normal_tex.CreateInput("scale", Sdf.ValueTypeNames.Float4).Set(
+            Gf.Vec4f(2.0, 2.0, 2.0, 1.0))
+        normal_tex.CreateInput("bias", Sdf.ValueTypeNames.Float4).Set(
+            Gf.Vec4f(-1.0, -1.0, -1.0, 0.0))
+        normal_tex.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
+        normal_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
+            reader.ConnectableAPI(), "result")
+
+        surface.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).ConnectToSource(
+            diffuse_tex.ConnectableAPI(), "rgb")
+        surface.CreateInput("roughness", Sdf.ValueTypeNames.Float).ConnectToSource(
+            rough_tex.ConnectableAPI(), "r")
+        surface.CreateInput("normal", Sdf.ValueTypeNames.Normal3f).ConnectToSource(
+            normal_tex.ConnectableAPI(), "rgb")
+    else:
+        surface.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
+            Gf.Vec3f(0.72, 0.38, 0.22))
+
+    material.CreateSurfaceOutput().ConnectToSource(
+        surface.ConnectableAPI(), "surface")
+    return material
+
+
+def _make_uvs(xs, ys, x_min, y_min, uv_scale_m):
+    uvs = []
+    for y in ys:
+        for x in xs:
+            uvs.append(((float(x) - x_min) / uv_scale_m,
+                        (float(y) - y_min) / uv_scale_m))
+    return uvs
+
+
+def _configure_stage(stage):
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+    world = UsdGeom.Xform.Define(stage, "/World")
+    stage.SetDefaultPrim(world.GetPrim())
+    return world
+
+
+def build_terrain_prim(stage, heightmap, x_coords, y_coords, texture_dir,
+                       terrain_path="/Terrain"):
+    """heightmap → 삼각형 메시 + PBR 머티리얼. 머티리얼은 terrain_path 하위에
+    둔다 — defaultPrim 밖에 있으면 reference 합성 시 바인딩이 끊긴다."""
+    UsdGeom.Xform.Define(stage, terrain_path)
+    mesh = UsdGeom.Mesh.Define(stage, f"{terrain_path}/TerrainMesh")
+
+    h, w = heightmap.shape
+    points = []
+    for yi, y in enumerate(y_coords):
+        for xi, x in enumerate(x_coords):
+            points.append(Gf.Vec3f(float(x), float(y), float(heightmap[yi, xi])))
+
+    fvi, fvc = [], []
+    for yi in range(h - 1):
+        row_start, next_start = yi * w, (yi + 1) * w
+        for xi in range(w - 1):
+            v0, v1 = row_start + xi, row_start + xi + 1
+            v2, v3 = next_start + xi + 1, next_start + xi
+            fvi.extend([v0, v1, v2, v0, v2, v3])
+            fvc.extend([3, 3])
+
+    mesh.CreatePointsAttr(points)
+    mesh.CreateFaceVertexIndicesAttr(fvi)
+    mesh.CreateFaceVertexCountsAttr(fvc)
+    mesh.CreateSubdivisionSchemeAttr("none")
+    mesh.CreateDoubleSidedAttr(True)
+
+    dx = float(x_coords[1] - x_coords[0]) if len(x_coords) > 1 else 1.0
+    dy = float(y_coords[1] - y_coords[0]) if len(y_coords) > 1 else 1.0
+    dz_dy, dz_dx = np.gradient(heightmap, dy, dx)
+    normals = []
+    for yi in range(h):
+        for xi in range(w):
+            nx, ny, nz = -float(dz_dx[yi, xi]), -float(dz_dy[yi, xi]), 1.0
+            length = (nx * nx + ny * ny + nz * nz) ** 0.5
+            normals.append(Gf.Vec3f(nx / length, ny / length, nz / length))
+    mesh.CreateNormalsAttr(normals)
+    mesh.SetNormalsInterpolation("vertex")
+
+    st_primvar = UsdGeom.PrimvarsAPI(mesh).CreatePrimvar(
+        "st", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex)
+    uv_scale_m = max(float(x_coords[-1] - x_coords[0]),
+                     float(y_coords[-1] - y_coords[0])) / 4.0
+    if uv_scale_m <= 0:
+        uv_scale_m = 64.0
+    st_primvar.Set(_make_uvs(x_coords, y_coords, float(x_coords[0]),
+                             float(y_coords[0]), uv_scale_m))
+
+    base_dir = (Path(stage.GetRootLayer().realPath).parent
+                if stage.GetRootLayer().realPath else None)
+    material = _create_preview_material(
+        stage, f"{terrain_path}/Looks/MarsSurface", texture_dir, base_dir)
+    UsdShade.MaterialBindingAPI(mesh.GetPrim()).Bind(material)
+    return mesh
+
+
+def build_rocks_prim(stage, rocks, terrain_height_at, rocks_path="/Rocks"):
+    UsdGeom.Xform.Define(stage, rocks_path)
+    for idx, rock in enumerate(rocks):
+        x, y = float(rock["x"]), float(rock["y"])
+        radius = float(rock["radius"])
+        z = float(terrain_height_at(x, y)) + radius * 0.55
+        prim = UsdGeom.Sphere.Define(stage, f"{rocks_path}/rock_{idx:04d}")
+        prim.GetRadiusAttr().Set(radius)
+        prim.GetDisplayColorAttr().Set([Gf.Vec3f(0.35, 0.28, 0.24)])
+        UsdGeom.XformCommonAPI(prim).SetTranslate((x, y, z))
+
+
+def build_light_rig(stage):
+    UsdGeom.Xform.Define(stage, "/World/Lights")
+    sun = UsdLux.DistantLight.Define(stage, "/World/Lights/Sun")
+    sun.CreateIntensityAttr(2200.0)
+    sun.CreateAngleAttr(0.53)
+    UsdGeom.XformCommonAPI(sun.GetPrim()).SetRotate((35.0, 0.0, -25.0))
+    sky = UsdLux.DomeLight.Define(stage, "/World/Lights/Sky")
+    sky.CreateIntensityAttr(150.0)
+    sky.CreateColorAttr(Gf.Vec3f(0.95, 0.73, 0.57))
+
+
+def export_terrain_usd(heightmap, x_coords, y_coords, out_path, texture_dir):
+    """terrain_only.usd — defaultPrim=/Terrain (reference 가능하도록)."""
+    require_pxr()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(out_path))
+    _configure_stage(stage)
+    build_terrain_prim(stage, heightmap, x_coords, y_coords, texture_dir,
+                       terrain_path="/Terrain")
+    stage.SetDefaultPrim(stage.GetPrimAtPath("/Terrain"))
+    stage.GetRootLayer().Save()
+
+
+def export_rocks_usd(rocks, out_path, terrain_height_at):
+    """rocks_merged.usd — sphere prim 모음, defaultPrim=/Rocks."""
+    require_pxr()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(out_path))
+    _configure_stage(stage)
+    build_rocks_prim(stage, rocks, terrain_height_at, rocks_path="/Rocks")
+    stage.SetDefaultPrim(stage.GetPrimAtPath("/Rocks"))
+    stage.GetRootLayer().Save()
+
+
+def compose_world(world_path, terrain_usd, rocks_usd, marker_dir, minerals,
+                  generated_at, basecamp=None):
+    """master scene — terrain/rocks/basecamp/광물 마커를 reference로 묶고 조명 추가."""
+    require_pxr()
+    world_path.parent.mkdir(parents=True, exist_ok=True)
+    stage = Usd.Stage.CreateNew(str(world_path))
+    _configure_stage(stage)
+
+    terrain_prim = stage.DefinePrim("/World/Terrain", "Xform")
+    terrain_prim.GetReferences().AddReference(
+        _relpath_safe(terrain_usd, world_path.parent))
+    rocks_prim = stage.DefinePrim("/World/Rocks", "Xform")
+    rocks_prim.GetReferences().AddReference(
+        _relpath_safe(rocks_usd, world_path.parent))
+
+    # Basecamp — markers/ 의 USD를 reference (mineral과 동일 패턴).
+    # 해당 파일만 교체하면 원하는 basecamp 모양이 그대로 로드된다.
+    if basecamp is not None:
+        marker_path = marker_dir / basecamp.get("marker_usd", "basecamp_dome.usd")
+        if marker_path.exists():
+            bc = stage.DefinePrim("/World/Basecamp", "Xform")
+            bc.GetReferences().AddReference(
+                _relpath_safe(marker_path, world_path.parent))
+            center = basecamp.get("center", {"x": 0.0, "y": 0.0})
+            UsdGeom.XformCommonAPI(bc).SetTranslate(
+                (float(center["x"]), float(center["y"]), 0.0))
+
+    UsdGeom.Xform.Define(stage, "/World/Minerals")
+    for mineral in minerals:
+        mtype = str(mineral["type"])
+        marker_path = marker_dir / f"mineral_{mtype}.usd"
+        if not marker_path.exists():
+            continue
+        prim = stage.DefinePrim(
+            f"/World/Minerals/{mtype}_{int(mineral['id']):04d}", "Xform")
+        prim.GetReferences().AddReference(
+            _relpath_safe(marker_path, world_path.parent))
+        pos = mineral["position"]
+        UsdGeom.XformCommonAPI(prim).SetTranslate(
+            (float(pos["x"]), float(pos["y"]), float(pos["z"])))
+
+    build_light_rig(stage)
+    stage.GetRootLayer().customLayerData = {"generated_at": generated_at}
+    stage.GetRootLayer().Save()
+
+
 def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
                      minerals, basecamp, generated_at) -> bool:
     """terrain_only.usd / rocks_merged.usd + master scene 조립.
@@ -473,15 +752,7 @@ def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
     + 최신 alias worlds/mars_exploration_world.usd (둘 다).
     pxr(Isaac Sim 런타임) 없으면 전부 건너뜀 — npy/json은 그대로 유효.
     """
-    import shutil
-    if str(SCRIPT_DIR) not in sys.path:
-        sys.path.insert(0, str(SCRIPT_DIR))
-    try:
-        import world_composer as wc
-    except Exception as exc:
-        print(f"[usd] world_composer import 실패 — USD 건너뜀 ({exc})")
-        return False
-    if not wc.PXR_AVAILABLE:
+    if not PXR_AVAILABLE:
         print("[usd] pxr 미가용 (plain python3) — USD 건너뜀. "
               "isaac-python으로 재실행 시 USD가 생성됨.")
         return False
@@ -493,12 +764,12 @@ def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
     per_terrain_world = WORLDS_DIR / f"{terrain_id}.usd"
     latest_world = WORLDS_DIR / "mars_exploration_world.usd"
     try:
-        wc.export_terrain_usd(hm[::s, ::s], xs[::s], ys[::s], terrain_usd,
-                              TEXTURE_DIR if TEXTURE_DIR.exists() else None)
-        wc.export_rocks_usd(rocks, rocks_usd, lambda x, y: sample(hm, x, y))
+        export_terrain_usd(hm[::s, ::s], xs[::s], ys[::s], terrain_usd,
+                           TEXTURE_DIR if TEXTURE_DIR.exists() else None)
+        export_rocks_usd(rocks, rocks_usd, lambda x, y: sample(hm, x, y))
         # master scene — terrain별 보존본
-        wc.compose_world(per_terrain_world, terrain_usd, rocks_usd,
-                         MARKERS_DIR, minerals, generated_at, basecamp=basecamp)
+        compose_world(per_terrain_world, terrain_usd, rocks_usd,
+                      MARKERS_DIR, minerals, generated_at, basecamp=basecamp)
         # 최신 alias — worlds/ 동일 폴더라 상대 ref 그대로 유효 → byte-copy
         shutil.copyfile(per_terrain_world, latest_world)
     except Exception as exc:
