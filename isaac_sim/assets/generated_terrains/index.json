@@ -1,27 +1,18 @@
 {
+  "version": "1.0",
+  "generated_at": "2026-05-20T07:22:11+00:00",
   "terrains": [
-    {
-      "seed": 7,
-      "folder": "terrain_test_01",
-      "path": "assets/generated_terrains/terrain_test_01",
-      "world": "worlds/mars_exploration_world.usd",
-      "generated_at": "2026-05-20T05:36:53+00:00"
-    },
-    {
-      "seed": 42,
-      "folder": "seed_000042",
-      "path": "assets/generated_terrains/seed_000042",
-      "world": "worlds/mars_exploration_world.usd",
-      "generated_at": "2026-05-20T05:42:12+00:00"
-    },
     {
       "id": "terrain_00001",
       "split": "train",
       "difficulty": 0.528,
-      "seed": 12345,
-      "folder": "terrain_00001",
-      "path": "assets/generated_terrains/terrain_00001",
-      "world": "worlds/mars_exploration_world.usd"
+      "seed": 12345
+    },
+    {
+      "id": "terrain_00002",
+      "split": "train",
+      "difficulty": 0.458,
+      "seed": 23456
     }
   ]
 }

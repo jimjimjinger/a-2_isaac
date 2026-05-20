@@ -27,7 +27,8 @@ isaac_sim/
 │     └─ basecamp_dome.usd            # [이찬휘 T3 FSM] "is rover home?" 시각
 │
 └─ worlds/
-   └─ mars_exploration_world.usd      ← master scene (Isaac Sim이 열어주는 파일)
+   ├─ terrain_NNNNN.usd               ← terrain별 master scene (보존, 덮어쓰기 X)
+   └─ mars_exploration_world.usd      ← 최신 terrain alias (Isaac Sim 기본 entry point)
 ```
 
 **구분이 중요**:
@@ -330,16 +331,17 @@ estimated_pos, confidence = trn.localize(local, prior_pos, global_heightmap)
 ## terrain 새로 생성 시 흐름
 
 ```bash
-python3 isaac_sim/scripts/procedural_terrain_generator.py \
-    --seed 99 --terrain-id terrain_00002
+python3 isaac_sim/scripts/mars_terrain_generator_v2.py \
+    --seed 23456 --terrain-id terrain_00002
 ```
 
 생성되는 것:
 1. `generated_terrains/terrain_00002/{terrain_only.usd, rocks_merged.usd, obstacle_grid.npy, heightmap.npy, meta.json}` 5개 ✅
-2. `generated_terrains/index.json` (기존 entry + 새 terrain 추가) ✅
-3. `worlds/mars_exploration_world.usd` ← terrain_00002로 갱신 ✅
+2. `generated_terrains/index.json` (기존 entry + 새 terrain 추가, I1 포맷) ✅
+3. `worlds/terrain_00002.usd` ← 이 terrain 전용 master scene (terrain별 보존) ✅
+4. `worlds/mars_exploration_world.usd` ← 최신 terrain alias로 갱신 ✅
 
-> 현재는 master scene이 1개 terrain만 가리킴 (가장 최근 생성). 만약 동시에 여러 terrain을 시각화하고 싶다면 generator에 `--no-compose` 옵션 사용 + 별도 master scene 작성.
+> master scene 정책 (v2): terrain마다 `worlds/<terrain_id>.usd`를 보존하고, `worlds/mars_exploration_world.usd`는 항상 최신 terrain의 alias. 특정 terrain은 `worlds/<terrain_id>.usd`로, 최신은 `mars_exploration_world.usd`로 연다.
 
 생성 안 되는 것 (이미 존재 시 보호):
 - `markers/mineral_*.usd`, `markers/basecamp_dome.usd` — 김현중이 멋진 모형으로 교체해뒀을 수도 있어서 보호. 다시 만들고 싶으면 `rm` 후 generator 재실행.

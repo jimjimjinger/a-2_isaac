@@ -79,7 +79,7 @@ def _create_preview_material(
         diffuse_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
         diffuse_tex.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
         diffuse_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
-            primvar_reader, "result"
+            primvar_reader.ConnectableAPI(), "result"
         )
 
         rough_tex = UsdShade.Shader.Define(stage, f"{material_path}/RoughnessTex")
@@ -91,7 +91,7 @@ def _create_preview_material(
         rough_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
         rough_tex.CreateOutput("r", Sdf.ValueTypeNames.Float)
         rough_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
-            primvar_reader, "result"
+            primvar_reader.ConnectableAPI(), "result"
         )
 
         normal_tex = UsdShade.Shader.Define(stage, f"{material_path}/NormalTex")
@@ -99,35 +99,40 @@ def _create_preview_material(
         normal_tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(
             Sdf.AssetPath(_asset_ref(normal, base_dir))
         )
+        normal_tex.CreateInput("sourceColorSpace", Sdf.ValueTypeNames.Token).Set("raw")
         normal_tex.CreateInput("wrapS", Sdf.ValueTypeNames.Token).Set("repeat")
         normal_tex.CreateInput("wrapT", Sdf.ValueTypeNames.Token).Set("repeat")
+        normal_tex.CreateInput("scale", Sdf.ValueTypeNames.Float4).Set(
+            Gf.Vec4f(2.0, 2.0, 2.0, 1.0)
+        )
+        normal_tex.CreateInput("bias", Sdf.ValueTypeNames.Float4).Set(
+            Gf.Vec4f(-1.0, -1.0, -1.0, 0.0)
+        )
         normal_tex.CreateOutput("rgb", Sdf.ValueTypeNames.Float3)
         normal_tex.CreateInput("st", Sdf.ValueTypeNames.Float2).ConnectToSource(
-            primvar_reader, "result"
+            primvar_reader.ConnectableAPI(), "result"
         )
 
-        normal_map = UsdShade.Shader.Define(stage, f"{material_path}/NormalMap")
-        normal_map.CreateIdAttr("UsdNormalMap")
-        normal_map.CreateInput("in", Sdf.ValueTypeNames.Float3).ConnectToSource(
-            normal_tex, "rgb"
-        )
-        normal_map.CreateOutput("result", Sdf.ValueTypeNames.Normal3f)
-
+        # UsdPreviewSurface 표준: UsdUVTexture를 normal에 직결한다.
+        # ('UsdNormalMap'은 표준 셰이더가 아니라 제거 — normal_tex에 raw 색공간 +
+        #  scale (2,2,2)/bias (-1,-1,-1)을 줘 [0,1] 텍셀을 [-1,1] 법선으로 remap.)
         surface_shader.CreateInput(
             "diffuseColor", Sdf.ValueTypeNames.Color3f
-        ).ConnectToSource(diffuse_tex, "rgb")
+        ).ConnectToSource(diffuse_tex.ConnectableAPI(), "rgb")
         surface_shader.CreateInput(
             "roughness", Sdf.ValueTypeNames.Float
-        ).ConnectToSource(rough_tex, "r")
+        ).ConnectToSource(rough_tex.ConnectableAPI(), "r")
         surface_shader.CreateInput(
             "normal", Sdf.ValueTypeNames.Normal3f
-        ).ConnectToSource(normal_map, "result")
+        ).ConnectToSource(normal_tex.ConnectableAPI(), "rgb")
     else:
         surface_shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
             Gf.Vec3f(0.72, 0.38, 0.22)
         )
 
-    material.CreateSurfaceOutput().ConnectToSource(surface_shader, "surface")
+    material.CreateSurfaceOutput().ConnectToSource(
+        surface_shader.ConnectableAPI(), "surface"
+    )
     return material
 
 
@@ -214,7 +219,10 @@ def build_terrain_prim(
         uv_scale_m = 64.0
     st_primvar.Set(_make_uvs(x_coords, y_coords, x_min, y_min, uv_scale_m))
 
-    material_dir = "/World/Terrain/Looks"
+    # 머티리얼은 메시와 같은 terrain_path 하위에 둔다. export_terrain_usd는
+    # terrain_path="/Terrain"(defaultPrim)이라, 머티리얼이 그 밖에 있으면
+    # reference 합성 시 따라오지 않아 바인딩이 끊긴다.
+    material_dir = f"{terrain_path}/Looks"
     material = _create_preview_material(
         stage,
         f"{material_dir}/MarsSurface",
@@ -357,6 +365,7 @@ def compose_world(
     marker_dir: Path,
     minerals: Iterable[Dict[str, Any]],
     generated_at: str,
+    basecamp: Optional[Dict[str, Any]] = None,
 ) -> None:
     require_pxr()
 
@@ -369,6 +378,21 @@ def compose_world(
 
     rocks_prim = stage.DefinePrim("/World/Rocks", "Xform")
     rocks_prim.GetReferences().AddReference(_relpath_safe(rocks_usd, world_path.parent))
+
+    # Basecamp — markers/ 의 USD를 reference (mineral과 동일 패턴).
+    # 해당 파일만 교체하면 원하는 basecamp 모양이 그대로 로드된다.
+    if basecamp is not None:
+        marker_name = basecamp.get("marker_usd", "basecamp_dome.usd")
+        marker_path = marker_dir / marker_name
+        if marker_path.exists():
+            bc_prim = stage.DefinePrim("/World/Basecamp", "Xform")
+            bc_prim.GetReferences().AddReference(
+                _relpath_safe(marker_path, world_path.parent)
+            )
+            center = basecamp.get("center", {"x": 0.0, "y": 0.0})
+            UsdGeom.XformCommonAPI(bc_prim).SetTranslate(
+                (float(center["x"]), float(center["y"]), 0.0)
+            )
 
     minerals_root = UsdGeom.Xform.Define(stage, "/World/Minerals")
     for mineral in minerals:
