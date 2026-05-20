@@ -63,8 +63,117 @@ def _ensure_static_assets() -> None:
         write_placeholder_reference_asset(ASSETS_DIR / "command_center.usd", "CommandCenter", (0.72, 0.74, 0.78))
     if not (ASSETS_DIR / "bunker.usd").exists():
         write_placeholder_reference_asset(ASSETS_DIR / "bunker.usd", "Bunker", (0.50, 0.54, 0.58))
-    if not (ASSETS_DIR / "minerals" / "mineral.usd").exists():
-        write_placeholder_reference_asset(ASSETS_DIR / "minerals" / "mineral.usd", "Mineral", (0.92, 0.87, 0.38))
+    mineral_asset = ASSETS_DIR / "minerals" / "mineral.usd"
+    mineral_scene = ASSETS_DIR / "minerals" / "minerals.usdc"
+    if not mineral_asset.exists():
+        if mineral_scene.exists():
+            mineral_asset.write_text(
+                """#usda 1.0
+(
+    defaultPrim = "Mineral"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "Mineral"
+(
+    prepend references = @minerals.usdc@
+    prepend apiSchemas = ["CollectionAPI:allMeshes", "MaterialBindingAPI"]
+)
+{
+    double3 xformOp:rotateXYZ = (90, 0, 0)
+    double3 xformOp:scale = (0.01, 0.01, 0.01)
+    uniform token[] xformOpOrder = ["xformOp:rotateXYZ", "xformOp:scale"]
+    rel material:binding = </Mineral/Looks/MineralMaterial>
+    uniform token collection:allMeshes:expansionRule = "expandPrims"
+    rel collection:allMeshes:includes = </Mineral/Meshes>
+    rel material:binding:collection:allMeshes = [</Mineral/Looks/MineralMaterial>, </Mineral.collection:allMeshes>]
+
+    def Scope "Looks"
+    {
+        def Material "MineralMaterial"
+        {
+            token outputs:surface.connect = </Mineral/Looks/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </Mineral/Looks/BaseColor.outputs:rgb>
+                color3f inputs:emissiveColor.connect = </Mineral/Looks/Emissive.outputs:rgb>
+                float inputs:metallic.connect = </Mineral/Looks/Metallic.outputs:r>
+                float inputs:roughness.connect = </Mineral/Looks/Roughness.outputs:r>
+                normal3f inputs:normal.connect = </Mineral/Looks/Normal.outputs:rgb>
+            }
+
+            def Shader "UVReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "uvset0"
+                float2 outputs:result
+            }
+
+            def Shader "BaseColor"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Default_OBJ_baseColor.jpg@
+                token inputs:sourceColorSpace = "sRGB"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float3 outputs:rgb
+            }
+
+            def Shader "Emissive"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Default_OBJ_emissive.jpg@
+                token inputs:sourceColorSpace = "sRGB"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float3 outputs:rgb
+            }
+
+            def Shader "Roughness"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Default_OBJ_metallicRoughness_rough.jpg@
+                token inputs:sourceColorSpace = "raw"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float outputs:r
+            }
+
+            def Shader "Metallic"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Default_OBJ_metallicRoughness_metal.jpg@
+                token inputs:sourceColorSpace = "raw"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float outputs:r
+            }
+
+            def Shader "Normal"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @Default_OBJ_normal.jpg@
+                token inputs:sourceColorSpace = "raw"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float3 outputs:rgb
+            }
+        }
+    }
+}
+""",
+                encoding="utf-8",
+            )
+        else:
+            write_placeholder_reference_asset(mineral_asset, "Mineral", (0.92, 0.87, 0.38))
 
 
 def _build_world_stage(

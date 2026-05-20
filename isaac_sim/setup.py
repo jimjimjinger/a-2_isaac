@@ -20,7 +20,10 @@ setup(
         (f"share/{package_name}/assets/textures/Mars", _files("assets/textures/Mars/*")),
         (f"share/{package_name}/worlds/generated", ["worlds/generated/.gitkeep"]),
         (f"share/{package_name}/assets", ["assets/command_center.usd", "assets/bunker.usd"]),
-        (f"share/{package_name}/assets/minerals", ["assets/minerals/mineral.usd"]),
+        (
+            f"share/{package_name}/assets/minerals",
+            _files("assets/minerals/*.usd") + _files("assets/minerals/*.usdc") + _files("assets/minerals/*.jpg"),
+        ),
     ],
     install_requires=["setuptools"],
     zip_safe=True,

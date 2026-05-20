@@ -1,17 +1,82 @@
 #usda 1.0
 (
     defaultPrim = "Mineral"
-    upAxis = "Z"
     metersPerUnit = 1
+    upAxis = "Z"
 )
 
 def Xform "Mineral"
+(
+    prepend references = @mineral.usdc@
+    prepend apiSchemas = ["CollectionAPI:allMeshes", "MaterialBindingAPI"]
+)
 {
-    def Sphere "Geom"
+    double3 xformOp:rotateXYZ = (90, 0, 0)
+    double3 xformOp:scale = (0.01, 0.01, 0.01)
+    uniform token[] xformOpOrder = ["xformOp:rotateXYZ", "xformOp:scale"]
+
+    rel material:binding = </Mineral/Looks/MineralMaterial>
+
+    uniform token collection:allMeshes:expansionRule = "expandPrims"
+    rel collection:allMeshes:includes = </Mineral>
+    rel material:binding:collection:allMeshes = [
+        </Mineral/Looks/MineralMaterial>,
+        </Mineral.collection:allMeshes>
+    ]
+
+    def Scope "Looks"
     {
-        double3 xformOp:translate = (0, 0, 0.15)
-        float radius = 0.25
-        color3f primvars:displayColor = (0.92, 0.86, 0.35)
-        uniform token[] xformOpOrder = ["xformOp:translate"]
+        def Material "MineralMaterial"
+        {
+            token outputs:surface.connect = </Mineral/Looks/PreviewSurface.outputs:surface>
+
+            def Shader "PreviewSurface"
+            {
+                uniform token info:id = "UsdPreviewSurface"
+                color3f inputs:diffuseColor.connect = </Mineral/Looks/BaseColor.outputs:rgb>
+                float inputs:metallic.connect = </Mineral/Looks/Metallic.outputs:r>
+                float inputs:roughness.connect = </Mineral/Looks/Roughness.outputs:r>
+            }
+
+            def Shader "UVReader"
+            {
+                uniform token info:id = "UsdPrimvarReader_float2"
+                token inputs:varname = "uvset0"
+                float2 outputs:result
+            }
+
+            def Shader "BaseColor"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./Default_OBJ_baseColor.jpg@
+                token inputs:sourceColorSpace = "sRGB"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float3 outputs:rgb
+            }
+
+            def Shader "Roughness"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./Default_OBJ_metallicRoughness_rough.jpg@
+                token inputs:sourceColorSpace = "raw"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float outputs:r
+            }
+
+            def Shader "Metallic"
+            {
+                uniform token info:id = "UsdUVTexture"
+                asset inputs:file = @./Default_OBJ_metallicRoughness_metal.jpg@
+                token inputs:sourceColorSpace = "raw"
+                token inputs:wrapS = "repeat"
+                token inputs:wrapT = "repeat"
+                float2 inputs:st.connect = </Mineral/Looks/UVReader.outputs:result>
+                float outputs:r
+            }
+        }
     }
 }
