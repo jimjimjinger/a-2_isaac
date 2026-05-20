@@ -73,7 +73,8 @@ from isaacsim.robot_setup.assembler import RobotAssembler
 # ─── 경로 ──────────────────────────────────────────────────────────────────
 A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
-ROVER_USD = Path("/home/rokey/dev_ws/rover_ws/src/aau_rover/Mars_Rover.usd")
+# T1 김현중이 main 에 추가한 in-repo rover 자산 (2026-05-20). 외부 경로 종속성 제거.
+ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 
 ISAAC_SIM_SRC = Path("/home/rokey/dev_ws/isaac_sim/src")
 M0609_URDF = ISAAC_SIM_SRC / "doosan-robot2/urdf/m0609_isaac_sim.urdf"

@@ -25,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from noise import pnoise2
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics
 from scipy import ndimage
 
 # ─── 기본 파라미터 (medium 난이도 preset) ──────────────────────────
@@ -287,6 +287,10 @@ def export_terrain_usd(hm, origin, res, out_path, stride):
     mesh.CreateNormalsAttr(face_normals)
     mesh.SetNormalsInterpolation("uniform")  # per-face
     mesh.CreateDisplayColorAttr([Gf.Vec3f(0.78, 0.45, 0.30)])  # Mars red-orange
+    # 정적 collider: 로버가 지형 위에 안착하도록 triangle-mesh 충돌 baking.
+    UsdPhysics.CollisionAPI.Apply(mesh.GetPrim())
+    mesh_collision = UsdPhysics.MeshCollisionAPI.Apply(mesh.GetPrim())
+    mesh_collision.CreateApproximationAttr().Set("none")
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
 
@@ -303,6 +307,8 @@ def export_rocks_usd(rocks, hm, origin, res, out_path):
         sph.GetRadiusAttr().Set(float(size * 0.5))
         UsdGeom.XformCommonAPI(sph).SetTranslate((float(x), float(y), float(z)))
         sph.GetDisplayColorAttr().Set([Gf.Vec3f(0.45, 0.30, 0.25)])
+        # 정적 collider: 로버가 암석에 물리적으로 부딪히도록 충돌 baking.
+        UsdPhysics.CollisionAPI.Apply(sph.GetPrim())
     stage.SetDefaultPrim(root.GetPrim())
     stage.GetRootLayer().Save()
 
