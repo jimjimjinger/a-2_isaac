@@ -1,0 +1,17 @@
+#usda 1.0
+(
+    defaultPrim = "Mineral"
+    upAxis = "Z"
+    metersPerUnit = 1
+)
+
+def Xform "Mineral"
+{
+    def Sphere "Geom"
+    {
+        double3 xformOp:translate = (0, 0, 0.15)
+        float radius = 0.25
+        color3f primvars:displayColor = (0.92, 0.86, 0.35)
+        uniform token[] xformOpOrder = ["xformOp:translate"]
+    }
+}

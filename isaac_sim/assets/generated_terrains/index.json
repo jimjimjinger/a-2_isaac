@@ -16,12 +16,66 @@
     },
     {
       "id": "terrain_00001",
+      "seed": 12345,
       "split": "train",
       "difficulty": 0.528,
-      "seed": 12345,
       "folder": "terrain_00001",
       "path": "assets/generated_terrains/terrain_00001",
       "world": "worlds/mars_exploration_world.usd"
+    },
+    {
+      "id": "terrain_00002",
+      "seed": 2,
+      "split": "train",
+      "difficulty": 0.378
+    },
+    {
+      "id": "terrain_48291",
+      "seed": 48291,
+      "split": "train",
+      "difficulty": 0.285
+    },
+    {
+      "id": "terrain_73918",
+      "seed": 73918,
+      "split": "train",
+      "difficulty": 0.293
+    },
+    {
+      "id": "terrain_00001",
+      "seed": 1,
+      "split": "train",
+      "difficulty": 0.444
+    },
+    {
+      "id": "terrain_24680",
+      "seed": 24680,
+      "split": "train",
+      "difficulty": 0.397
+    },
+    {
+      "id": "terrain_53124",
+      "seed": 53124,
+      "split": "train",
+      "difficulty": 0.421
+    },
+    {
+      "id": "terrain_86420",
+      "seed": 86420,
+      "split": "train",
+      "difficulty": 0.405
+    },
+    {
+      "id": "terrain_97531",
+      "seed": 97531,
+      "split": "train",
+      "difficulty": 0.333
+    },
+    {
+      "id": "terrain_11223",
+      "seed": 11223,
+      "split": "train",
+      "difficulty": 0.375
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "seed": 2,
+  "terrain_id": "terrain_00002",
+  "material_name": "MarsSoil",
+  "shader": "UsdPreviewSurface",
+  "textures": {
+    "albedo": "mars_albedo.png",
+    "normal": "mars_normal.png",
+    "roughness": "mars_roughness.png"
+  }
+}

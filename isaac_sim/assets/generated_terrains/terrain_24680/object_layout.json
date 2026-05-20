@@ -1,0 +1,2084 @@
+{
+  "seed": 24680,
+  "terrain_id": "terrain_24680",
+  "objects": [
+    {
+      "type": "rock",
+      "name": "rock_0001",
+      "prim_path": "/World/Rocks/rock_0001",
+      "asset_path": "procedural:sphere",
+      "position": [
+        25.675,
+        -45.098,
+        4.124
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        17.093
+      ],
+      "scale": [
+        0.856,
+        0.856,
+        0.856
+      ],
+      "radius": 0.428
+    },
+    {
+      "type": "rock",
+      "name": "rock_0002",
+      "prim_path": "/World/Rocks/rock_0002",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -47.182,
+        8.71,
+        3.539
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        155.887
+      ],
+      "scale": [
+        1.117,
+        1.117,
+        1.117
+      ],
+      "radius": 0.559
+    },
+    {
+      "type": "rock",
+      "name": "rock_0003",
+      "prim_path": "/World/Rocks/rock_0003",
+      "asset_path": "procedural:sphere",
+      "position": [
+        35.863,
+        38.526,
+        2.152
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        101.572
+      ],
+      "scale": [
+        0.998,
+        0.998,
+        0.998
+      ],
+      "radius": 0.499
+    },
+    {
+      "type": "rock",
+      "name": "rock_0004",
+      "prim_path": "/World/Rocks/rock_0004",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -46.882,
+        29.347,
+        1.263
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        269.762
+      ],
+      "scale": [
+        1.302,
+        1.302,
+        1.302
+      ],
+      "radius": 0.651
+    },
+    {
+      "type": "rock",
+      "name": "rock_0005",
+      "prim_path": "/World/Rocks/rock_0005",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -44.668,
+        6.142,
+        3.812
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        70.793
+      ],
+      "scale": [
+        0.863,
+        0.863,
+        0.863
+      ],
+      "radius": 0.431
+    },
+    {
+      "type": "rock",
+      "name": "rock_0006",
+      "prim_path": "/World/Rocks/rock_0006",
+      "asset_path": "procedural:sphere",
+      "position": [
+        47.413,
+        44.016,
+        1.994
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        350.921
+      ],
+      "scale": [
+        1.499,
+        1.499,
+        1.499
+      ],
+      "radius": 0.749
+    },
+    {
+      "type": "rock",
+      "name": "rock_0007",
+      "prim_path": "/World/Rocks/rock_0007",
+      "asset_path": "procedural:sphere",
+      "position": [
+        15.934,
+        0.157,
+        3.41
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        179.536
+      ],
+      "scale": [
+        1.385,
+        1.385,
+        1.385
+      ],
+      "radius": 0.692
+    },
+    {
+      "type": "rock",
+      "name": "rock_0008",
+      "prim_path": "/World/Rocks/rock_0008",
+      "asset_path": "procedural:sphere",
+      "position": [
+        31.096,
+        -41.821,
+        5.087
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        342.464
+      ],
+      "scale": [
+        1.436,
+        1.436,
+        1.436
+      ],
+      "radius": 0.718
+    },
+    {
+      "type": "rock",
+      "name": "rock_0009",
+      "prim_path": "/World/Rocks/rock_0009",
+      "asset_path": "procedural:sphere",
+      "position": [
+        20.911,
+        20.248,
+        2.599
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        323.676
+      ],
+      "scale": [
+        0.714,
+        0.714,
+        0.714
+      ],
+      "radius": 0.357
+    },
+    {
+      "type": "rock",
+      "name": "rock_0010",
+      "prim_path": "/World/Rocks/rock_0010",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -42.543,
+        -46.229,
+        3.055
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        164.767
+      ],
+      "scale": [
+        0.386,
+        0.386,
+        0.386
+      ],
+      "radius": 0.193
+    },
+    {
+      "type": "rock",
+      "name": "rock_0011",
+      "prim_path": "/World/Rocks/rock_0011",
+      "asset_path": "procedural:sphere",
+      "position": [
+        36.622,
+        17.285,
+        2.742
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        39.171
+      ],
+      "scale": [
+        0.998,
+        0.998,
+        0.998
+      ],
+      "radius": 0.499
+    },
+    {
+      "type": "rock",
+      "name": "rock_0012",
+      "prim_path": "/World/Rocks/rock_0012",
+      "asset_path": "procedural:sphere",
+      "position": [
+        20.25,
+        4.101,
+        3.083
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        206.949
+      ],
+      "scale": [
+        1.438,
+        1.438,
+        1.438
+      ],
+      "radius": 0.719
+    },
+    {
+      "type": "rock",
+      "name": "rock_0013",
+      "prim_path": "/World/Rocks/rock_0013",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -32.344,
+        -48.655,
+        2.807
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        348.42
+      ],
+      "scale": [
+        0.345,
+        0.345,
+        0.345
+      ],
+      "radius": 0.172
+    },
+    {
+      "type": "rock",
+      "name": "rock_0014",
+      "prim_path": "/World/Rocks/rock_0014",
+      "asset_path": "procedural:sphere",
+      "position": [
+        2.643,
+        -32.117,
+        3.882
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        7.159
+      ],
+      "scale": [
+        0.302,
+        0.302,
+        0.302
+      ],
+      "radius": 0.151
+    },
+    {
+      "type": "rock",
+      "name": "rock_0015",
+      "prim_path": "/World/Rocks/rock_0015",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -32.335,
+        26.42,
+        2.636
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        269.62
+      ],
+      "scale": [
+        0.359,
+        0.359,
+        0.359
+      ],
+      "radius": 0.179
+    },
+    {
+      "type": "rock",
+      "name": "rock_0016",
+      "prim_path": "/World/Rocks/rock_0016",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -36.652,
+        -27.689,
+        3.83
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        76.074
+      ],
+      "scale": [
+        1.297,
+        1.297,
+        1.297
+      ],
+      "radius": 0.649
+    },
+    {
+      "type": "rock",
+      "name": "rock_0017",
+      "prim_path": "/World/Rocks/rock_0017",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -7.382,
+        -28.139,
+        5.461
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        330.136
+      ],
+      "scale": [
+        0.596,
+        0.596,
+        0.596
+      ],
+      "radius": 0.298
+    },
+    {
+      "type": "rock",
+      "name": "rock_0018",
+      "prim_path": "/World/Rocks/rock_0018",
+      "asset_path": "procedural:sphere",
+      "position": [
+        16.448,
+        -25.545,
+        3.144
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        303.225
+      ],
+      "scale": [
+        1.122,
+        1.122,
+        1.122
+      ],
+      "radius": 0.561
+    },
+    {
+      "type": "rock",
+      "name": "rock_0019",
+      "prim_path": "/World/Rocks/rock_0019",
+      "asset_path": "procedural:sphere",
+      "position": [
+        41.756,
+        29.986,
+        2.532
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        90.667
+      ],
+      "scale": [
+        1.09,
+        1.09,
+        1.09
+      ],
+      "radius": 0.545
+    },
+    {
+      "type": "rock",
+      "name": "rock_0020",
+      "prim_path": "/World/Rocks/rock_0020",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -1.959,
+        39.955,
+        4.048
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        315.395
+      ],
+      "scale": [
+        1.296,
+        1.296,
+        1.296
+      ],
+      "radius": 0.648
+    },
+    {
+      "type": "rock",
+      "name": "rock_0021",
+      "prim_path": "/World/Rocks/rock_0021",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -13.78,
+        -22.505,
+        7.049
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        316.333
+      ],
+      "scale": [
+        1.168,
+        1.168,
+        1.168
+      ],
+      "radius": 0.584
+    },
+    {
+      "type": "rock",
+      "name": "rock_0022",
+      "prim_path": "/World/Rocks/rock_0022",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -18.289,
+        36.288,
+        4.074
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        261.513
+      ],
+      "scale": [
+        0.734,
+        0.734,
+        0.734
+      ],
+      "radius": 0.367
+    },
+    {
+      "type": "rock",
+      "name": "rock_0023",
+      "prim_path": "/World/Rocks/rock_0023",
+      "asset_path": "procedural:sphere",
+      "position": [
+        30.278,
+        -43.279,
+        4.443
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        168.292
+      ],
+      "scale": [
+        0.603,
+        0.603,
+        0.603
+      ],
+      "radius": 0.301
+    },
+    {
+      "type": "rock",
+      "name": "rock_0024",
+      "prim_path": "/World/Rocks/rock_0024",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -32.016,
+        34.718,
+        3.198
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        30.469
+      ],
+      "scale": [
+        0.737,
+        0.737,
+        0.737
+      ],
+      "radius": 0.368
+    },
+    {
+      "type": "rock",
+      "name": "rock_0025",
+      "prim_path": "/World/Rocks/rock_0025",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -35.627,
+        7.539,
+        4.777
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        6.095
+      ],
+      "scale": [
+        0.92,
+        0.92,
+        0.92
+      ],
+      "radius": 0.46
+    },
+    {
+      "type": "rock",
+      "name": "rock_0026",
+      "prim_path": "/World/Rocks/rock_0026",
+      "asset_path": "procedural:sphere",
+      "position": [
+        13.784,
+        -32.027,
+        2.676
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        352.166
+      ],
+      "scale": [
+        0.393,
+        0.393,
+        0.393
+      ],
+      "radius": 0.197
+    },
+    {
+      "type": "rock",
+      "name": "rock_0027",
+      "prim_path": "/World/Rocks/rock_0027",
+      "asset_path": "procedural:sphere",
+      "position": [
+        20.027,
+        -5.198,
+        2.88
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        115.381
+      ],
+      "scale": [
+        1.051,
+        1.051,
+        1.051
+      ],
+      "radius": 0.525
+    },
+    {
+      "type": "rock",
+      "name": "rock_0028",
+      "prim_path": "/World/Rocks/rock_0028",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -30.654,
+        -33.441,
+        6.3
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        149.331
+      ],
+      "scale": [
+        1.109,
+        1.109,
+        1.109
+      ],
+      "radius": 0.554
+    },
+    {
+      "type": "rock",
+      "name": "rock_0029",
+      "prim_path": "/World/Rocks/rock_0029",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -46.558,
+        42.914,
+        1.216
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        195.006
+      ],
+      "scale": [
+        1.336,
+        1.336,
+        1.336
+      ],
+      "radius": 0.668
+    },
+    {
+      "type": "rock",
+      "name": "rock_0030",
+      "prim_path": "/World/Rocks/rock_0030",
+      "asset_path": "procedural:sphere",
+      "position": [
+        45.525,
+        -43.5,
+        5.38
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        143.665
+      ],
+      "scale": [
+        1.004,
+        1.004,
+        1.004
+      ],
+      "radius": 0.502
+    },
+    {
+      "type": "rock",
+      "name": "rock_0031",
+      "prim_path": "/World/Rocks/rock_0031",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -40.875,
+        -1.853,
+        4.06
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        280.37
+      ],
+      "scale": [
+        1.219,
+        1.219,
+        1.219
+      ],
+      "radius": 0.609
+    },
+    {
+      "type": "rock",
+      "name": "rock_0032",
+      "prim_path": "/World/Rocks/rock_0032",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -26.596,
+        12.4,
+        3.154
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        150.473
+      ],
+      "scale": [
+        0.983,
+        0.983,
+        0.983
+      ],
+      "radius": 0.492
+    },
+    {
+      "type": "rock",
+      "name": "rock_0033",
+      "prim_path": "/World/Rocks/rock_0033",
+      "asset_path": "procedural:sphere",
+      "position": [
+        44.727,
+        -16.548,
+        4.121
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        304.14
+      ],
+      "scale": [
+        1.283,
+        1.283,
+        1.283
+      ],
+      "radius": 0.641
+    },
+    {
+      "type": "rock",
+      "name": "rock_0034",
+      "prim_path": "/World/Rocks/rock_0034",
+      "asset_path": "procedural:sphere",
+      "position": [
+        22.227,
+        24.527,
+        2.015
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        271.891
+      ],
+      "scale": [
+        0.531,
+        0.531,
+        0.531
+      ],
+      "radius": 0.266
+    },
+    {
+      "type": "rock",
+      "name": "rock_0035",
+      "prim_path": "/World/Rocks/rock_0035",
+      "asset_path": "procedural:sphere",
+      "position": [
+        22.491,
+        -22.413,
+        3.87
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        244.493
+      ],
+      "scale": [
+        1.393,
+        1.393,
+        1.393
+      ],
+      "radius": 0.697
+    },
+    {
+      "type": "rock",
+      "name": "rock_0036",
+      "prim_path": "/World/Rocks/rock_0036",
+      "asset_path": "procedural:sphere",
+      "position": [
+        47.82,
+        -42.931,
+        5.288
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        138.502
+      ],
+      "scale": [
+        1.497,
+        1.497,
+        1.497
+      ],
+      "radius": 0.749
+    },
+    {
+      "type": "rock",
+      "name": "rock_0037",
+      "prim_path": "/World/Rocks/rock_0037",
+      "asset_path": "procedural:sphere",
+      "position": [
+        37.002,
+        -23.0,
+        4.61
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        22.079
+      ],
+      "scale": [
+        0.767,
+        0.767,
+        0.767
+      ],
+      "radius": 0.384
+    },
+    {
+      "type": "rock",
+      "name": "rock_0038",
+      "prim_path": "/World/Rocks/rock_0038",
+      "asset_path": "procedural:sphere",
+      "position": [
+        16.403,
+        13.597,
+        3.32
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        285.473
+      ],
+      "scale": [
+        1.146,
+        1.146,
+        1.146
+      ],
+      "radius": 0.573
+    },
+    {
+      "type": "rock",
+      "name": "rock_0039",
+      "prim_path": "/World/Rocks/rock_0039",
+      "asset_path": "procedural:sphere",
+      "position": [
+        48.812,
+        18.115,
+        3.731
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        194.047
+      ],
+      "scale": [
+        1.074,
+        1.074,
+        1.074
+      ],
+      "radius": 0.537
+    },
+    {
+      "type": "rock",
+      "name": "rock_0040",
+      "prim_path": "/World/Rocks/rock_0040",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -36.853,
+        47.409,
+        1.38
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        341.804
+      ],
+      "scale": [
+        0.687,
+        0.687,
+        0.687
+      ],
+      "radius": 0.343
+    },
+    {
+      "type": "rock",
+      "name": "rock_0041",
+      "prim_path": "/World/Rocks/rock_0041",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -45.776,
+        27.196,
+        1.636
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        53.49
+      ],
+      "scale": [
+        1.405,
+        1.405,
+        1.405
+      ],
+      "radius": 0.703
+    },
+    {
+      "type": "rock",
+      "name": "rock_0042",
+      "prim_path": "/World/Rocks/rock_0042",
+      "asset_path": "procedural:sphere",
+      "position": [
+        16.266,
+        21.183,
+        2.826
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        108.284
+      ],
+      "scale": [
+        0.301,
+        0.301,
+        0.301
+      ],
+      "radius": 0.151
+    },
+    {
+      "type": "rock",
+      "name": "rock_0043",
+      "prim_path": "/World/Rocks/rock_0043",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -9.791,
+        36.112,
+        4.171
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        84.093
+      ],
+      "scale": [
+        1.082,
+        1.082,
+        1.082
+      ],
+      "radius": 0.541
+    },
+    {
+      "type": "rock",
+      "name": "rock_0044",
+      "prim_path": "/World/Rocks/rock_0044",
+      "asset_path": "procedural:sphere",
+      "position": [
+        0.798,
+        -9.27,
+        5.583
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        163.992
+      ],
+      "scale": [
+        0.736,
+        0.736,
+        0.736
+      ],
+      "radius": 0.368
+    },
+    {
+      "type": "rock",
+      "name": "rock_0045",
+      "prim_path": "/World/Rocks/rock_0045",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -12.442,
+        10.667,
+        4.616
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        159.838
+      ],
+      "scale": [
+        0.98,
+        0.98,
+        0.98
+      ],
+      "radius": 0.49
+    },
+    {
+      "type": "rock",
+      "name": "rock_0046",
+      "prim_path": "/World/Rocks/rock_0046",
+      "asset_path": "procedural:sphere",
+      "position": [
+        43.997,
+        3.564,
+        3.217
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        215.246
+      ],
+      "scale": [
+        1.078,
+        1.078,
+        1.078
+      ],
+      "radius": 0.539
+    },
+    {
+      "type": "rock",
+      "name": "rock_0047",
+      "prim_path": "/World/Rocks/rock_0047",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -25.112,
+        -20.61,
+        6.379
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        277.894
+      ],
+      "scale": [
+        0.84,
+        0.84,
+        0.84
+      ],
+      "radius": 0.42
+    },
+    {
+      "type": "rock",
+      "name": "rock_0048",
+      "prim_path": "/World/Rocks/rock_0048",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -31.449,
+        33.548,
+        3.164
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        113.885
+      ],
+      "scale": [
+        0.442,
+        0.442,
+        0.442
+      ],
+      "radius": 0.221
+    },
+    {
+      "type": "rock",
+      "name": "rock_0049",
+      "prim_path": "/World/Rocks/rock_0049",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -13.399,
+        0.583,
+        0.977
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        32.113
+      ],
+      "scale": [
+        0.755,
+        0.755,
+        0.755
+      ],
+      "radius": 0.378
+    },
+    {
+      "type": "rock",
+      "name": "rock_0050",
+      "prim_path": "/World/Rocks/rock_0050",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -13.863,
+        20.916,
+        4.265
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        74.508
+      ],
+      "scale": [
+        1.356,
+        1.356,
+        1.356
+      ],
+      "radius": 0.678
+    },
+    {
+      "type": "rock",
+      "name": "rock_0051",
+      "prim_path": "/World/Rocks/rock_0051",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -44.962,
+        15.67,
+        3.236
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        242.907
+      ],
+      "scale": [
+        0.308,
+        0.308,
+        0.308
+      ],
+      "radius": 0.154
+    },
+    {
+      "type": "rock",
+      "name": "rock_0052",
+      "prim_path": "/World/Rocks/rock_0052",
+      "asset_path": "procedural:sphere",
+      "position": [
+        45.308,
+        -0.861,
+        2.96
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        343.533
+      ],
+      "scale": [
+        1.01,
+        1.01,
+        1.01
+      ],
+      "radius": 0.505
+    },
+    {
+      "type": "rock",
+      "name": "rock_0053",
+      "prim_path": "/World/Rocks/rock_0053",
+      "asset_path": "procedural:sphere",
+      "position": [
+        36.89,
+        31.752,
+        2.259
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        217.485
+      ],
+      "scale": [
+        0.424,
+        0.424,
+        0.424
+      ],
+      "radius": 0.212
+    },
+    {
+      "type": "rock",
+      "name": "rock_0054",
+      "prim_path": "/World/Rocks/rock_0054",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -22.45,
+        22.063,
+        3.778
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        131.54
+      ],
+      "scale": [
+        1.011,
+        1.011,
+        1.011
+      ],
+      "radius": 0.505
+    },
+    {
+      "type": "rock",
+      "name": "rock_0055",
+      "prim_path": "/World/Rocks/rock_0055",
+      "asset_path": "procedural:sphere",
+      "position": [
+        1.647,
+        24.978,
+        3.909
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        217.124
+      ],
+      "scale": [
+        0.605,
+        0.605,
+        0.605
+      ],
+      "radius": 0.303
+    },
+    {
+      "type": "rock",
+      "name": "rock_0056",
+      "prim_path": "/World/Rocks/rock_0056",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -47.948,
+        -36.619,
+        3.16
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        339.57
+      ],
+      "scale": [
+        1.147,
+        1.147,
+        1.147
+      ],
+      "radius": 0.574
+    },
+    {
+      "type": "rock",
+      "name": "rock_0057",
+      "prim_path": "/World/Rocks/rock_0057",
+      "asset_path": "procedural:sphere",
+      "position": [
+        1.88,
+        5.367,
+        5.553
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        276.596
+      ],
+      "scale": [
+        1.415,
+        1.415,
+        1.415
+      ],
+      "radius": 0.708
+    },
+    {
+      "type": "rock",
+      "name": "rock_0058",
+      "prim_path": "/World/Rocks/rock_0058",
+      "asset_path": "procedural:sphere",
+      "position": [
+        37.362,
+        24.245,
+        2.715
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        30.454
+      ],
+      "scale": [
+        0.846,
+        0.846,
+        0.846
+      ],
+      "radius": 0.423
+    },
+    {
+      "type": "rock",
+      "name": "rock_0059",
+      "prim_path": "/World/Rocks/rock_0059",
+      "asset_path": "procedural:sphere",
+      "position": [
+        20.619,
+        -32.795,
+        3.556
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        281.799
+      ],
+      "scale": [
+        1.257,
+        1.257,
+        1.257
+      ],
+      "radius": 0.628
+    },
+    {
+      "type": "rock",
+      "name": "rock_0060",
+      "prim_path": "/World/Rocks/rock_0060",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -30.03,
+        8.667,
+        3.643
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        142.027
+      ],
+      "scale": [
+        0.458,
+        0.458,
+        0.458
+      ],
+      "radius": 0.229
+    },
+    {
+      "type": "rock",
+      "name": "rock_0061",
+      "prim_path": "/World/Rocks/rock_0061",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -29.131,
+        -15.207,
+        6.293
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        26.57
+      ],
+      "scale": [
+        1.44,
+        1.44,
+        1.44
+      ],
+      "radius": 0.72
+    },
+    {
+      "type": "rock",
+      "name": "rock_0062",
+      "prim_path": "/World/Rocks/rock_0062",
+      "asset_path": "procedural:sphere",
+      "position": [
+        11.742,
+        38.403,
+        3.366
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        175.334
+      ],
+      "scale": [
+        1.307,
+        1.307,
+        1.307
+      ],
+      "radius": 0.653
+    },
+    {
+      "type": "rock",
+      "name": "rock_0063",
+      "prim_path": "/World/Rocks/rock_0063",
+      "asset_path": "procedural:sphere",
+      "position": [
+        21.035,
+        43.074,
+        2.963
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        308.601
+      ],
+      "scale": [
+        1.451,
+        1.451,
+        1.451
+      ],
+      "radius": 0.725
+    },
+    {
+      "type": "rock",
+      "name": "rock_0064",
+      "prim_path": "/World/Rocks/rock_0064",
+      "asset_path": "procedural:sphere",
+      "position": [
+        7.451,
+        27.333,
+        3.899
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        64.138
+      ],
+      "scale": [
+        0.579,
+        0.579,
+        0.579
+      ],
+      "radius": 0.29
+    },
+    {
+      "type": "rock",
+      "name": "rock_0065",
+      "prim_path": "/World/Rocks/rock_0065",
+      "asset_path": "procedural:sphere",
+      "position": [
+        43.93,
+        -38.662,
+        5.104
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        218.76
+      ],
+      "scale": [
+        0.434,
+        0.434,
+        0.434
+      ],
+      "radius": 0.217
+    },
+    {
+      "type": "rock",
+      "name": "rock_0066",
+      "prim_path": "/World/Rocks/rock_0066",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -16.713,
+        -39.702,
+        4.52
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        245.321
+      ],
+      "scale": [
+        0.357,
+        0.357,
+        0.357
+      ],
+      "radius": 0.179
+    },
+    {
+      "type": "rock",
+      "name": "rock_0067",
+      "prim_path": "/World/Rocks/rock_0067",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -22.261,
+        -44.451,
+        4.433
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        3.201
+      ],
+      "scale": [
+        1.171,
+        1.171,
+        1.171
+      ],
+      "radius": 0.585
+    },
+    {
+      "type": "rock",
+      "name": "rock_0068",
+      "prim_path": "/World/Rocks/rock_0068",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -3.881,
+        18.223,
+        3.753
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        125.187
+      ],
+      "scale": [
+        0.629,
+        0.629,
+        0.629
+      ],
+      "radius": 0.315
+    },
+    {
+      "type": "rock",
+      "name": "rock_0069",
+      "prim_path": "/World/Rocks/rock_0069",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -14.821,
+        -22.755,
+        6.795
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        123.08
+      ],
+      "scale": [
+        0.918,
+        0.918,
+        0.918
+      ],
+      "radius": 0.459
+    },
+    {
+      "type": "rock",
+      "name": "rock_0070",
+      "prim_path": "/World/Rocks/rock_0070",
+      "asset_path": "procedural:sphere",
+      "position": [
+        9.784,
+        -17.47,
+        3.637
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        100.083
+      ],
+      "scale": [
+        0.553,
+        0.553,
+        0.553
+      ],
+      "radius": 0.276
+    },
+    {
+      "type": "rock",
+      "name": "rock_0071",
+      "prim_path": "/World/Rocks/rock_0071",
+      "asset_path": "procedural:sphere",
+      "position": [
+        12.283,
+        -0.306,
+        4.055
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        255.416
+      ],
+      "scale": [
+        1.285,
+        1.285,
+        1.285
+      ],
+      "radius": 0.642
+    },
+    {
+      "type": "rock",
+      "name": "rock_0072",
+      "prim_path": "/World/Rocks/rock_0072",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -44.596,
+        -46.628,
+        3.18
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        342.653
+      ],
+      "scale": [
+        0.822,
+        0.822,
+        0.822
+      ],
+      "radius": 0.411
+    },
+    {
+      "type": "rock",
+      "name": "rock_0073",
+      "prim_path": "/World/Rocks/rock_0073",
+      "asset_path": "procedural:sphere",
+      "position": [
+        16.185,
+        7.922,
+        3.282
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        118.084
+      ],
+      "scale": [
+        1.26,
+        1.26,
+        1.26
+      ],
+      "radius": 0.63
+    },
+    {
+      "type": "rock",
+      "name": "rock_0074",
+      "prim_path": "/World/Rocks/rock_0074",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -27.571,
+        16.106,
+        3.187
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        131.518
+      ],
+      "scale": [
+        1.224,
+        1.224,
+        1.224
+      ],
+      "radius": 0.612
+    },
+    {
+      "type": "rock",
+      "name": "rock_0075",
+      "prim_path": "/World/Rocks/rock_0075",
+      "asset_path": "procedural:sphere",
+      "position": [
+        46.302,
+        -48.507,
+        5.09
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        316.699
+      ],
+      "scale": [
+        1.221,
+        1.221,
+        1.221
+      ],
+      "radius": 0.611
+    },
+    {
+      "type": "rock",
+      "name": "rock_0076",
+      "prim_path": "/World/Rocks/rock_0076",
+      "asset_path": "procedural:sphere",
+      "position": [
+        29.73,
+        23.231,
+        2.164
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        20.073
+      ],
+      "scale": [
+        0.915,
+        0.915,
+        0.915
+      ],
+      "radius": 0.457
+    },
+    {
+      "type": "rock",
+      "name": "rock_0077",
+      "prim_path": "/World/Rocks/rock_0077",
+      "asset_path": "procedural:sphere",
+      "position": [
+        18.059,
+        -43.896,
+        3.797
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        122.926
+      ],
+      "scale": [
+        1.146,
+        1.146,
+        1.146
+      ],
+      "radius": 0.573
+    },
+    {
+      "type": "rock",
+      "name": "rock_0078",
+      "prim_path": "/World/Rocks/rock_0078",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -2.542,
+        46.383,
+        2.798
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        36.23
+      ],
+      "scale": [
+        0.32,
+        0.32,
+        0.32
+      ],
+      "radius": 0.16
+    },
+    {
+      "type": "rock",
+      "name": "rock_0079",
+      "prim_path": "/World/Rocks/rock_0079",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -9.938,
+        32.448,
+        4.045
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        102.463
+      ],
+      "scale": [
+        0.435,
+        0.435,
+        0.435
+      ],
+      "radius": 0.217
+    },
+    {
+      "type": "rock",
+      "name": "rock_0080",
+      "prim_path": "/World/Rocks/rock_0080",
+      "asset_path": "procedural:sphere",
+      "position": [
+        -11.711,
+        -11.251,
+        6.844
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        282.548
+      ],
+      "scale": [
+        0.442,
+        0.442,
+        0.442
+      ],
+      "radius": 0.221
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0001",
+      "prim_path": "/World/Minerals/mineral_0001",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        36.333,
+        -39.049,
+        5.192
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        133.552
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0002",
+      "prim_path": "/World/Minerals/mineral_0002",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        10.461,
+        -15.823,
+        3.698
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        329.72
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "red",
+      "value": 25,
+      "name": "mineral_0003",
+      "prim_path": "/World/Minerals/mineral_0003",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -37.884,
+        44.79,
+        1.38
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        194.624
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0004",
+      "prim_path": "/World/Minerals/mineral_0004",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        15.56,
+        -15.411,
+        3.369
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        355.592
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0005",
+      "prim_path": "/World/Minerals/mineral_0005",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        12.787,
+        47.392,
+        2.338
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        171.26
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0006",
+      "prim_path": "/World/Minerals/mineral_0006",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -17.262,
+        26.478,
+        3.792
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        326.568
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0007",
+      "prim_path": "/World/Minerals/mineral_0007",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        4.88,
+        23.31,
+        3.703
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        176.577
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0008",
+      "prim_path": "/World/Minerals/mineral_0008",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -15.713,
+        4.518,
+        2.702
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        258.586
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0009",
+      "prim_path": "/World/Minerals/mineral_0009",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -0.931,
+        -29.796,
+        4.521
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        356.001
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0010",
+      "prim_path": "/World/Minerals/mineral_0010",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        22.968,
+        -6.318,
+        2.264
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        21.753
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0011",
+      "prim_path": "/World/Minerals/mineral_0011",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -21.088,
+        37.696,
+        3.599
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        279.984
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "mineral",
+      "variant": "blue",
+      "value": 10,
+      "name": "mineral_0012",
+      "prim_path": "/World/Minerals/mineral_0012",
+      "asset_path": "assets/minerals/mineral.usd",
+      "position": [
+        -8.835,
+        -32.314,
+        4.626
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        67.443
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "base",
+      "name": "command_center",
+      "prim_path": "/World/Base/command_center",
+      "asset_path": "assets/command_center.usd",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
+      "type": "base",
+      "name": "bunker",
+      "prim_path": "/World/Base/bunker",
+      "asset_path": "assets/bunker.usd",
+      "position": [
+        8.79,
+        -14.449,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        90.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    }
+  ]
+}

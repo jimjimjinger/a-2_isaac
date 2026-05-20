@@ -1,0 +1,16 @@
+{
+  "seed": 97531,
+  "terrain_id": "terrain_97531",
+  "material_name": "Mars_AntiTile_Soil",
+  "shader": "UsdPreviewSurface",
+  "textures": {
+    "albedo": "mars_albedo.png",
+    "normal": "mars_normal.png",
+    "roughness": "mars_roughness.png",
+    "macro_noise": "mars_macro_noise.png",
+    "detail_noise": "mars_detail_noise.png",
+    "micro_noise": "mars_micro_noise.png",
+    "color_variation": "mars_color_variation.png",
+    "crater_mask": "mars_crater_mask.png"
+  }
+}

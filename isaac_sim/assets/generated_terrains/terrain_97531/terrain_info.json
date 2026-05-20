@@ -1,0 +1,24 @@
+{
+  "seed": 97531,
+  "terrain_id": "terrain_97531",
+  "usd_path": "../../../worlds/generated/mars_seed_97531.usd",
+  "world_path": "../../../worlds/generated/mars_seed_97531.usd",
+  "map_size": 1000,
+  "map_size_m": 100.0,
+  "resolution_m": 0.1,
+  "height_scale": 8.0,
+  "heightmap_npy": "heightmap.npy",
+  "heightmap_png": "heightmap.png",
+  "object_layout": "object_layout.json",
+  "material_info": "material_info.json",
+  "preview_png": "preview.png",
+  "obstacle_grid_npy": "obstacle_grid.npy",
+  "difficulty": {
+    "score": 0.333,
+    "rock_density": 0.008,
+    "max_slope_deg": 74.05,
+    "mean_slope_deg": 15.92,
+    "passable_ratio": 0.862,
+    "longest_corridor_m": 92.29
+  }
+}
