@@ -23,3 +23,8 @@ m0609_rmpflow/
 onrobot_rg2/
 OnRobot-RG2FT-ROS/
 physics_compare/
+
+# T2 (최진우): in-repo m0609 + RG2 자산 (self-contained Day 1 spike).
+# 위 글로벌 ignore 패턴의 예외 — isaac_sim/assets/ 안의 것만 추적.
+!isaac_sim/assets/doosan-robot2/
+!isaac_sim/assets/onrobot_rg2/
