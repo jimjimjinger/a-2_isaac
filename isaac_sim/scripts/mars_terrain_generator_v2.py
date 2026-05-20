@@ -2,11 +2,11 @@
 """
 mars_terrain_generator_v2.py — I1 규약 준수 화성 지형 생성기 (v2).
 
-T1(김현중) `mars_exploration_map_generator.py`의 지형 기능(크레이터·언덕·
-능선)을 흡수하되, 출력은 I1 지형 규약(docs/interfaces/INTERFACE_CONTRACTS.md,
+T1(김현중)이 기획한 지형 생성 기능(크레이터·언덕·능선)을 흡수하되,
+출력은 I1 지형 규약(docs/interfaces/INTERFACE_CONTRACTS.md,
 terrain_meta_schema.json)을 100% 따른다.
 
-v1(`procedural_terrain_generator.py`, Perlin only) 대비:
+이전 Perlin-only 시안(stopgap) 대비:
   - heightmap = 베이스 기복 + 크레이터 + 언덕 + 능선  (T1 엔진 흡수)
   - 피처 크기를 월드 span 비율로 파라미터화 → 50 m 아레나에 맞게 재조준
   - basecamp은 (0,0) 고정 — base-candidate 자동선택은 흡수 안 함

@@ -150,7 +150,7 @@ mars_exploration_world.usd 열기 (2.5 KB)
 
 ⚠️ **npy는 항상 풀해상도 1000×1000 유지**. mesh는 시각/충돌용 다운샘플일 뿐.
 
-### 생성 알고리즘 ([procedural_terrain_generator.py:213-264](../../isaac_sim/scripts/procedural_terrain_generator.py#L213-L264))
+### 생성 알고리즘 ([world_composer.py](../../isaac_sim/scripts/world_composer.py))
 heightmap[i, j]를 stride 간격으로 샘플링 → vertex 배열 → 각 quad(4 vertex)를 2개 triangle로 분할 → per-face normal 계산.
 
 ### 디버깅 히스토리 (왜 이 구조인지)
@@ -183,7 +183,7 @@ heightmap[i, j]를 stride 간격으로 샘플링 → vertex 배열 → 각 quad(
 - 우리 generator는 sphere라 size/2가 반지름
 
 ### 향후 (김현중)
-[generator의 export_rocks_usd()](../../isaac_sim/scripts/procedural_terrain_generator.py#L271-L283)를 reference 방식으로 한 줄 수정:
+[world_composer.py의 export_rocks_usd()](../../isaac_sim/scripts/world_composer.py)를 reference 방식으로 수정:
 ```python
 # 지금:  UsdGeom.Sphere.Define(stage, ...) → 직접 sphere prim
 # 후행:  markers/rock_default.usd를 reference (mineral과 같은 패턴)
