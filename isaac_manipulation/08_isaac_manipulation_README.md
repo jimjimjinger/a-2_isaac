@@ -81,9 +81,9 @@ arm_executor_node (T2 최진우)
 |------|------|
 | ① mars 환경 | T1(김현중)의 `mars_exploration_world.usd` 를 reference 로 로드 |
 | ② PhysX | Mars gravity 3.72 m/s² PhysicsScene 추가 + terrain mesh collision 보강 |
-| ③ Rover | `aau_rover/Mars_Rover.usd` reference, spawn (5, 0, 1.0). 휠/조향 drive freeze |
-| ④ M0609 | `doosan-robot2/urdf/m0609_isaac_sim.urdf` URDF import (floating-base), `TransformPrimSRTCommand` 로 (5.15274, 0, 1.21232) 위치 적용 |
-| ⑤ RG2 | `onrobot_rg2/urdf/onrobot_rg2.urdf` URDF import, RobotAssembler 로 M0609 `link_6` ↔ RG2 `angle_bracket` 결합 |
+| ③ Rover | `isaac_sim/assets/rover/Mars_Rover.usd` (T1 자산) reference, spawn (5, 0, 1.0). 휠/조향 drive freeze |
+| ④ M0609 | `isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf` URDF import (floating-base, in-repo 자가포함), `TransformPrimSRTCommand` 로 (5.15274, 0, 1.21232) 위치 적용 |
+| ⑤ RG2 | `isaac_sim/assets/onrobot_rg2/urdf/onrobot_rg2.urdf` URDF import (in-repo), RobotAssembler 로 M0609 `link_6` ↔ RG2 `angle_bracket` 결합 |
 | ⑥ rover↔M0609 | rover/Body 자식으로 mount-point Xform 생성 (offset (0.15274, 0, 0.21232)) → RobotAssembler 가 m0609.base_link 를 그 위치로 정렬 |
 
 핵심 hack:
