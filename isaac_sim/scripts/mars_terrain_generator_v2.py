@@ -39,10 +39,10 @@ from typing import Any, Dict, Iterable, Optional
 import numpy as np
 
 try:
-    from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade
+    from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
     PXR_AVAILABLE = True
 except Exception:  # pragma: no cover - Isaac Sim 런타임에서만 동작
-    Gf = Sdf = Usd = UsdGeom = UsdLux = UsdShade = None
+    Gf = Sdf = Usd = UsdGeom = UsdLux = UsdPhysics = UsdShade = None
     PXR_AVAILABLE = False
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -649,6 +649,11 @@ def build_terrain_prim(stage, heightmap, x_coords, y_coords, texture_dir,
     material = _create_preview_material(
         stage, f"{terrain_path}/Looks/MarsSurface", texture_dir, base_dir)
     UsdShade.MaterialBindingAPI(mesh.GetPrim()).Bind(material)
+
+    # 정적 collider — 로버가 지형 위에 안착하도록 triangle-mesh 충돌 baking.
+    # (RigidBodyAPI 없음 = static. approximation "none" = 정확한 삼각형 메시.)
+    UsdPhysics.CollisionAPI.Apply(mesh.GetPrim())
+    UsdPhysics.MeshCollisionAPI.Apply(mesh.GetPrim()).CreateApproximationAttr().Set("none")
     return mesh
 
 
@@ -662,6 +667,7 @@ def build_rocks_prim(stage, rocks, terrain_height_at, rocks_path="/Rocks"):
         prim.GetRadiusAttr().Set(radius)
         prim.GetDisplayColorAttr().Set([Gf.Vec3f(0.35, 0.28, 0.24)])
         UsdGeom.XformCommonAPI(prim).SetTranslate((x, y, z))
+        UsdPhysics.CollisionAPI.Apply(prim.GetPrim())  # 정적 collider (안 움직임)
 
 
 def build_light_rig(stage):
