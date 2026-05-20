@@ -36,37 +36,85 @@
 - 5개 패키지(perception/rl/supervisor/manipulation/localization)의 Python 노드는 모두 0 byte — 트랙 owner들이 채울 자리
 - Mars physics (gravity 3.72 + friction)는 `isaac_sim/scripts/mars_physics_config.py`에 들어갈 예정 (빈 파일)
 
-## 빠른 시작
+## 빠른 시작 (Day 1 셋업, ~5분)
 
-### 1. 의존성 (한 번만)
+### 1. 워크스페이스 생성 + clone
+
 ```bash
+# ROS2 워크스페이스 (~/dev_ws/rover_ws/) 만들고 src/ 안에 우리 repo clone
+mkdir -p ~/dev_ws/rover_ws/src
+cd ~/dev_ws/rover_ws/src
+
+# 폴더명을 a2_isaac으로 명시 (repo는 a-2_isaac이지만 우리 환경은 a2_isaac로 통일)
+git clone https://github.com/sungyu-sung/a-2_isaac.git a2_isaac
+
+cd a2_isaac
+```
+
+> ℹ️ 위치는 `~/dev_ws/rover_ws/` 권장 (문서 명령어 그대로 copy-paste 가능). 다른 위치도 기능적으로 무관 — [docs/SETUP_BASHRC.md](docs/SETUP_BASHRC.md) §위치 무관성 참조.
+
+### 2. 의존성 (한 번만)
+
+```bash
+# Python 의존성 (T1 김현중 generator + meta.json schema 검증)
 pip install --user noise usd-core jsonschema scipy
+
+# 트랙 owner별 추가 (필요한 사람만)
+# T3 이찬휘 — A* 빠른 구현
+pip install --user pyastar2d
 ```
 
-### 2. I1 샘플 생성 + Isaac Sim 띄우기
-```bash
-# 절차생성 1샘플 (이미 있으면 덮어쓰기)
-python3 isaac_sim/scripts/procedural_terrain_generator.py --seed 12345 --terrain-id terrain_00001
+### 3. ROS2 빌드 + source
 
-# Isaac Sim에서 master scene 열기
-isaac isaac_sim/worlds/mars_exploration_world.usd
-```
-
-→ 더 자세한 I1 흐름: [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md)
-
-### 3. ROS2 빌드 (트랙 노드 채워진 후)
 ```bash
 cd ~/dev_ws/rover_ws
+
+# 첫 빌드 (~30초)
 colcon build --symlink-install
+
+# source (매 터미널 또는 .bashrc에 등록)
 source install/setup.bash
 
-# 전체 실행
+# 검증 — 9개 패키지 등록 확인
+ros2 pkg list | grep isaac_
+# 예상 출력: isaac_bringup, isaac_drive, isaac_interfaces, isaac_localization,
+#           isaac_manipulation, isaac_perception, isaac_rl, isaac_sim, isaac_supervisor
+```
+
+### 4. (선택) bashrc 설정
+
+매 터미널마다 source / cd / build 명령 안 치려면 **`~/.bashrc`에 한 번 등록**해두면 편함. 권장 alias + 환경 변수 + ROS_DOMAIN_ID 충돌 방지:
+
+→ **[docs/SETUP_BASHRC.md](docs/SETUP_BASHRC.md)** — 필수/권장/선택 단계별 + 트랙별 추가 alias
+
+### 5. Isaac Sim 시각 확인 (T1 1샘플)
+
+```bash
+# I1 1샘플은 이미 생성되어 있음 (terrain_00001)
+# Isaac Sim에서 master scene 열기:
+isaac ~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/worlds/mars_exploration_world.usd
+
+# 또는 다른 seed로 새 terrain 생성:
+cd ~/dev_ws/rover_ws/src/a2_isaac
+python3 isaac_sim/scripts/procedural_terrain_generator.py --seed 99 --terrain-id terrain_00002
+```
+
+→ I1 풀 가이드: [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md)
+
+### 6. ROS2 실행 (트랙 노드 채워진 후)
+
+```bash
+# 전체 통합 (Day 5+)
 ros2 launch isaac_bringup full_system.launch.py
 
-# 또는 트랙별 부분 실행
-ros2 launch isaac_bringup perception.launch.py
-ros2 launch isaac_bringup drive.launch.py
-# ... 8개 launch (isaac_bringup/launch/ 참조)
+# 트랙별 부분 실행 (Day 1-4 개발용)
+ros2 launch isaac_bringup sim.launch.py            # 김현중 환경 검증
+ros2 launch isaac_bringup perception.launch.py     # 최진우 vision
+ros2 launch isaac_bringup drive.launch.py          # 이찬휘 주행
+ros2 launch isaac_bringup localization.launch.py   # 이지민 TRN
+ros2 launch isaac_bringup manipulation.launch.py   # 최진우 M0609
+ros2 launch isaac_bringup supervisor.launch.py     # 성선규 mission
+ros2 launch isaac_bringup rl.launch.py             # 이찬휘 RL inference
 ```
 
 ## Workspace 구조
@@ -78,6 +126,7 @@ a2_isaac/
 ├─ README.md                                  # ← 이 문서
 ├─ docs/
 │  ├─ STUDY_AND_PLAN.md                       # 전체 설계 의도
+│  ├─ SETUP_BASHRC.md                         # ~/.bashrc 셋업 (Day 1 필수)
 │  ├─ README.enhanced.md                      # ⚠️ 클론 reference (archive 후보)
 │  ├─ flowcharts/                             # 시스템 아키텍처 SVG 5개
 │  ├─ interfaces/                             # I1~I5 계약 + 가이드
@@ -190,6 +239,7 @@ a2_isaac/
 | 누가 보나 | 무엇 | 위치 |
 |----------|------|------|
 | 신규 합류자 (5명) | 본인 트랙 onboarding | `docs/tracks/T{1-5}_BRIEF.md` |
+| 모든 개발자 (Day 1) | **bashrc 셋업 가이드** | [docs/SETUP_BASHRC.md](docs/SETUP_BASHRC.md) |
 | Claude Code 사용 시 | 자동 로드 context | `docs/tracks/T{1-5}_CLAUDE.md` |
 | 모든 개발자 | 5개 인터페이스 계약 | [docs/interfaces/INTERFACE_CONTRACTS.md](docs/interfaces/INTERFACE_CONTRACTS.md) |
 | 김현중, 이지민 (좌표계 합의) | I1 풀 가이드 | [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md) |
