@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-05-20T07:22:11+00:00",
+  "generated_at": "2026-05-20T08:39:51+00:00",
   "terrains": [
     {
       "id": "terrain_00001",
@@ -13,6 +13,12 @@
       "split": "train",
       "difficulty": 0.458,
       "seed": 23456
+    },
+    {
+      "id": "terrain_00003",
+      "split": "train",
+      "difficulty": 0.455,
+      "seed": 99
     }
   ]
 }

@@ -784,7 +784,64 @@ def maybe_export_usd(terrain_dir, terrain_id, hm, xs, ys, rocks,
     return True
 
 
-# ─── 8. I1 적합성 자가검증 ──────────────────────────────────────────────
+# ─── 8. PNG 오버뷰 (옵션 — matplotlib 필요) ─────────────────────────────
+def maybe_export_preview(terrain_dir) -> bool:
+    """terrain_dir의 npy/meta를 읽어 heightmap.png + preview.png 생성.
+
+    생성 흐름에서도, 기존 terrain 백필에도 쓸 수 있다 (terrain_dir만 주면 됨).
+    matplotlib 없으면 건너뜀 — I1 5파일과 무관한 옵션 산출물.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")  # headless 렌더
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
+    except Exception as exc:
+        print(f"[png] matplotlib 미가용 — PNG 오버뷰 건너뜀 ({exc})")
+        return False
+
+    hm = np.load(terrain_dir / "heightmap.npy")
+    og = np.load(terrain_dir / "obstacle_grid.npy")
+    meta = json.loads((terrain_dir / "meta.json").read_text(encoding="utf-8"))
+    ox, oy = meta["origin"]["x"], meta["origin"]["y"]
+    sx, sy = meta["size_m"]
+    extent = [ox, ox + sx, oy, oy + sy]
+
+    # (1) heightmap.png — 높이맵 단독 (픽셀 1:1, 장식 없음)
+    plt.imsave(str(terrain_dir / "heightmap.png"), hm, cmap="terrain",
+               origin="lower")
+
+    # (2) preview.png — 미션 합성 맵 (높이 + obstacle + 광물 + basecamp)
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=128)
+    im = ax.imshow(hm, cmap="terrain", origin="lower", extent=extent)
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="height (m)")
+    ax.imshow(np.ma.masked_where(og == 0, og), cmap="Reds", origin="lower",
+              extent=extent, alpha=0.5, vmin=0, vmax=1)
+    colors = {"blue": "#3a6ff0", "red": "#e63c3c", "yellow": "#f0d022"}
+    for m in meta.get("minerals", []):
+        p = m["position"]
+        ax.scatter(p["x"], p["y"], c=colors.get(m["type"], "white"), s=80,
+                   edgecolors="black", linewidths=0.8, zorder=5)
+    bc = meta["basecamp"]["center"]
+    ax.scatter(bc["x"], bc["y"], marker="*", s=420, c="lime",
+               edgecolors="black", linewidths=1.0, zorder=6)
+    ax.add_patch(Circle((bc["x"], bc["y"]), meta["basecamp"]["radius"],
+                         fill=False, color="lime", lw=1.5))
+    d = meta.get("difficulty", {})
+    ax.set_title(f"{meta.get('terrain_id', '?')}  ·  seed {meta.get('seed', '?')}"
+                 f"  ·  difficulty {d.get('score', '?')}"
+                 f"  ·  passable {d.get('passable_ratio', 0) * 100:.0f}%")
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_aspect("equal")
+    fig.tight_layout()
+    fig.savefig(str(terrain_dir / "preview.png"))
+    plt.close(fig)
+    print("[png] heightmap.png + preview.png 생성")
+    return True
+
+
+# ─── 9. I1 적합성 자가검증 ──────────────────────────────────────────────
 REQUIRED_META = ["terrain_id", "version", "seed", "size_m", "resolution_m",
                  "origin", "spawn_locations", "basecamp", "minerals",
                  "minimap", "difficulty"]
@@ -892,9 +949,10 @@ def main() -> int:
     if dropped:
         print(f"      index.json 정리 — 비적합(레거시) 엔트리 제외: {dropped}")
 
-    print("[7/7] USD + master scene (옵션)...")
+    print("[7/7] USD + master scene + PNG 오버뷰 (옵션)...")
     maybe_export_usd(terrain_dir, args.terrain_id, hm, xs, ys, rocks,
                      minerals, meta["basecamp"], meta["generated_at"])
+    maybe_export_preview(terrain_dir)
 
     ok = verify(terrain_dir)
 
