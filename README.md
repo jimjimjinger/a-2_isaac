@@ -96,7 +96,7 @@ isaac ~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/worlds/mars_exploration_world.usd
 
 # 또는 다른 seed로 새 terrain 생성:
 cd ~/dev_ws/rover_ws/src/a2_isaac
-python3 isaac_sim/scripts/procedural_terrain_generator.py --seed 99 --terrain-id terrain_00002
+python3 isaac_sim/scripts/mars_terrain_generator_v2.py --seed 99 --terrain-id terrain_00003
 ```
 
 → I1 풀 가이드: [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md)
@@ -165,7 +165,8 @@ a2_isaac/
 │  │  │  └─ terrain_00001/                    ✅ I1 풀 1샘플
 │  │  └─ markers/                             ✅ 공유 USD (광물 3색 + basecamp)
 │  └─ scripts/
-│     ├─ procedural_terrain_generator.py      ✅ 1샘플 generator (성선규 임시 작성)
+│     ├─ mars_terrain_generator_v2.py         ✅ I1 지형 생성기 v2 (T1 크레이터 등 흡수)
+│     ├─ world_composer.py                    ✅ USD 조립 헬퍼
 │     ├─ basecamp_visual_builder.py           ⏳ 빈 파일 (T1)
 │     └─ mars_physics_config.py               ⏳ 빈 파일 (T1 → T5)
 │
