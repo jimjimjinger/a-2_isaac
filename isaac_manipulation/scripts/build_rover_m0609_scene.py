@@ -24,6 +24,12 @@ try:
 except Exception:
     pass
 
+# 스크립트 절대경로를 chdir 보다 먼저 고정한다.
+# ⚠️ 아래 os.chdir 가 cwd 를 임시 폴더로 바꾸므로, 그 후에 Path(__file__) 를
+# resolve 하면 상대 __file__ 이 temp dir 기준으로 깨진다 → A2_ROOT 가 망가짐.
+# 반드시 chdir 전에 abspath 로 캡처해 둘 것.
+_SCRIPT_PATH = os.path.abspath(__file__)
+
 # URDF importer 가 임시 mesh USD 를 cwd 에 쓰려고 함 → cwd 가 read-only 면 실패
 # (예: /opt/ove/base_stack 같은 곳에서 실행 시 권한 에러). 임시 쓰기 가능
 # 디렉토리로 chdir 한 뒤 SimulationApp 시작.
@@ -71,7 +77,11 @@ from isaacsim.robot_setup.assembler import RobotAssembler
 
 
 # ─── 경로 ──────────────────────────────────────────────────────────────────
-A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+# A2_ROOT = a2_isaac 워크스페이스 루트. 이 스크립트는
+#   <A2_ROOT>/isaac_manipulation/scripts/build_rover_m0609_scene.py
+# 위치이므로 부모 3단계 위가 루트다. 절대경로 하드코딩 대신 스크립트 위치에서
+# 유도 → 워크스페이스를 어디에 두든·어느 cwd 에서 실행하든 동작한다.
+A2_ROOT = Path(_SCRIPT_PATH).parents[2]
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 # T1 김현중이 main 에 추가한 in-repo rover 자산 (2026-05-20).
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
