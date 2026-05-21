@@ -1076,7 +1076,7 @@ def main() -> int:
     print(f"[5/7] minerals (목표 {CFG['mineral_count']}) "
           f"+ spawns (목표 {CFG['spawn_count']})...")
     minerals = place_minerals(rng, hm, slope, rocks)
-    spawns = place_spawns(rng, hm, slope, obstacle, minerals)
+    spawns = place_spawns(rng, hm, slope, obstacle)
     print(f"      minerals {len(minerals)}개, spawns {len(spawns)}개")
 
     print("[6/7] difficulty + meta + index...")
