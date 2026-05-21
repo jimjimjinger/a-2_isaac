@@ -92,10 +92,14 @@ CFG = {
     "spawn_slope_deg": 15.0,
     "mineral_slope_deg": 18.0,
     "basecamp_center": (0.0, 0.0),  # I1 Tier 1 — (0,0) 고정
-    "basecamp_radius": 3.0,
+    # keepout·평탄화·spawn/rock/mineral 배제가 모두 이 값에서 파생된다.
+    # basecamp 은 8×8 m 구조물(아래 collision Cube)이므로, 그 대각 반경
+    # (√32 ≈ 5.66 m)을 감싸도록 6.0 으로 둔다. 옛 3.0 은 3 m 베이스캠프
+    # 가정의 잔재 — 구조물보다 작아 배제가 박스를 못 덮었다.
+    "basecamp_radius": 6.0,
     # basecamp_dome.usd 내부 정적 충돌 Cube 한 변 (8×8×8 m, 중심 (0,0)).
-    # 시각 메시(visual_footprint 3×3 m)보다 크다 — 로버가 실제로 막히는 건
-    # 이 Cube. obstacle_grid 는 이 값과 동기화할 것 (자산 변경 시 같이 수정).
+    # 로버가 실제로 막히는 건 이 Cube. obstacle_grid(_stamp_basecamp)는 이
+    # 값과 동기화할 것 (자산 변경 시 같이 수정).
     "basecamp_collision_size_m": 8.0,
     "mesh_stride": 5,             # USD 시각 메시 다운샘플 (npy는 풀해상도 유지)
     # ─ 맵경계 낙하 방지 — 50 m 아레나 둘레 정적 충돌벽 ─
@@ -320,7 +324,7 @@ def place_minerals(rng, hm, slope_deg, rocks):
             break
         x = float(rng.uniform(lo, hi))
         y = float(rng.uniform(lo, hi))
-        if math.hypot(x - bcx, y - bcy) < 5.0:
+        if math.hypot(x - bcx, y - bcy) < CFG["basecamp_radius"]:
             continue
         if any(math.hypot(x - r["x"], y - r["y"]) < r["radius"] + 0.5
                for r in rocks):
@@ -458,7 +462,7 @@ def build_meta(terrain_id, seed, minerals, spawns, difficulty):
             "minerals": {
                 "count": CFG["mineral_count"],
                 "min_spacing_m": CFG["mineral_spacing_m"],
-                "exclude_basecamp_radius_m": 5.0,
+                "exclude_basecamp_radius_m": CFG["basecamp_radius"],
                 "value_distribution": {
                     "blue": {"prob": 0.5, "score": 10},
                     "red": {"prob": 0.3, "score": 25},
@@ -472,7 +476,7 @@ def build_meta(terrain_id, seed, minerals, spawns, difficulty):
                        "y": CFG["basecamp_center"][1]},
             "radius": CFG["basecamp_radius"],
             "marker_usd": "basecamp_dome.usd",
-            "visual_footprint_m": [3.0, 3.0],
+            "visual_footprint_m": [8.0, 8.0],
             "marker_height_m": 5.5,
             "shape": None,
             "entry_points": [],
