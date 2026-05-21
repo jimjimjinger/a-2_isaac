@@ -18,7 +18,6 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
-            "mission_manager_node = isaac_supervisor.mission_manager_node:main",
             "battery_monitor_node = isaac_supervisor.battery_monitor_node:main",
         ],
     },

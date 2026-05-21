@@ -7,7 +7,6 @@ setup(
     version="0.0.1",
     packages=[
         package_name,
-        f"{package_name}.primitives",
         f"{package_name}.navigation",
     ],
     data_files=[
@@ -22,8 +21,8 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
-            "drive_manager_node = isaac_drive.drive_manager_node:main",
-            "mobile_base_executor_node = isaac_drive.mobile_base_executor_node:main",
+            "coverage_node = isaac_drive.coverage_node:main",
+            "odom_to_estimated_pose = isaac_drive.odom_to_estimated_pose:main",
         ],
     },
 )

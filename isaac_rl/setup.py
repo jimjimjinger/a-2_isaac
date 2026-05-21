@@ -18,7 +18,6 @@ setup(
     license="MIT",
     entry_points={
         "console_scripts": [
-            "driving_policy_node = isaac_rl.driving_policy_node:main",
             "rl_trainer = isaac_rl.rl_trainer:main",
         ],
     },
