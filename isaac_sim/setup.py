@@ -5,8 +5,10 @@ package_name = "isaac_sim"
 
 
 def _files(pattern: str):
+    # colcon requires data_files sources to be relative to the package root.
     base = Path(__file__).resolve().parent
-    return [str(path) for path in (base / pattern.split("/")[0]).glob(pattern.split("/", 1)[1])]
+    head, tail = pattern.split("/", 1)
+    return [str(path.relative_to(base)) for path in sorted((base / head).glob(tail))]
 
 setup(
     name=package_name,
