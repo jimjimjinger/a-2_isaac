@@ -31,8 +31,10 @@ from isaac_drive.navigation.pose_provider import PoseProvider, quat_to_yaw
 from isaac_drive.navigation.terrain_loader import load_terrain
 
 def _find_default_terrain() -> str:
-    """terrain_00001 자산 폴더를 후보 위치에서 탐색.
+    """terrain_00004 자산 폴더를 후보 위치에서 탐색.
 
+    terrain_00004 는 v2 생성기 산출물로 obstacle_grid 가 USD 씬과 정합한다.
+    terrain_00001 은 옛 v1 잔재라 obstacle_grid 가 씬과 ~180° 어긋나므로 쓰지 않는다.
     coverage_node 는 소스 트리(헤드리스 스크립트)·colcon 빌드(ros2 run) 양쪽에서
     실행될 수 있고, terrain 자산은 소스 트리에만 있다(install share 에 없음).
     실행 위치별 후보를 순서대로 시도하고, 없으면 "" → 파라미터로 받아야 한다.
@@ -46,7 +48,7 @@ def _find_default_terrain() -> str:
     ]
     for root in candidates:
         path = os.path.join(root, "isaac_sim", "assets",
-                            "generated_terrains", "terrain_00001")
+                            "generated_terrains", "terrain_00004")
         if os.path.isdir(path):
             return path
     return ""

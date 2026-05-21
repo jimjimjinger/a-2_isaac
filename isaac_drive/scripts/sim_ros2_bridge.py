@@ -15,7 +15,7 @@ rclpy 를 안 거치므로 Isaac Sim Python(3.11) vs ROS2 Humble(3.10) 버전
 
 실행 (터미널 2개 — UDP 릴레이 불필요):
     # A — Isaac Sim 브리지
-    <isaac-python> sim_ros2_bridge.py --terrain terrain_00001
+    <isaac-python> sim_ros2_bridge.py --terrain terrain_00004
     # B — coverage + odom 어댑터 (시스템 ROS2)
     ros2 run isaac_drive odom_to_estimated_pose
     ros2 run isaac_drive coverage_node
@@ -32,8 +32,9 @@ import sys
 
 # argparse 는 SimulationApp 보다 먼저.
 _parser = argparse.ArgumentParser(description="Isaac Sim ↔ ROS2 bridge (정공법)")
-_parser.add_argument("--terrain", default="terrain_00001",
-                     help="terrain id (coverage_node 의 terrain_dir 와 일치시킬 것)")
+_parser.add_argument("--terrain", default="terrain_00004",
+                     help="terrain id (coverage_node 의 terrain_dir 와 일치시킬 것). "
+                          "terrain_00001 은 v1 잔재라 씬 어긋남 — v2 terrain 사용")
 _parser.add_argument("--headless", action="store_true", help="GUI 없이 실행")
 _args, _ = _parser.parse_known_args()
 
