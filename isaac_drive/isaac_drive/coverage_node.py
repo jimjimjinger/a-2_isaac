@@ -58,12 +58,20 @@ _DEFAULT_TERRAIN = _find_default_terrain()
 def _find_scripts_dir() -> str:
     """state_writer.py · viewer.py 가 있는 scripts/ 디렉터리 경로.
 
-    coverage_node 는 패키지 안(isaac_drive/isaac_drive/)에 있고, 미니맵
-    부품(StateWriter·viewer.py)은 isaac_drive/scripts/ 에 있다 — __file__
-    기준으로 한 단계 올라가 scripts/ 를 가리킨다.
+    coverage_node 는 소스 트리·colcon 설치(ros2 run) 양쪽에서 import 되고,
+    scripts/ 는 소스 트리에만 있다(install 에 없음). ros2 run 시 __file__ 은
+    build 트리를 가리키므로 realpath 로 심링크를 풀어 소스 경로를 얻은 뒤,
+    후보 위치를 순서대로 시도한다. 못 찾으면 "" 반환(미니맵 비활성).
     """
-    here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(os.path.dirname(here), "scripts")
+    here = os.path.dirname(os.path.realpath(__file__))   # .../isaac_drive/isaac_drive
+    candidates = [
+        os.path.join(os.path.dirname(here), "scripts"),
+        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac/isaac_drive/scripts"),
+    ]
+    for path in candidates:
+        if os.path.isfile(os.path.join(path, "state_writer.py")):
+            return path
+    return ""
 
 
 class CoverageNode(Node):
@@ -152,6 +160,10 @@ class CoverageNode(Node):
     # ── 미니맵 viewer 시작 (scripts/ 의 StateWriter import) ──
     def _start_minimap(self, write_every: int) -> None:
         scripts_dir = _find_scripts_dir()
+        if not scripts_dir:
+            self.get_logger().warning(
+                "미니맵 비활성화 — scripts/ 디렉터리를 못 찾음")
+            return
         if scripts_dir not in sys.path:
             sys.path.insert(0, scripts_dir)
         try:
