@@ -24,6 +24,7 @@ setup(
         "console_scripts": [
             "drive_manager_node = isaac_drive.drive_manager_node:main",
             "mobile_base_executor_node = isaac_drive.mobile_base_executor_node:main",
+            "coverage_node = isaac_drive.coverage_node:main",
         ],
     },
 )
