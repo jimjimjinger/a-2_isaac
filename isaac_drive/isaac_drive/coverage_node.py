@@ -17,6 +17,7 @@ navigation/ 의 coverage 알고리즘(SectorPlanner·Navigator·Mission·FogMap)
 from __future__ import annotations
 
 import os
+import sys
 
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
@@ -54,6 +55,17 @@ def _find_default_terrain() -> str:
 _DEFAULT_TERRAIN = _find_default_terrain()
 
 
+def _find_scripts_dir() -> str:
+    """state_writer.py · viewer.py 가 있는 scripts/ 디렉터리 경로.
+
+    coverage_node 는 패키지 안(isaac_drive/isaac_drive/)에 있고, 미니맵
+    부품(StateWriter·viewer.py)은 isaac_drive/scripts/ 에 있다 — __file__
+    기준으로 한 단계 올라가 scripts/ 를 가리킨다.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(os.path.dirname(here), "scripts")
+
+
 class CoverageNode(Node):
     """coverage 알고리즘을 ROS2 토픽 입·출력으로 구동하는 노드."""
 
@@ -72,6 +84,8 @@ class CoverageNode(Node):
         self.declare_parameter("max_lin", 3.0)
         self.declare_parameter("max_ang", 1.5)
         self.declare_parameter("sector_done_ratio", 0.95)
+        self.declare_parameter("enable_minimap", True)
+        self.declare_parameter("viewer_write_every", 3)
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         pose_topic = str(self.get_parameter("pose_topic").value)
@@ -116,6 +130,14 @@ class CoverageNode(Node):
             SelectedDriveAction, "/selected_drive_action", 10)
         self.state_pub = self.create_publisher(MissionState, "/mission_state", 10)
 
+        # ── 미니맵 viewer (T3 의 StateWriter + viewer.py 재배선) ──
+        # coverage 알고리즘이 fog·mission 을 들고 있는 유일한 프로세스라
+        # 진척 미니맵도 여기서 띄운다. viewer 는 StateWriter 가 clean env +
+        # 시스템 python3 로 띄우므로 ROS2/Isaac 환경과 무관하게 동작한다.
+        self.writer = None
+        if bool(self.get_parameter("enable_minimap").value):
+            self._start_minimap(int(self.get_parameter("viewer_write_every").value))
+
         # ── tick 타이머 ──
         self._tick_index = 0
         self._prev_state = ""
@@ -126,6 +148,22 @@ class CoverageNode(Node):
             f"coverage_node ready — terrain={os.path.basename(terrain_dir)}, "
             f"map {self.fog.map_w:.0f}x{self.fog.map_h:.0f}m, "
             f"pose_topic={pose_topic}, tick={tick_hz:.0f}Hz")
+
+    # ── 미니맵 viewer 시작 (scripts/ 의 StateWriter import) ──
+    def _start_minimap(self, write_every: int) -> None:
+        scripts_dir = _find_scripts_dir()
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        try:
+            from state_writer import StateWriter
+        except ImportError as exc:
+            self.get_logger().warning(
+                f"미니맵 비활성화 — state_writer import 실패: {exc}")
+            return
+        viewer = os.path.join(scripts_dir, "viewer.py")
+        self.writer = StateWriter(
+            self.fog, viewer_script_path=viewer, write_every=write_every)
+        self.get_logger().info(f"미니맵 viewer 시작 — {viewer}")
 
     # ── I5 구독 콜백: PoseWithCovarianceStamped → PoseProvider ──
     def _on_pose(self, msg: PoseWithCovarianceStamped) -> None:
@@ -141,7 +179,7 @@ class CoverageNode(Node):
             self.cmd_pub.publish(Twist())
             return
 
-        x, y, _ = self.pose.get_pose_2d()
+        x, y, yaw = self.pose.get_pose_2d()
         self.fog.reveal_around(x, y)
 
         if self.mission.is_done():
@@ -157,6 +195,10 @@ class CoverageNode(Node):
         self._publish_cmd(lin, ang)
         self._publish_action(lin, ang)
         self._publish_state()
+
+        # 미니맵 viewer 로 fog·mission 상태 기록 (write_every tick 마다).
+        if self.writer is not None:
+            self.writer.maybe_write(self._tick_index, (x, y, yaw), self.mission)
 
     def _publish_cmd(self, lin: float, ang: float) -> None:
         twist = Twist()
@@ -186,6 +228,13 @@ class CoverageNode(Node):
         msg.active_task = f"coverage:{self.fog.overall_ratio()*100:.1f}%"
         self.state_pub.publish(msg)
         self._prev_state = self.mission.state
+
+    # ── 종료 정리: 미니맵 viewer 프로세스까지 함께 종료 ──
+    def destroy_node(self) -> None:
+        if self.writer is not None:
+            self.writer.close()
+            self.writer = None
+        super().destroy_node()
 
 
 def main(args: list[str] | None = None) -> None:

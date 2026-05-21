@@ -24,13 +24,42 @@ import os
 import sys
 import time
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import font_manager as fm
 from matplotlib.patches import Circle
 from matplotlib.colors import ListedColormap
 
 DATA_PATH = sys.argv[1] if len(sys.argv) > 1 else "/tmp/starcraft_map_state.npz"
 POLL = 0.05
 
+
+def _set_korean_font():
+    """matplotlib 에 한글 글리프가 있는 폰트를 지정한다.
+
+    팀원마다 설치된 한글 폰트가 달라도 깨지지 않도록, 흔한 후보를 순서대로
+    찾아 처음 발견되는 것을 쓴다. Noto Sans CJK 는 JP/KR 등 어느 지역
+    변형이든 한글 글리프를 동일하게 포함하므로 모두 후보에 넣는다.
+    (matplotlib 은 .ttc 컬렉션을 보통 'Noto Sans CJK JP' 로 인덱싱한다.)
+    하나도 없으면 설치 안내만 출력하고 기본 폰트로 둔다.
+    """
+    candidates = [
+        "Noto Sans CJK KR", "Noto Sans CJK JP", "Noto Sans KR",
+        "NanumGothic", "NanumBarunGothic", "NanumSquare",
+        "Malgun Gothic", "AppleGothic", "UnDotum", "Gulim", "Batang",
+    ]
+    available = {f.name for f in fm.fontManager.ttflist}
+    for name in candidates:
+        if name in available:
+            matplotlib.rcParams["font.family"] = name
+            matplotlib.rcParams["axes.unicode_minus"] = False  # 한글폰트 마이너스 깨짐 방지
+            print(f"[viewer] 한글 폰트: {name}", flush=True)
+            return
+    print("[viewer] 한글 폰트 없음 — 라벨이 깨질 수 있습니다. "
+          "설치: sudo apt install fonts-noto-cjk", flush=True)
+
+
+_set_korean_font()
 plt.ion()
 fig, axes = plt.subplots(1, 2, figsize=(14, 7))
 try:
