@@ -22,7 +22,8 @@ isaac_sim/
 ├─ isaac_sim/
 │  └─ sim_bridge_node.py            ⏳ stub — Isaac Sim ↔ ROS2 bridge (성선규 T4가 채울 예정)
 ├─ scripts/
-│  ├─ procedural_terrain_generator.py   ✅ T1 1샘플 생성기 (성선규가 임시 작성 → 김현중 확장 예정)
+│  ├─ mars_terrain_generator_v2.py      ✅ I1 지형 생성기 v2 (T1 크레이터·언덕·능선 흡수)
+│  ├─ world_composer.py                 ✅ USD 조립 헬퍼 (terrain/rocks/master scene)
 │  ├─ basecamp_visual_builder.py        ⏳ 빈 파일 — 김현중이 채울 예정
 │  └─ mars_physics_config.py            ⏳ 빈 파일 — gravity/friction/sun direction 들어갈 자리
 ├─ worlds/
@@ -48,9 +49,9 @@ isaac_sim/
 ## 3. 첫 샘플 생성 흐름 (현재 동작 중)
 
 ```bash
-# 1샘플 생성 (procedural_terrain_generator.py)
-python3 isaac_sim/scripts/procedural_terrain_generator.py \
-    --seed 12345 --terrain-id terrain_00001
+# terrain 생성 (mars_terrain_generator_v2.py)
+python3 isaac_sim/scripts/mars_terrain_generator_v2.py \
+    --seed 23456 --terrain-id terrain_00002
 
 # 생성물:
 #   isaac_sim/assets/generated_terrains/terrain_00001/  (5 files)
@@ -71,7 +72,7 @@ isaac isaac_sim/worlds/mars_exploration_world.usd
 | 작업 | 위치 | 우선순위 |
 |------|------|:--------:|
 | `mars_physics_config.py` 채우기 (gravity 3.72, ground/wheel friction, sun direction) | scripts/ | 🔴 P0 |
-| `procedural_terrain_generator.py`에 `--batch` 모드 + easy/medium/hard preset | scripts/ | 🔴 P0 |
+| `mars_terrain_generator_v2.py`에 `--batch` 모드 + easy/medium/hard preset | scripts/ | 🔴 P0 |
 | markers/의 mineral / basecamp / rock USD를 진짜 모형으로 교체 (같은 파일명) | assets/markers/ | 🟡 P1 |
 | `basecamp_visual_builder.py` 채우기 (현재 generator에 임시 통합돼 있음) | scripts/ | 🟢 P2 |
 | 30개 batch + train/holdout split 자동화 | scripts/ | 🟡 P1 |
