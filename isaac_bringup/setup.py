@@ -13,7 +13,6 @@ setup(
             "launch/full_system.launch.py",
             "launch/sim.launch.py",
             "launch/perception.launch.py",
-            "launch/rl.launch.py",
             "launch/drive.launch.py",
             "launch/supervisor.launch.py",
             "launch/manipulation.launch.py",
