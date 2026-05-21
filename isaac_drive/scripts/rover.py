@@ -122,6 +122,8 @@ class RoverController:
         self._steer_indices = None
         self._num_dof = 0
         self._camera_path = None
+        self._camera_vp = None
+        self._camera_rp = None
 
     def spawn(self, initial_position=(0.0, 0.0, 0.0)):
         """로버 USD reference 추가 + 초기 위치 (옵션) 적용.
@@ -165,15 +167,23 @@ class RoverController:
         cam_xf.AddTranslateOp().Set(Gf.Vec3d(*translation))
         cam_xf.AddRotateXYZOp().Set(Gf.Vec3f(*rpy_deg))
 
-        # 카메라 뷰포트 생성
+        # 카메라 뷰포트 생성 — floating 창으로 화면 안쪽에 띄운다.
+        # 도킹(deferred_dock_in/dock_in)을 직접 조작하면 ImGui 도킹 트리가
+        # 전이 상태에서 렌더돼 크래시한다(ImGui::SetScrollY segfault).
+        # create_viewport_window 는 도킹을 하지 않으므로 position 만 지정해
+        # floating 으로 띄운다. 기본값 (0,0)은 메뉴바 뒤에 가려진다.
         vp = create_viewport_window(
             "Rover Camera View",
             width=resolution[0], height=resolution[1],
+            position_x=100, position_y=120,
+            camera_path=self._camera_path,
         )
-        vp.viewport_api.set_active_camera(self._camera_path)
+        self._camera_vp = vp
+
         # 렌더 프로덕트 (필요 시 annotator 부착용)
         self._camera_rp = rep.create.render_product(self._camera_path, resolution)
-        print(f"[rover] 카메라 부착 완료: {self._camera_path}")
+        print(f"[rover] 카메라 부착 완료: {self._camera_path} "
+              f"(viewport visible={vp.visible})")
         return self._camera_path
 
     def initialize(self):
