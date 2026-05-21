@@ -148,6 +148,18 @@ def main() -> None:
     pos_attr = og.Controller.attribute(f"{GRAPH_PATH}/PubOdom.inputs:position")
     ori_attr = og.Controller.attribute(f"{GRAPH_PATH}/PubOdom.inputs:orientation")
 
+    # /odom 첫 프레임 시드 — PubOdom 의 inputs:position 기본값은 (0,0,0)이다.
+    # 루프가 첫 step 에서 실제 pose 를 써넣기 전에 OnTick 이 한 번 발행하면
+    # /odom 첫 메시지가 (0,0,0)으로 나가고, coverage_node 가 그걸 첫 pose 로
+    # 받아 맵 원점에 reveal_radius 짜리 가짜 reveal 을 새긴다 — 미니맵에서
+    # 베이스캠프 박스 안 원형으로 보이던 그것. 루프 전에 실제 spawn pose 로 채운다.
+    x0, y0, yaw0 = rover.get_pose_2d()
+    og.Controller.set(pos_attr, [float(x0), float(y0), 0.0])
+    og.Controller.set(ori_attr,
+                      [0.0, 0.0, math.sin(yaw0 / 2.0), math.cos(yaw0 / 2.0)])
+    print(f"[sim_ros2_bridge] /odom 초기 pose 시드 "
+          f"({x0:+.2f},{y0:+.2f}, {math.degrees(yaw0):+.0f}°)")
+
     lin_x = ang_z = 0.0
     step = 0
     try:
