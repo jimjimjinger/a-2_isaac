@@ -2,7 +2,7 @@
   "terrain_id": "terrain_00021",
   "version": "1.0",
   "seed": 14142,
-  "generated_at": "2026-05-21T07:24:34+00:00",
+  "generated_at": "2026-05-21T11:32:41+00:00",
   "size_m": [
     50.0,
     50.0
@@ -601,11 +601,11 @@
     }
   },
   "difficulty": {
-    "score": 0.465,
+    "score": 0.472,
     "rock_density": 0.032,
     "max_slope_deg": 45.98,
     "mean_slope_deg": 9.38,
-    "passable_ratio": 0.933,
-    "longest_corridor_m": 47.66
+    "passable_ratio": 0.91,
+    "longest_corridor_m": 47.06
   }
 }

@@ -2,7 +2,7 @@
   "terrain_id": "terrain_00008",
   "version": "1.0",
   "seed": 11235,
-  "generated_at": "2026-05-21T02:49:32+00:00",
+  "generated_at": "2026-05-21T11:32:14+00:00",
   "size_m": [
     50.0,
     50.0
@@ -291,31 +291,17 @@
       "group": "default"
     },
     {
-      "x": -17.37,
-      "y": 14.12,
-      "z": 1.0,
-      "yaw": 1.813,
+      "x": -9.72,
+      "y": -3.44,
+      "z": -0.64,
+      "yaw": 0.357,
       "group": "default"
     },
     {
-      "x": -3.44,
-      "y": -20.39,
-      "z": -0.03,
-      "yaw": 2.502,
-      "group": "default"
-    },
-    {
-      "x": -14.09,
-      "y": -17.52,
-      "z": -0.24,
-      "yaw": 2.933,
-      "group": "default"
-    },
-    {
-      "x": 21.62,
-      "y": 12.79,
-      "z": 0.38,
-      "yaw": 4.547,
+      "x": -4.68,
+      "y": -14.09,
+      "z": -0.54,
+      "yaw": 0.748,
       "group": "default"
     },
     {
@@ -347,10 +333,10 @@
       "group": "default"
     },
     {
-      "x": -17.01,
-      "y": -22.41,
-      "z": -0.43,
-      "yaw": 3.29,
+      "x": 1.08,
+      "y": 17.66,
+      "z": 1.19,
+      "yaw": 1.547,
       "group": "default"
     },
     {
@@ -400,6 +386,20 @@
       "y": -2.03,
       "z": 0.65,
       "yaw": 4.108,
+      "group": "default"
+    },
+    {
+      "x": 3.33,
+      "y": 16.03,
+      "z": 0.76,
+      "yaw": 4.52,
+      "group": "default"
+    },
+    {
+      "x": 19.95,
+      "y": -22.65,
+      "z": -0.19,
+      "yaw": 2.772,
       "group": "default"
     }
   ],
@@ -601,11 +601,11 @@
     }
   },
   "difficulty": {
-    "score": 0.465,
+    "score": 0.473,
     "rock_density": 0.032,
     "max_slope_deg": 34.7,
     "mean_slope_deg": 9.52,
-    "passable_ratio": 0.938,
-    "longest_corridor_m": 47.86
+    "passable_ratio": 0.914,
+    "longest_corridor_m": 47.2
   }
 }
