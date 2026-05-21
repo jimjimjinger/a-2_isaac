@@ -93,6 +93,10 @@ CFG = {
     "mineral_slope_deg": 18.0,
     "basecamp_center": (0.0, 0.0),  # I1 Tier 1 — (0,0) 고정
     "basecamp_radius": 3.0,
+    # basecamp_dome.usd 내부 정적 충돌 Cube 한 변 (8×8×8 m, 중심 (0,0)).
+    # 시각 메시(visual_footprint 3×3 m)보다 크다 — 로버가 실제로 막히는 건
+    # 이 Cube. obstacle_grid 는 이 값과 동기화할 것 (자산 변경 시 같이 수정).
+    "basecamp_collision_size_m": 8.0,
     "mesh_stride": 5,             # USD 시각 메시 다운샘플 (npy는 풀해상도 유지)
     # ─ 맵경계 낙하 방지 — 50 m 아레나 둘레 정적 충돌벽 ─
     "boundary_wall_thickness_m": 0.5,      # 벽 두께
@@ -242,18 +246,44 @@ def compute_slope_deg(hm: np.ndarray) -> np.ndarray:
     return np.degrees(np.arctan(np.sqrt(dz_dx ** 2 + dz_dy ** 2))).astype(np.float32)
 
 
+def _stamp_disc(obstacle, cx, cy, radius_m) -> None:
+    """world (cx,cy) 중심, 반경 radius_m 원을 obstacle(1)로 OR-in 한다."""
+    i, j = world_to_idx(cx, cy)
+    cell_r = max(1, int(math.ceil(radius_m / RESOLUTION_M)))
+    i0, i1 = max(0, i - cell_r), min(GRID, i + cell_r + 1)
+    j0, j1 = max(0, j - cell_r), min(GRID, j + cell_r + 1)
+    ii, jj = np.ogrid[i0:i1, j0:j1]
+    mask = (ii - i) ** 2 + (jj - j) ** 2 <= cell_r ** 2
+    obstacle[i0:i1, j0:j1] = np.maximum(obstacle[i0:i1, j0:j1],
+                                        mask.astype(np.int8))
+
+
+def _stamp_basecamp(obstacle) -> None:
+    """베이스캠프 충돌체를 obstacle(1)로 마킹한다.
+
+    basecamp_dome.usd 는 중심에 8×8×8 m 정적 충돌 Cube 를 갖는다 — 시각
+    메시(visual_footprint 3×3 m)보다 크고, 로버가 실제로 막히는 건 이 Cube다.
+    그런데 heightmap 은 _flatten_basecamp 로 평탄화돼 경사 기준에 안 걸리고
+    바위도 베이스캠프 keepout 밖에만 놓이므로, 명시적으로 안 찍으면
+    obstacle_grid 가 베이스캠프를 자유공간으로 본다 — 로버가 통과 경로를
+    계획하다 실제 씬에선 충돌. 축 정렬 박스라 정사각 풋프린트로 찍는다.
+    """
+    bcx, bcy = CFG["basecamp_center"]
+    half = 0.5 * CFG["basecamp_collision_size_m"]
+    i0, j0 = world_to_idx(bcx - half, bcy - half)
+    i1, j1 = world_to_idx(bcx + half, bcy + half)
+    obstacle[i0:i1 + 1, j0:j1 + 1] = 1
+
+
 def build_obstacle_grid(slope_deg, rocks) -> np.ndarray:
-    """I1: shape (1000,1000), dtype int8, 0=safe 1=obstacle."""
+    """I1: shape (1000,1000), dtype int8, 0=safe 1=obstacle.
+
+    obstacle = (1) 경사 임계 초과 셀  (2) 바위 풋프린트  (3) 베이스캠프 충돌체.
+    """
     obstacle = (slope_deg > CFG["obstacle_slope_deg"]).astype(np.int8)
     for rk in rocks:
-        i, j = world_to_idx(rk["x"], rk["y"])
-        cell_r = max(1, int(math.ceil(rk["radius"] / RESOLUTION_M)))
-        i0, i1 = max(0, i - cell_r), min(GRID, i + cell_r + 1)
-        j0, j1 = max(0, j - cell_r), min(GRID, j + cell_r + 1)
-        ii, jj = np.ogrid[i0:i1, j0:j1]
-        mask = (ii - i) ** 2 + (jj - j) ** 2 <= cell_r ** 2
-        obstacle[i0:i1, j0:j1] = np.maximum(obstacle[i0:i1, j0:j1],
-                                            mask.astype(np.int8))
+        _stamp_disc(obstacle, rk["x"], rk["y"], rk["radius"])
+    _stamp_basecamp(obstacle)
     return obstacle.astype(np.int8)
 
 
