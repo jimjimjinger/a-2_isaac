@@ -1,0 +1,611 @@
+{
+  "terrain_id": "terrain_00004",
+  "version": "1.0",
+  "seed": 54321,
+  "generated_at": "2026-05-21T02:26:16+00:00",
+  "size_m": [
+    50.0,
+    50.0
+  ],
+  "resolution_m": 0.05,
+  "origin": {
+    "x": -25.0,
+    "y": -25.0
+  },
+  "generation_params": {
+    "terrain": {
+      "method": "base_relief+craters+hills+ridges",
+      "crater_count": 8,
+      "hill_count": 5,
+      "ridge_count": 3
+    },
+    "rocks": {
+      "count": 80,
+      "size_range_m": [
+        0.3,
+        1.0
+      ],
+      "min_spacing_m": 1.0,
+      "slope_threshold_deg": 25.0,
+      "asset_pool": [
+        "rock_default"
+      ]
+    },
+    "minerals": {
+      "count": 12,
+      "min_spacing_m": 3.0,
+      "exclude_basecamp_radius_m": 5.0,
+      "value_distribution": {
+        "blue": {
+          "prob": 0.5,
+          "score": 10
+        },
+        "red": {
+          "prob": 0.3,
+          "score": 25
+        },
+        "yellow": {
+          "prob": 0.2,
+          "score": 50
+        }
+      }
+    }
+  },
+  "spawn_locations": [
+    {
+      "x": 13.08,
+      "y": 22.54,
+      "z": 0.34,
+      "yaw": 0.653,
+      "group": "default"
+    },
+    {
+      "x": -3.58,
+      "y": -9.08,
+      "z": -0.37,
+      "yaw": 0.192,
+      "group": "default"
+    },
+    {
+      "x": 2.73,
+      "y": -10.68,
+      "z": -0.46,
+      "yaw": 4.262,
+      "group": "default"
+    },
+    {
+      "x": 6.5,
+      "y": -15.2,
+      "z": -0.43,
+      "yaw": 6.28,
+      "group": "default"
+    },
+    {
+      "x": 4.06,
+      "y": 5.25,
+      "z": 0.7,
+      "yaw": 6.032,
+      "group": "default"
+    },
+    {
+      "x": 22.54,
+      "y": -13.88,
+      "z": -0.04,
+      "yaw": 1.289,
+      "group": "default"
+    },
+    {
+      "x": 0.82,
+      "y": 6.0,
+      "z": 0.87,
+      "yaw": 5.519,
+      "group": "default"
+    },
+    {
+      "x": 16.36,
+      "y": 14.81,
+      "z": 0.15,
+      "yaw": 3.653,
+      "group": "default"
+    },
+    {
+      "x": 5.56,
+      "y": 11.28,
+      "z": 0.52,
+      "yaw": 5.414,
+      "group": "default"
+    },
+    {
+      "x": -5.26,
+      "y": -21.86,
+      "z": -0.08,
+      "yaw": 5.37,
+      "group": "default"
+    },
+    {
+      "x": 13.41,
+      "y": -6.41,
+      "z": 0.45,
+      "yaw": 4.279,
+      "group": "default"
+    },
+    {
+      "x": -13.84,
+      "y": 11.56,
+      "z": 0.07,
+      "yaw": 2.02,
+      "group": "default"
+    },
+    {
+      "x": 21.43,
+      "y": 16.3,
+      "z": 0.06,
+      "yaw": 4.486,
+      "group": "default"
+    },
+    {
+      "x": 18.66,
+      "y": 13.42,
+      "z": 0.18,
+      "yaw": 0.722,
+      "group": "default"
+    },
+    {
+      "x": -0.93,
+      "y": -14.37,
+      "z": -0.13,
+      "yaw": 3.155,
+      "group": "default"
+    },
+    {
+      "x": 13.82,
+      "y": -14.67,
+      "z": 0.41,
+      "yaw": 3.546,
+      "group": "default"
+    },
+    {
+      "x": -9.91,
+      "y": -0.42,
+      "z": -0.15,
+      "yaw": 3.355,
+      "group": "default"
+    },
+    {
+      "x": -17.49,
+      "y": -13.22,
+      "z": 0.38,
+      "yaw": 4.028,
+      "group": "default"
+    },
+    {
+      "x": 8.35,
+      "y": 22.22,
+      "z": 0.41,
+      "yaw": 4.304,
+      "group": "default"
+    },
+    {
+      "x": 14.41,
+      "y": 21.82,
+      "z": 0.36,
+      "yaw": 4.997,
+      "group": "default"
+    },
+    {
+      "x": -4.42,
+      "y": 19.56,
+      "z": 0.67,
+      "yaw": 4.78,
+      "group": "default"
+    },
+    {
+      "x": -5.42,
+      "y": 15.3,
+      "z": 0.61,
+      "yaw": 1.28,
+      "group": "default"
+    },
+    {
+      "x": -0.11,
+      "y": 13.34,
+      "z": 0.62,
+      "yaw": 3.197,
+      "group": "default"
+    },
+    {
+      "x": 7.95,
+      "y": -11.75,
+      "z": -0.59,
+      "yaw": 1.616,
+      "group": "default"
+    },
+    {
+      "x": -13.1,
+      "y": 5.49,
+      "z": -0.06,
+      "yaw": 3.862,
+      "group": "default"
+    },
+    {
+      "x": 5.62,
+      "y": -1.1,
+      "z": 0.05,
+      "yaw": 0.583,
+      "group": "default"
+    },
+    {
+      "x": 5.07,
+      "y": -15.99,
+      "z": -0.62,
+      "yaw": 5.205,
+      "group": "default"
+    },
+    {
+      "x": -16.49,
+      "y": -10.49,
+      "z": 0.64,
+      "yaw": 1.78,
+      "group": "default"
+    },
+    {
+      "x": 18.69,
+      "y": 15.32,
+      "z": 0.06,
+      "yaw": 5.715,
+      "group": "default"
+    },
+    {
+      "x": -12.35,
+      "y": -20.06,
+      "z": 0.36,
+      "yaw": 1.393,
+      "group": "default"
+    },
+    {
+      "x": -10.07,
+      "y": -5.87,
+      "z": -0.24,
+      "yaw": 3.063,
+      "group": "default"
+    },
+    {
+      "x": 7.61,
+      "y": -22.84,
+      "z": -0.32,
+      "yaw": 4.794,
+      "group": "default"
+    },
+    {
+      "x": 16.37,
+      "y": -1.7,
+      "z": 0.18,
+      "yaw": 0.736,
+      "group": "default"
+    },
+    {
+      "x": 11.53,
+      "y": -22.33,
+      "z": 0.09,
+      "yaw": 2.333,
+      "group": "default"
+    },
+    {
+      "x": -17.35,
+      "y": 15.81,
+      "z": -0.07,
+      "yaw": 1.757,
+      "group": "default"
+    },
+    {
+      "x": 17.69,
+      "y": -11.64,
+      "z": 0.42,
+      "yaw": 1.631,
+      "group": "default"
+    },
+    {
+      "x": 8.72,
+      "y": -2.14,
+      "z": 0.31,
+      "yaw": 2.549,
+      "group": "default"
+    },
+    {
+      "x": -6.65,
+      "y": 0.68,
+      "z": -0.03,
+      "yaw": 1.864,
+      "group": "default"
+    },
+    {
+      "x": -6.85,
+      "y": 22.69,
+      "z": 0.85,
+      "yaw": 6.186,
+      "group": "default"
+    },
+    {
+      "x": -9.45,
+      "y": -0.67,
+      "z": -0.14,
+      "yaw": 1.279,
+      "group": "default"
+    },
+    {
+      "x": -16.66,
+      "y": -7.45,
+      "z": 0.31,
+      "yaw": 4.123,
+      "group": "default"
+    },
+    {
+      "x": -7.81,
+      "y": -22.63,
+      "z": -0.09,
+      "yaw": 3.04,
+      "group": "default"
+    },
+    {
+      "x": 13.2,
+      "y": 12.39,
+      "z": 0.21,
+      "yaw": 0.282,
+      "group": "default"
+    },
+    {
+      "x": -16.64,
+      "y": 14.08,
+      "z": -0.07,
+      "yaw": 0.321,
+      "group": "default"
+    },
+    {
+      "x": 2.33,
+      "y": 13.56,
+      "z": 0.54,
+      "yaw": 1.751,
+      "group": "default"
+    },
+    {
+      "x": 12.63,
+      "y": -18.37,
+      "z": 0.72,
+      "yaw": 0.356,
+      "group": "default"
+    },
+    {
+      "x": 20.97,
+      "y": -22.63,
+      "z": 0.12,
+      "yaw": 5.005,
+      "group": "default"
+    },
+    {
+      "x": -4.56,
+      "y": 20.04,
+      "z": 0.72,
+      "yaw": 5.256,
+      "group": "default"
+    },
+    {
+      "x": 22.78,
+      "y": -15.27,
+      "z": -0.24,
+      "yaw": 4.926,
+      "group": "default"
+    },
+    {
+      "x": 21.94,
+      "y": 4.31,
+      "z": 0.8,
+      "yaw": 3.137,
+      "group": "default"
+    }
+  ],
+  "basecamp": {
+    "center": {
+      "x": 0.0,
+      "y": 0.0
+    },
+    "radius": 3.0,
+    "marker_usd": "basecamp_dome.usd",
+    "visual_footprint_m": [
+      3.0,
+      3.0
+    ],
+    "marker_height_m": 5.5,
+    "shape": null,
+    "entry_points": [],
+    "collision_usd_path": null
+  },
+  "minerals": [
+    {
+      "id": 1,
+      "type": "red",
+      "position": {
+        "x": 15.47,
+        "y": -20.43,
+        "z": 0.47
+      },
+      "value": 25
+    },
+    {
+      "id": 2,
+      "type": "blue",
+      "position": {
+        "x": -21.4,
+        "y": -14.48,
+        "z": 0.35
+      },
+      "value": 10
+    },
+    {
+      "id": 3,
+      "type": "blue",
+      "position": {
+        "x": -8.89,
+        "y": 5.14,
+        "z": -0.32
+      },
+      "value": 10
+    },
+    {
+      "id": 4,
+      "type": "blue",
+      "position": {
+        "x": 2.31,
+        "y": -21.98,
+        "z": -0.35
+      },
+      "value": 10
+    },
+    {
+      "id": 5,
+      "type": "blue",
+      "position": {
+        "x": 11.09,
+        "y": 20.12,
+        "z": 0.83
+      },
+      "value": 10
+    },
+    {
+      "id": 6,
+      "type": "blue",
+      "position": {
+        "x": -22.73,
+        "y": 0.56,
+        "z": 0.61
+      },
+      "value": 10
+    },
+    {
+      "id": 7,
+      "type": "yellow",
+      "position": {
+        "x": -17.83,
+        "y": 8.95,
+        "z": -0.27
+      },
+      "value": 50
+    },
+    {
+      "id": 8,
+      "type": "blue",
+      "position": {
+        "x": 7.73,
+        "y": -0.0,
+        "z": 0.25
+      },
+      "value": 10
+    },
+    {
+      "id": 9,
+      "type": "red",
+      "position": {
+        "x": -1.38,
+        "y": -14.56,
+        "z": -0.16
+      },
+      "value": 25
+    },
+    {
+      "id": 10,
+      "type": "blue",
+      "position": {
+        "x": 12.08,
+        "y": -8.26,
+        "z": 0.23
+      },
+      "value": 10
+    },
+    {
+      "id": 11,
+      "type": "blue",
+      "position": {
+        "x": -4.32,
+        "y": -6.76,
+        "z": -0.51
+      },
+      "value": 10
+    },
+    {
+      "id": 12,
+      "type": "red",
+      "position": {
+        "x": -17.95,
+        "y": 13.19,
+        "z": -0.41
+      },
+      "value": 25
+    }
+  ],
+  "physics_zones": [
+    {
+      "type": "sand",
+      "polygon": [
+        [
+          -10,
+          -10
+        ],
+        [
+          10,
+          -10
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          -10,
+          0
+        ]
+      ],
+      "static_friction": 0.3,
+      "dynamic_friction": 0.25
+    },
+    {
+      "type": "rocky",
+      "polygon": [
+        [
+          -25,
+          -25
+        ],
+        [
+          -10,
+          -25
+        ],
+        [
+          -10,
+          -10
+        ],
+        [
+          -25,
+          -10
+        ]
+      ],
+      "static_friction": 0.55,
+      "dynamic_friction": 0.5
+    }
+  ],
+  "minimap": {
+    "grid_size": [
+      25,
+      25
+    ],
+    "cell_size_m": 2.0,
+    "origin": {
+      "x": -25.0,
+      "y": -25.0
+    }
+  },
+  "difficulty": {
+    "score": 0.468,
+    "rock_density": 0.032,
+    "max_slope_deg": 42.83,
+    "mean_slope_deg": 9.56,
+    "passable_ratio": 0.932,
+    "longest_corridor_m": 47.66
+  }
+}

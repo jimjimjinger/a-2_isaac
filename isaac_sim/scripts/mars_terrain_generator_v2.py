@@ -54,6 +54,9 @@ TEXTURE_DIR = ISAAC_SIM_DIR / "assets" / "textures" / "Mars"
 MARKERS_DIR = ISAAC_SIM_DIR / "assets" / "markers"
 WORLDS_DIR = ISAAC_SIM_DIR / "worlds"
 SCHEMA_PATH = REPO_ROOT / "docs" / "interfaces" / "terrain_meta_schema.json"
+WESTERN_ROCK_USD = ISAAC_SIM_DIR / "assets" / "Western_Stylised_Rock" / "scene.usdc"
+# 원본 메시 X-span: bbox -193~+189 cm (metersPerUnit=0.01) → 3.82 m
+_ROCK_NATURAL_WIDTH_M = 3.82
 
 # ─── I1 규약 상수 (동결 — 절대 변경 금지. 로버 실측 검증된 값) ───────────
 SIZE_M = 50.0                             # 월드 크기 (정사각)
@@ -315,10 +318,14 @@ def place_minerals(rng, hm, slope_deg, rocks):
     return minerals
 
 
-def place_spawns(rng, hm, slope_deg, obstacle):
+def place_spawns(rng, hm, slope_deg, obstacle, minerals=None):
     spawns = []
     bcx, bcy = CFG["basecamp_center"]
     lo, hi = ORIGIN[0] + 2.0, ORIGIN[0] + SIZE_M - 2.0
+    mineral_pts = [(m["position"]["x"], m["position"]["y"])
+                   for m in (minerals or [])]
+    spawn_clearance = 1.5   # 로버 간 최소 간격 (m)
+    mineral_clearance = 0.8  # 미네랄과 최소 간격 (m)
     for _ in range(CFG["spawn_count"] * 40):
         if len(spawns) >= CFG["spawn_count"]:
             break
@@ -329,6 +336,14 @@ def place_spawns(rng, hm, slope_deg, obstacle):
         if sample(slope_deg, x, y) > CFG["spawn_slope_deg"]:
             continue
         if sample(obstacle, x, y) > 0.5:
+            continue
+        # 기존 spawn과 최소 간격 체크 (로버끼리 겹침 방지)
+        if any(math.hypot(x - s["x"], y - s["y"]) < spawn_clearance
+               for s in spawns):
+            continue
+        # mineral과 최소 간격 체크 (RigidBody mineral과 충돌 방지)
+        if any(math.hypot(x - mx, y - my) < mineral_clearance
+               for mx, my in mineral_pts):
             continue
         spawns.append({
             "x": round(x, 2), "y": round(y, 2),
@@ -505,6 +520,25 @@ def _asset_ref(target: Path, base_dir: Optional[Path]) -> str:
     if base_dir is None:
         return Path(target).resolve().as_posix()
     return _relpath_safe(target, base_dir)
+
+
+def _define_translated_reference(stage, prim_path: str, asset_path: Path,
+                                 translate: Iterable[float],
+                                 base_dir: Optional[Path]):
+    """Create a translated Xform wrapper and reference an asset below it.
+
+    Some referenced USD assets author their own root xform stack, so applying the
+    translate directly on the same prim can be dropped during composition.  A
+    dedicated parent Xform keeps the world pose stable regardless of the asset's
+    internal transform stack.
+    """
+    wrapper = UsdGeom.Xform.Define(stage, prim_path)
+    UsdGeom.XformCommonAPI(wrapper.GetPrim()).SetTranslate(
+        Gf.Vec3d(*[float(v) for v in translate]))
+    ref_prim = UsdGeom.Xform.Define(stage, f"{prim_path}/Reference")
+    ref_prim.GetPrim().GetReferences().AddReference(
+        _asset_ref(asset_path, base_dir))
+    return wrapper, ref_prim
 
 
 def _create_preview_material(stage, material_path, texture_dir, base_dir):
@@ -722,15 +756,37 @@ def build_boundary_walls(stage, terrain_z_min, terrain_z_max,
 
 def build_rocks_prim(stage, rocks, terrain_height_at, rocks_path="/Rocks"):
     UsdGeom.Xform.Define(stage, rocks_path)
+    use_mesh = WESTERN_ROCK_USD.exists()
+    base_dir = (Path(stage.GetRootLayer().realPath).parent
+                if stage.GetRootLayer().realPath else None)
+
     for idx, rock in enumerate(rocks):
         x, y = float(rock["x"]), float(rock["y"])
         radius = float(rock["radius"])
-        z = float(terrain_height_at(x, y)) + radius * 0.55
-        prim = UsdGeom.Sphere.Define(stage, f"{rocks_path}/rock_{idx:04d}")
-        prim.GetRadiusAttr().Set(radius)
-        prim.GetDisplayColorAttr().Set([Gf.Vec3f(0.35, 0.28, 0.24)])
-        UsdGeom.XformCommonAPI(prim).SetTranslate((x, y, z))
-        UsdPhysics.CollisionAPI.Apply(prim.GetPrim())  # 정적 collider (안 움직임)
+        prim_path = f"{rocks_path}/rock_{idx:04d}"
+
+        if use_mesh:
+            # cm→m 단위변환(×0.01) 후 원하는 반경에 맞춰 스케일
+            scale = float(0.01 * (radius * 2.0) / _ROCK_NATURAL_WIDTH_M)
+            z = float(terrain_height_at(x, y))
+            xform = UsdGeom.Xform.Define(stage, prim_path)
+            # XformOp 직접 설정 — XformCommonAPI 충돌 방지
+            xform.AddTranslateOp().Set(Gf.Vec3d(x, y, z))
+            xform.AddRotateXOp().Set(90.0)          # Y-up → Z-up
+            xform.AddScaleOp().Set(Gf.Vec3f(scale, scale, scale))
+            ref = _asset_ref(WESTERN_ROCK_USD, base_dir)
+            xform.GetPrim().GetReferences().AddReference(ref)
+            UsdPhysics.CollisionAPI.Apply(xform.GetPrim())
+            UsdPhysics.MeshCollisionAPI.Apply(
+                xform.GetPrim()).CreateApproximationAttr().Set("convexHull")
+        else:
+            # fallback: sphere proxy (pxr 없거나 에셋 누락 시)
+            z = float(terrain_height_at(x, y)) + radius * 0.55
+            prim = UsdGeom.Sphere.Define(stage, prim_path)
+            prim.GetRadiusAttr().Set(radius)
+            prim.GetDisplayColorAttr().Set([Gf.Vec3f(0.35, 0.28, 0.24)])
+            UsdGeom.XformCommonAPI(prim).SetTranslate((x, y, z))
+            UsdPhysics.CollisionAPI.Apply(prim.GetPrim())
 
 
 def build_light_rig(stage):
@@ -795,26 +851,35 @@ def compose_world(world_path, terrain_usd, rocks_usd, marker_dir, minerals,
     if basecamp is not None:
         marker_path = marker_dir / basecamp.get("marker_usd", "basecamp_dome.usd")
         if marker_path.exists():
-            bc = stage.DefinePrim("/World/Basecamp", "Xform")
-            bc.GetReferences().AddReference(
-                _relpath_safe(marker_path, world_path.parent))
             center = basecamp.get("center", {"x": 0.0, "y": 0.0})
-            UsdGeom.XformCommonAPI(bc).SetTranslate(
-                (float(center["x"]), float(center["y"]), 0.0))
+            _define_translated_reference(
+                stage,
+                "/World/Basecamp",
+                marker_path,
+                (float(center["x"]), float(center["y"]), 0.0),
+                world_path.parent,
+            )
 
     UsdGeom.Xform.Define(stage, "/World/Minerals")
     for mineral in minerals:
         mtype = str(mineral["type"])
-        marker_path = marker_dir / f"mineral_{mtype}.usd"
+        marker_path = marker_dir / "tier2_mineral" / f"mineral_{mtype}.usd"
         if not marker_path.exists():
             continue
-        prim = stage.DefinePrim(
-            f"/World/Minerals/{mtype}_{int(mineral['id']):04d}", "Xform")
-        prim.GetReferences().AddReference(
-            _relpath_safe(marker_path, world_path.parent))
         pos = mineral["position"]
-        UsdGeom.XformCommonAPI(prim).SetTranslate(
-            (float(pos["x"]), float(pos["y"]), float(pos["z"])))
+        wrapper, _ = _define_translated_reference(
+            stage,
+            f"/World/Minerals/{mtype}_{int(mineral['id']):04d}",
+            marker_path,
+            (float(pos["x"]), float(pos["y"]), float(pos["z"])),
+            world_path.parent,
+        )
+        # Physics: 충돌 + rigid body → 로버 그리퍼로 pick & place 가능
+        wprim = wrapper.GetPrim()
+        UsdPhysics.RigidBodyAPI.Apply(wprim)
+        UsdPhysics.CollisionAPI.Apply(wprim)
+        UsdPhysics.MeshCollisionAPI.Apply(wprim).CreateApproximationAttr().Set("convexHull")
+        UsdPhysics.MassAPI.Apply(wprim).CreateMassAttr().Set(0.3)  # 0.3 kg
 
     build_light_rig(stage)
     stage.GetRootLayer().customLayerData = {"generated_at": generated_at}
@@ -1011,7 +1076,7 @@ def main() -> int:
     print(f"[5/7] minerals (목표 {CFG['mineral_count']}) "
           f"+ spawns (목표 {CFG['spawn_count']})...")
     minerals = place_minerals(rng, hm, slope, rocks)
-    spawns = place_spawns(rng, hm, slope, obstacle)
+    spawns = place_spawns(rng, hm, slope, obstacle, minerals)
     print(f"      minerals {len(minerals)}개, spawns {len(spawns)}개")
 
     print("[6/7] difficulty + meta + index...")

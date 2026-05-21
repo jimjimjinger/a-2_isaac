@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-05-20T08:39:51+00:00",
+  "generated_at": "2026-05-21T06:43:26+00:00",
   "terrains": [
     {
       "id": "terrain_00001",
@@ -19,6 +19,102 @@
       "split": "train",
       "difficulty": 0.455,
       "seed": 99
+    },
+    {
+      "id": "terrain_00004",
+      "split": "train",
+      "difficulty": 0.468,
+      "seed": 54321
+    },
+    {
+      "id": "terrain_00005",
+      "split": "train",
+      "difficulty": 0.455,
+      "seed": 77777
+    },
+    {
+      "id": "terrain_00006",
+      "split": "train",
+      "difficulty": 0.472,
+      "seed": 31415
+    },
+    {
+      "id": "terrain_00007",
+      "split": "train",
+      "difficulty": 0.441,
+      "seed": 86420
+    },
+    {
+      "id": "terrain_00008",
+      "split": "train",
+      "difficulty": 0.465,
+      "seed": 11235
+    },
+    {
+      "id": "terrain_00009",
+      "split": "train",
+      "difficulty": 0.461,
+      "seed": 92736
+    },
+    {
+      "id": "terrain_00010",
+      "split": "train",
+      "difficulty": 0.459,
+      "seed": 48151
+    },
+    {
+      "id": "terrain_00011",
+      "split": "train",
+      "difficulty": 0.456,
+      "seed": 63829
+    },
+    {
+      "id": "terrain_00012",
+      "split": "train",
+      "difficulty": 0.464,
+      "seed": 74163
+    },
+    {
+      "id": "terrain_00013",
+      "split": "train",
+      "difficulty": 0.462,
+      "seed": 58394
+    },
+    {
+      "id": "terrain_00014",
+      "split": "train",
+      "difficulty": 0.46,
+      "seed": 20001
+    },
+    {
+      "id": "terrain_00015",
+      "split": "train",
+      "difficulty": 0.462,
+      "seed": 39281
+    },
+    {
+      "id": "terrain_00016",
+      "split": "train",
+      "difficulty": 0.459,
+      "seed": 55500
+    },
+    {
+      "id": "terrain_00017",
+      "split": "train",
+      "difficulty": 0.455,
+      "seed": 17364
+    },
+    {
+      "id": "terrain_00018",
+      "split": "train",
+      "difficulty": 0.464,
+      "seed": 82647
+    },
+    {
+      "id": "terrain_00019",
+      "split": "train",
+      "difficulty": 0.457,
+      "seed": 99999
     }
   ]
 }
