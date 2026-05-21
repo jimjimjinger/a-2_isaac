@@ -24,6 +24,7 @@ from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from isaac_interfaces.msg import MissionState, SelectedDriveAction
 from rclpy.node import Node
 
+from isaac_drive.minimap_publisher import MinimapPublisher
 from isaac_drive.navigation.coverage_planner import SectorPlanner
 from isaac_drive.navigation.mission_fsm import Mission
 from isaac_drive.navigation.navigator import Navigator
@@ -96,6 +97,9 @@ class CoverageNode(Node):
         self.declare_parameter("sector_done_ratio", 0.95)
         self.declare_parameter("enable_minimap", True)
         self.declare_parameter("viewer_write_every", 3)
+        self.declare_parameter("enable_minimap_topics", True)
+        self.declare_parameter("minimap_publish_every", 10)
+        self.declare_parameter("minimap_frame_id", "map")
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         pose_topic = str(self.get_parameter("pose_topic").value)
@@ -147,6 +151,20 @@ class CoverageNode(Node):
         self.writer = None
         if bool(self.get_parameter("enable_minimap").value):
             self._start_minimap(int(self.get_parameter("viewer_write_every").value))
+
+        # ── 미니맵 ROS2 토픽 발행 (RViz/Foxglove/T4 mission UI 용) ──
+        # viewer.py(matplotlib) 와 별개로, 같은 상태를 표준 메시지로 토픽에 싣는다.
+        # 소비자는 구독만으로 미니맵을 그릴 수 있다 — 렌더링 코드 불필요.
+        self.minimap = None
+        if bool(self.get_parameter("enable_minimap_topics").value):
+            self.minimap = MinimapPublisher(
+                self, self.fog,
+                frame_id=str(self.get_parameter("minimap_frame_id").value),
+                publish_every=int(
+                    self.get_parameter("minimap_publish_every").value),
+            )
+            self.get_logger().info(
+                "미니맵 토픽 발행 — /mission/minimap /mission/path /mission/markers")
 
         # ── tick 타이머 ──
         self._tick_index = 0
@@ -213,6 +231,10 @@ class CoverageNode(Node):
         # 미니맵 viewer 로 fog·mission 상태 기록 (write_every tick 마다).
         if self.writer is not None:
             self.writer.maybe_write(self._tick_index, (x, y, yaw), self.mission)
+
+        # 미니맵 상태를 표준 ROS2 토픽으로도 발행 (publish_every tick 마다).
+        if self.minimap is not None:
+            self.minimap.maybe_publish(self._tick_index, self.mission)
 
     def _publish_cmd(self, lin: float, ang: float) -> None:
         twist = Twist()
