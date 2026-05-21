@@ -60,6 +60,13 @@ def _set_korean_font():
 
 
 _set_korean_font()
+
+# plt.pause()/show() 가 매번 창을 최상단으로 raise 하지 않게 한다 — 안 그러면
+# 미니맵이 Isaac Sim 에서 포커스를 계속 빼앗아 조작이 불가능해진다.
+# (matplotlib ≥3.3 의 rcParam. 구버전이면 조용히 건너뜀.)
+if "figure.raise_window" in matplotlib.rcParams:
+    matplotlib.rcParams["figure.raise_window"] = False
+
 plt.ion()
 fig, axes = plt.subplots(1, 2, figsize=(14, 7))
 try:
@@ -234,7 +241,14 @@ while plt.fignum_exists(fig.number):
                     f"({sector_ratios[current_sector] * 100:.0f}%)"
                 )
                 fig.canvas.draw_idle()
-        plt.pause(POLL)
+        # plt.pause() 는 매 호출마다 창을 최상단으로 raise 해 Isaac Sim 의
+        # 포커스를 빼앗는다. flush_events() 는 GUI 이벤트(이동·리사이즈·닫기)만
+        # 처리하고 창을 raise 하지 않는다 → 미니맵이 떠 있어도 Isaac Sim 조작 OK.
+        try:
+            fig.canvas.flush_events()
+        except Exception:
+            pass
+        time.sleep(POLL)
     except KeyboardInterrupt:
         break
     except Exception as e:
