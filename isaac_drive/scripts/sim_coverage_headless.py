@@ -25,7 +25,8 @@ from isaac_drive.navigation.coverage_planner import SectorPlanner
 from isaac_drive.navigation.navigator import Navigator
 from isaac_drive.navigation.mission_fsm import Mission
 
-WS = "/home/rokey/dev_ws/rover_ws/src/a2_isaac"
+# a2_isaac 워크스페이스 루트 = scripts/../.. (스크립트 위치 기준 자동 도출).
+WS = os.path.dirname(os.path.dirname(HERE))
 TERRAIN_DIR = f"{WS}/isaac_sim/assets/generated_terrains/terrain_00001"
 
 ROBOT_RADIUS  = 0.7
