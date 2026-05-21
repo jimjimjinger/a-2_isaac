@@ -29,23 +29,38 @@ class Mission:
         self.rover = rover
         self.sector_done_ratio = float(sector_done_ratio)
 
-        # 방문 순서 (planner.sector_visit_order 정의)
-        self.visit_order = sector_visit_order(fog_map.grid_n ** 2)
+        # 방문 순서는 spawn 위치 기준 NN 으로 정한다(sector_visit_order).
+        # __init__ 시점엔 아직 pose 가 안 들어왔으므로, 첫 update() 에서
+        # 실제 pose 로 지연 초기화한다 — _init_visit_order 참고.
+        self.visit_order = None
         self.visit_idx = 0
-        self.current_sector = self.visit_order[self.visit_idx]
-        self.anchor_queue = []   # 남은 anchor 의 world xy 리스트
+        self.current_sector = 0      # placeholder — _init_visit_order 에서 확정
+        self.anchor_queue = []       # 남은 anchor 의 world xy 리스트
         self.state = "PLAN_SECTOR"
         self._last_log = -1
-
-        order_str = " → ".join(str(s + 1) for s in self.visit_order)
-        print(f"[mission] 구역 방문 순서: {order_str}")
 
     def is_done(self):
         return self.state == "DONE"
 
+    def _init_visit_order(self):
+        """첫 update() 에서 실제 spawn pose 로 섹터 방문 순서를 확정한다.
+
+        coverage_node 는 pose 를 한 번이라도 받은 뒤에야 update() 를
+        호출하므로, 이 시점의 get_pose_2d() 는 유효한 spawn 위치다.
+        """
+        cx, cy, _ = self.rover.get_pose_2d()
+        self.visit_order = sector_visit_order(self.fog, (cx, cy))
+        self.current_sector = self.visit_order[self.visit_idx]
+        order_str = " → ".join(str(s + 1) for s in self.visit_order)
+        print(f"[mission] spawn ({cx:+.1f},{cy:+.1f}) → 섹터 "
+              f"{self.current_sector + 1} 부터, 방문 순서: {order_str}")
+
     # ──────────────────────────────────────────────────
     def update(self, step_index):
         """매 시뮬 step 호출. 반환: (lin_vel, ang_vel)."""
+        if self.visit_order is None:
+            self._init_visit_order()
+
         if self.state == "PLAN_SECTOR":
             self._plan_sector()
             # 바로 첫 anchor 까지 path 만들고 DRIVE 로 전환

@@ -96,14 +96,42 @@ class SectorPlanner:
         return result
 
 
-def sector_visit_order(num_sectors=9):
-    """방문 순서: 5→2→1→4→7→8→9→6→3 (사용자 지정, 중앙에서 나선형).
+def sector_visit_order(fog_map, start_xy):
+    """spawn 위치에서 출발하는 섹터 방문 순서 (centroid Nearest Neighbor).
 
-    1-indexed:  5  2  1  4  7  8  9  6  3
-    0-indexed:  4  1  0  3  6  7  8  5  2
+    로버 spawn 이 속한 섹터에서 시작해, 남은 섹터 중심점들에 대해 Nearest
+    Neighbor 로 순회한다. 동률이면 인덱스가 작은 섹터를 택한다 — 3×3
+    그리드에서 이 tie-break 는 인접 섹터만 밟는 serpentine 경로를 만들어
+    섹터 간 이동(backtrack)을 최소화한다.
+
+    이전에는 5→2→1→4→7→8→9→6→3 나선 순서를 하드코딩했는데, 그건 사실
+    "중앙(섹터 5)에서 출발한 NN 경로"였다. 이 함수는 그 경로를 임의의
+    spawn 섹터로 일반화한 것 — spawn 이 섹터 5면 동일 순서가 나온다.
+
+    Args:
+        fog_map:  FogMap — 섹터 경계(sector_bounds)/개수 제공.
+        start_xy: (x, y) 로버 spawn 위치 (world 좌표).
+
+    Returns:
+        list[int] — 0-indexed 섹터 방문 순서 (길이 grid_n²).
     """
-    if num_sectors == 9:
-        return [4, 1, 0, 3, 6, 7, 8, 5, 2]
-        # return [1]
-    # 폴백: 기본 순서
-    return list(range(num_sectors))
+    n = fog_map.grid_n ** 2
+    centroids = []
+    for s in range(n):
+        x_min, x_max, y_min, y_max = fog_map.sector_bounds(s)
+        centroids.append((0.5 * (x_min + x_max), 0.5 * (y_min + y_max)))
+
+    start = fog_map.world_to_sector(start_xy[0], start_xy[1])
+    order = [start]
+    remaining = set(range(n)) - {start}
+    cur = start
+    while remaining:
+        cx, cy = centroids[cur]
+        # 가장 가까운 섹터, 동률이면 인덱스 작은 쪽 (안정적 serpentine).
+        nxt = min(remaining,
+                  key=lambda s: ((centroids[s][0] - cx) ** 2
+                                 + (centroids[s][1] - cy) ** 2, s))
+        order.append(nxt)
+        remaining.discard(nxt)
+        cur = nxt
+    return order
