@@ -36,15 +36,16 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
-import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import omni.kit.commands
 import omni.kit.app
 import omni.usd
+import omni.graph.core as og
+import omni.replicator.core as rep
 import carb
+import usdrt
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 # 시끄러운 로그 silence
@@ -60,17 +61,31 @@ for ch in (
     except Exception:
         pass
 
-# RobotAssembler 확장 활성화
-omni.kit.app.get_app().get_extension_manager().set_extension_enabled_immediate(
-    "isaacsim.robot_setup.assembler", True
-)
+# 필요한 Isaac/OmniGraph 확장 활성화
+_ext_manager = omni.kit.app.get_app().get_extension_manager()
+for _ext in (
+    "isaacsim.robot_setup.assembler",
+    "isaacsim.sensors.physics",
+    "isaacsim.ros2.bridge",
+    "omni.graph.window.action",
+    "omni.graph.window.generic",
+    "omni.graph.bundle.action",
+    "omni.graph.ui",
+    "omni.graph.visualization.nodes",
+    "omni.kit.graph.delegate.default",
+    "omni.kit.graph.editor.core",
+):
+    _ext_manager.set_extension_enabled_immediate(_ext, True)
 
 from isaacsim.asset.importer.urdf import _urdf
 from isaacsim.core.api import World
 from isaacsim.core.prims import SingleArticulation
+from isaacsim.core.utils.prims import move_prim
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
+os.environ.setdefault("ROS_DISTRO", "humble")
+os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
 
 # ─── 경로 ──────────────────────────────────────────────────────────────────
 A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
@@ -78,6 +93,7 @@ MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"
 RG2_URDF = A2_ROOT / "isaac_sim/assets/onrobot_rg2/urdf/onrobot_rg2.urdf"
+LOCALIZATION_SCENE_USD = A2_ROOT / "isaac_sim/assets/scenes/rover_m0609_localization.usd"
 
 # URDF 안의 link 이름 (dual_cam_pick_place config 와 동일)
 M0609_EE_LINK = "link_6"
@@ -117,6 +133,22 @@ BASKET_HEIGHT = 0.18
 BASKET_WALL = 0.035
 BASKET_BOTTOM = 0.035
 
+# IMU sensor attached to rover body. Action Graph should read this prim.
+IMU_SENSOR_NAME = "Imu_Sensor"
+IMU_LOCAL_X = 0.0
+IMU_LOCAL_Y = 0.0
+IMU_LOCAL_Z = 0.12
+IMU_SENSOR_PERIOD = -1.0
+
+# Rover camera. One USD Camera prim publishes both RGB and depth.
+CAMERA_NAME = "Camera"
+CAMERA_LOCAL_X = 0.35
+CAMERA_LOCAL_Y = 0.0
+CAMERA_LOCAL_Z = 0.30
+CAMERA_RPY_DEG = (90.0, 0.0, -90.0)
+CAMERA_RESOLUTION = (640, 480)
+CAMERA_FRAME_ID = "rover_camera"
+
 
 # ─── URDF / Assembler 헬퍼 ───────────────────────────────────────────────────
 def _import_urdf(urdf_path: str, fix_base: bool) -> str:
@@ -155,6 +187,27 @@ def _find_prim_path_by_name(root_path: str, link_name: str):
     return None
 
 
+def _move_prim_under(root_path: str, parent_path: str) -> str:
+    """Move an imported root prim under parent_path before assembly."""
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(root_path)
+    if not prim.IsValid():
+        raise RuntimeError(f"prim not found: {root_path}")
+
+    name = prim.GetName()
+    dst_path = f"{parent_path}/{name}"
+    if root_path == dst_path:
+        return root_path
+    if stage.GetPrimAtPath(dst_path).IsValid():
+        raise RuntimeError(f"destination already exists: {dst_path}")
+
+    move_prim(root_path, dst_path)
+    for _ in range(5):
+        simulation_app.update()
+    print(f"  [Scene] moved prim: {root_path} -> {dst_path}")
+    return dst_path
+
+
 def _assemble(robot_base, robot_base_mount, robot_attach, robot_attach_mount,
               namespace, variant):
     """RobotAssembler 로 두 robot 을 fixed joint 로 결합.
@@ -184,19 +237,11 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
     stage = omni.usd.get_context().get_stage()
     root = stage.GetPrimAtPath(root_path)
     if not root.IsValid():
-        carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: root invalid {root_path}")
+        carb.log_warn(f"_paint_subtree_dark: root invalid {root_path}")
         return 0
 
     rgb_vec = Gf.Vec3f(*rgb)
-
-    # 디버그: subtree 의 모든 prim 타입 카운트 (왜 Mesh 가 0개인지 진단)
-    type_counts = {}
     all_predicate = Usd.PrimAllPrimsPredicate
-    for prim in Usd.PrimRange(root, predicate=all_predicate):
-        t = str(prim.GetTypeName()) or "<empty>"
-        type_counts[t] = type_counts.get(t, 0) + 1
-    top_types = sorted(type_counts.items(), key=lambda x: -x[1])[:15]
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark prim type counts: {top_types}")
 
     # (1) 모든 Shader prim 의 Color3f inputs 를 dark 로 set (이름 무관)
     modified = 0
@@ -219,7 +264,6 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
                 modified += 1
             except Exception:
                 pass
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: modified {modified} Color3f shader inputs")
 
     # (2) 새 PreviewSurface material 생성
     mat_path = f"{root_path}/Looks/T2DarkBody"
@@ -260,7 +304,6 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
             bindingStrength=UsdShade.Tokens.strongerThanDescendants,
         )
         bound += 1
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: rebound {bound} prims (Mesh/GeomSubset/with-binding)")
     return modified + bound
 
 
@@ -371,6 +414,161 @@ def _attach_rear_basket(rover_body: str) -> str:
     return basket_path
 
 
+def _attach_imu_sensor(rover_body: str) -> str:
+    """Create an Isaac IMU sensor under rover Body."""
+    stage = omni.usd.get_context().get_stage()
+    body_prim = stage.GetPrimAtPath(rover_body)
+    if not body_prim.IsValid():
+        raise RuntimeError(f"rover Body prim not found: {rover_body}")
+
+    imu_path = f"{rover_body}/{IMU_SENSOR_NAME}"
+    if stage.GetPrimAtPath(imu_path).IsValid():
+        print(f"  [Scene] IMU sensor already exists: {imu_path}")
+        return imu_path
+
+    ret = omni.kit.commands.execute(
+        "IsaacSensorCreateImuSensor",
+        path=f"/{IMU_SENSOR_NAME}",
+        parent=rover_body,
+        sensor_period=IMU_SENSOR_PERIOD,
+        translation=Gf.Vec3d(IMU_LOCAL_X, IMU_LOCAL_Y, IMU_LOCAL_Z),
+        orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+        linear_acceleration_filter_size=1,
+        angular_velocity_filter_size=1,
+        orientation_filter_size=1,
+    )
+
+    sensor_prim = ret[1] if isinstance(ret, tuple) else ret
+    if sensor_prim is None or not stage.GetPrimAtPath(imu_path).IsValid():
+        raise RuntimeError(f"Failed to create IMU sensor at {imu_path}")
+
+    print(f"  [Scene] IMU sensor attached: {imu_path}")
+    return imu_path
+
+
+def _attach_rover_camera(rover_body: str):
+    """Create/reuse the rover camera and return (camera_path, render_product_path)."""
+    stage = omni.usd.get_context().get_stage()
+    body_prim = stage.GetPrimAtPath(rover_body)
+    if not body_prim.IsValid():
+        raise RuntimeError(f"rover Body prim not found: {rover_body}")
+
+    camera_path = f"{rover_body}/{CAMERA_NAME}"
+    if not stage.GetPrimAtPath(camera_path).IsValid():
+        omni.kit.commands.execute(
+            "CreatePrim",
+            prim_path=camera_path,
+            prim_type="Camera",
+        )
+        cam_prim = stage.GetPrimAtPath(camera_path)
+        cam_xf = UsdGeom.Xformable(cam_prim)
+        cam_xf.ClearXformOpOrder()
+        cam_xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Vec3d(CAMERA_LOCAL_X, CAMERA_LOCAL_Y, CAMERA_LOCAL_Z)
+        )
+        cam_xf.AddRotateXYZOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Vec3d(*CAMERA_RPY_DEG)
+        )
+        print(f"  [Scene] camera attached: {camera_path}")
+    else:
+        print(f"  [Scene] camera already exists: {camera_path}")
+
+    UsdGeom.Imageable(stage.GetPrimAtPath(camera_path)).MakeInvisible()
+    render_product = rep.create.render_product(camera_path, CAMERA_RESOLUTION)
+    render_product_path = render_product.path
+    print(f"  [Scene] camera render product: {render_product_path}")
+    return camera_path, render_product_path
+
+
+def _create_localization_ros2_graph(
+    imu_path: str,
+    camera_render_product_path: str = "",
+) -> str:
+    """Create ROS2 publishers for localization sensors and rover camera."""
+    stage = omni.usd.get_context().get_stage()
+    graph_path = "/ActionGraph/LocalizationSensors"
+
+    if stage.GetPrimAtPath(graph_path).IsValid():
+        stage.RemovePrim(Sdf.Path(graph_path))
+
+    create_nodes = [
+        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
+        ("ReadIMU", "isaacsim.sensors.physics.IsaacReadIMU"),
+        ("PublishImu", "isaacsim.ros2.bridge.ROS2PublishImu"),
+    ]
+    connect = [
+        ("OnPlaybackTick.outputs:tick", "ReadIMU.inputs:execIn"),
+        ("ReadIMU.outputs:execOut", "PublishImu.inputs:execIn"),
+        ("Context.outputs:context", "PublishImu.inputs:context"),
+        ("ReadIMU.outputs:sensorTime", "PublishImu.inputs:timeStamp"),
+        ("ReadIMU.outputs:angVel", "PublishImu.inputs:angularVelocity"),
+        ("ReadIMU.outputs:linAcc", "PublishImu.inputs:linearAcceleration"),
+        ("ReadIMU.outputs:orientation", "PublishImu.inputs:orientation"),
+    ]
+    set_values = [
+        ("ReadIMU.inputs:imuPrim", [usdrt.Sdf.Path(imu_path)]),
+        ("ReadIMU.inputs:readGravity", True),
+        ("ReadIMU.inputs:useLatestData", False),
+        ("PublishImu.inputs:topicName", "/imu/data"),
+        ("PublishImu.inputs:frameId", "sim_imu"),
+        ("PublishImu.inputs:publishAngularVelocity", True),
+        ("PublishImu.inputs:publishLinearAcceleration", True),
+        ("PublishImu.inputs:publishOrientation", True),
+    ]
+
+    if camera_render_product_path:
+        create_nodes.extend(
+            [
+                ("CameraRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("CameraDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("CameraInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+            ]
+        )
+        connect.extend(
+            [
+                ("OnPlaybackTick.outputs:tick", "CameraRgb.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "CameraDepth.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "CameraInfo.inputs:execIn"),
+                ("Context.outputs:context", "CameraRgb.inputs:context"),
+                ("Context.outputs:context", "CameraDepth.inputs:context"),
+                ("Context.outputs:context", "CameraInfo.inputs:context"),
+            ]
+        )
+        set_values.extend(
+            [
+                ("CameraRgb.inputs:renderProductPath", camera_render_product_path),
+                ("CameraRgb.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraRgb.inputs:topicName", "/rover/camera/image_raw"),
+                ("CameraRgb.inputs:type", "rgb"),
+                ("CameraDepth.inputs:renderProductPath", camera_render_product_path),
+                ("CameraDepth.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraDepth.inputs:topicName", "/rover/camera/depth/image_raw"),
+                ("CameraDepth.inputs:type", "depth"),
+                ("CameraInfo.inputs:renderProductPath", camera_render_product_path),
+                ("CameraInfo.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraInfo.inputs:topicName", "/rover/camera/camera_info"),
+            ]
+        )
+
+    og.Controller.edit(
+        {"graph_path": graph_path, "evaluator_name": "execution"},
+        {
+            og.Controller.Keys.CREATE_NODES: create_nodes,
+            og.Controller.Keys.CONNECT: connect,
+            og.Controller.Keys.SET_VALUES: set_values,
+        },
+    )
+
+    print(f"  [Scene] ROS2 localization graph created: {graph_path}")
+    print(f"          /imu/data IMU prim : {imu_path}")
+    if camera_render_product_path:
+        print("          /rover/camera/image_raw")
+        print("          /rover/camera/depth/image_raw")
+        print("          /rover/camera/camera_info")
+    return graph_path
+
+
 def _freeze_rover_drives(rover_prim) -> int:
     """rover 의 모든 drive 를 freeze: target=0, stiffness/damping 매우 큼.
     휠/조향이 멋대로 돌지 않게."""
@@ -437,7 +635,7 @@ def _is_steer_joint_name(name: str) -> bool:
     )
 
 
-def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
+def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED, log: bool = True) -> int:
     """Drive wheel target velocity 설정.
 
     새 모델은 Stage 에 FL_Drive, FR_Drive ... 형태로 보이고, 예전 모델은
@@ -457,7 +655,8 @@ def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
             drv.GetStiffnessAttr().Set(0.0)
             drv.GetDampingAttr().Set(1e5)
             drv.GetMaxForceAttr().Set(1e7)
-            print(f"  [Drive] {prim.GetPath()} targetVelocity={speed}")
+            if log:
+                print(f"  [Drive] {prim.GetPath()} targetVelocity={speed}")
             n += 1
         elif _is_steer_joint_name(name):
             drv.GetTargetPositionAttr().Set(0.0)
@@ -466,7 +665,8 @@ def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
             drv.GetDampingAttr().Set(1e6)
             drv.GetMaxForceAttr().Set(1e7)
 
-    print(f"  [Drive] forward command applied to {n} wheel drives")
+    if log:
+        print(f"  [Drive] forward command applied to {n} wheel drives")
     return n
 
 
@@ -548,28 +748,8 @@ def build_scene():
     print(f"  [Scene] rover @ {ROVER_SPAWN_POS}  (drives frozen: {n})")
 
     # ③ M0609 URDF import (fix_base=False → floating-base).
-    carb.log_warn(f"[T2-DEBUG] === STEP 3: M0609 URDF import ===")
-    carb.log_warn(f"[T2-DEBUG] CONFIG M0609_BASE_POS = {M0609_BASE_POS}")
-    carb.log_warn(f"[T2-DEBUG] CONFIG M0609_MOUNT_OFFSET_Z = {M0609_MOUNT_OFFSET_Z}")
     robot_root = _import_urdf(str(M0609_URDF), fix_base=False)
-
-    # DEBUG: import 직후 실제 prim 구조 확인
-    m0609_root_prim = stage.GetPrimAtPath(robot_root)
-    carb.log_warn(f"[T2-DEBUG] robot_root = {robot_root}  valid={m0609_root_prim.IsValid()}  type={m0609_root_prim.GetTypeName()}")
-    carb.log_warn(f"[T2-DEBUG] robot_root APIs: {m0609_root_prim.GetAppliedSchemas()}")
-    carb.log_warn(f"[T2-DEBUG] robot_root children: {[c.GetName() for c in m0609_root_prim.GetChildren()][:10]}")
-    # 어느 prim 이 ArticulationRootAPI 가지고 있나
-    for prim in Usd.PrimRange(m0609_root_prim):
-        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
-            carb.log_warn(f"[T2-DEBUG] ArticulationRoot prim: {prim.GetPath()}")
-
-    # import 직후 base_link world pos
-    bl_path = _find_prim_path_by_name(robot_root, "base_link")
-    if bl_path:
-        bl = stage.GetPrimAtPath(bl_path)
-        bl_world = UsdGeom.Xformable(bl).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world BEFORE translate: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
+    robot_root = _move_prim_under(robot_root, "/World/Vehicle")
 
     # URDF importer 가 만든 articulation root prim 을 옮긴다.
     # ⚠️ 핵심: USD xformOp 만 직접 수정하면 USD prim 은 옮겨지지만 PhysX 내부
@@ -584,20 +764,11 @@ def build_scene():
     )
     for _ in range(10):
         simulation_app.update()
-    carb.log_warn(f"[T2-DEBUG] M0609 root translate → {M0609_BASE_POS} (via TransformPrimSRTCommand)")
-
-    # translate 직후 실제 world 위치 (정상이면 base_link ≈ M0609_BASE_POS)
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER translate: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})  ← 기대값 {M0609_BASE_POS}")
-    root_world = UsdGeom.Xformable(m0609_root_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()).ExtractTranslation()
-    carb.log_warn(f"[T2-DEBUG] robot_root world AFTER translate: ({root_world[0]:+.3f}, {root_world[1]:+.3f}, {root_world[2]:+.3f})")
 
     # ④ RG2 URDF import (floating, M0609 ee 에 결합)
     print("\n[4/5] Importing RG2 URDF + assembling to M0609 ee …")
     gripper_root = _import_urdf(str(RG2_URDF), fix_base=False)
+    gripper_root = _move_prim_under(gripper_root, "/World/Vehicle")
     robot_ee = _find_prim_path_by_name(robot_root, M0609_EE_LINK) \
                or f"{robot_root}/{M0609_EE_LINK}"
     gripper_base = _find_prim_path_by_name(gripper_root, RG2_BASE_LINK) \
@@ -605,12 +776,6 @@ def build_scene():
     _assemble(robot_root, robot_ee, gripper_root, gripper_base,
               "Gripper", "m0609_rg2")
     print(f"  [Assembly] M0609/{M0609_EE_LINK} ↔ RG2/{RG2_BASE_LINK}")
-
-    # DEBUG: RG2 assemble 후 M0609 위치 변동 확인
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER RG2 assemble: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
 
     # ⑤ rover Body ↔ M0609 base_link 결합 (rover 가 M0609 articulation 의 sub-tree 가 됨)
     print("\n[5/5] Assembling rover ↔ M0609 …")
@@ -638,10 +803,6 @@ def build_scene():
     )
     for _ in range(5):
         simulation_app.update()
-    # 검증: mount Xform 이 의도된 world 위치에 author 됐는지
-    mount_world = UsdGeom.Xformable(mount_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()).ExtractTranslation()
-    carb.log_warn(f"[T2-DEBUG] M0609_Mount world pos: ({mount_world[0]:+.3f}, {mount_world[1]:+.3f}, {mount_world[2]:+.3f}) (기대: {M0609_BASE_POS})")
     # 이제 m0609.base_link 가 M0609_Mount 위치로 정렬됨 → rover.Body 위 offset 자세
     _assemble(
         robot_root, m0609_base,
@@ -649,36 +810,21 @@ def build_scene():
         "RoverMount", "m0609_on_rover",
     )
 
-    # DEBUG: rover assemble 후 M0609 / rover Body 위치 (이게 시뮬 시작 전 최종)
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER rover assemble: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
-    rb_prim = stage.GetPrimAtPath(rover_body)
-    if rb_prim.IsValid():
-        rb_world = UsdGeom.Xformable(rb_prim).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] rover Body world AFTER rover assemble: ({rb_world[0]:+.3f}, {rb_world[1]:+.3f}, {rb_world[2]:+.3f})")
-
     # rover drive re-freeze (assemble 중에 풀릴 수 있음)
     _freeze_rover_drives(rover_prim)
 
+    imu_path = _attach_imu_sensor(rover_body)
+    _, camera_render_product_path = _attach_rover_camera(rover_body)
+    _create_localization_ros2_graph(
+        imu_path,
+        camera_render_product_path,
+    )
     _attach_rear_basket(rover_body)
-
-    # 시각: m0609 (+ RG2) 를 rover 처럼 어두운 색으로 paint
     _paint_subtree_dark(robot_root, rgb=(0.08, 0.08, 0.08))
+    _paint_subtree_dark(gripper_root, rgb=(0.08, 0.08, 0.08))
 
     for _ in range(10):
         simulation_app.update()
-
-    # 디버그: 주요 link world pose (시뮬 시작 전 최종)
-    print("\n[DEBUG] Key world positions (pre-simulation):")
-    for path in (rover_body, m0609_base, robot_ee, gripper_base):
-        prim = stage.GetPrimAtPath(path)
-        if prim and prim.IsValid():
-            t = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-                Usd.TimeCode.Default()).ExtractTranslation()
-            print(f"  {path}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
 
     return rover_prim, robot_root, rover_body, m0609_base
 
@@ -691,6 +837,8 @@ def main():
                         help="씬만 띄우고 로버 전진 명령은 주지 않음")
     parser.add_argument("--drive-speed", type=float, default=AUTO_DRIVE_SPEED,
                         help="로버 전진 wheel target velocity")
+    parser.add_argument("--save-scene", action="store_true",
+                        help=f"구성된 localization scene USD 저장: {LOCALIZATION_SCENE_USD}")
     args = parser.parse_args()
 
     world = World(stage_units_in_meters=1.0)
@@ -707,50 +855,53 @@ def main():
     # 깨지면서 m0609 가 분리됨. FixedJoint 가 USD authored pose 를 그대로 유지함.
     stage = omni.usd.get_context().get_stage()
 
-    # DEBUG: world.reset 후 위치
-    stage = omni.usd.get_context().get_stage()
-    carb.log_warn(f"[T2-DEBUG] === AFTER world.reset + set_world_pose ===")
-    for label, p in [("rover Body", rover_body_path), ("M0609 base_link", m0609_base_path)]:
-        prim = stage.GetPrimAtPath(p)
-        if prim.IsValid():
-            t = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-                Usd.TimeCode.Default()).ExtractTranslation()
-            carb.log_warn(f"[T2-DEBUG] {label}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
+    if args.save_scene:
+        LOCALIZATION_SCENE_USD.parent.mkdir(parents=True, exist_ok=True)
+        stage.GetRootLayer().Export(str(LOCALIZATION_SCENE_USD))
+        print(f"\n[Save] scene USD saved: {LOCALIZATION_SCENE_USD}")
 
     drive_articulation = None
     drive_indices = np.array([], dtype=np.int32)
 
     if not args.no_drive:
+        try:
+            drive_articulation = SingleArticulation(
+                prim_path=robot_root,
+                name="rover_m0609_drive_articulation",
+            )
+            drive_articulation.initialize()
+            drive_indices = _find_drive_dof_indices(drive_articulation.dof_names)
+            print("[Drive] articulation root:", robot_root)
+            print(f"[Drive] drive DOF count = {len(drive_indices)}")
+            for idx in drive_indices:
+                print(f"  {idx}: {drive_articulation.dof_names[idx]}")
+        except Exception as exc:
+            carb.log_warn(f"[Drive] articulation drive init failed; USD drive fallback only: {exc}")
+            drive_articulation = None
+            drive_indices = np.array([], dtype=np.int32)
+
+    if not args.no_drive:
         print(f"\n[Drive] rover forward speed = {args.drive_speed}")
         _command_rover_forward(rover_prim, args.drive_speed)
-        drive_articulation = SingleArticulation(
-            prim_path=robot_root,
-            name="rover_m0609_drive_articulation",
-        )
-        drive_articulation.initialize()
-        drive_indices = _find_drive_dof_indices(drive_articulation.dof_names)
-        print("[Drive] articulation root:", robot_root)
-        print("[Drive] DOF names:")
-        for i, name in enumerate(drive_articulation.dof_names):
-            mark = "  <-- drive" if i in set(drive_indices.tolist()) else ""
-            print(f"  {i}: {name}{mark}")
-        print(f"[Drive] drive DOF count = {len(drive_indices)}")
 
     if args.auto_play or not args.no_drive:
         world.play()
         print("\n[Play] auto-play ON")
 
     print("\n=== 씬 준비 완료. 정지하려면 터미널에서 Ctrl+C ===")
-    while simulation_app.is_running():
-        if drive_articulation is not None and len(drive_indices) > 0:
-            joint_velocities = np.zeros(drive_articulation.num_dof)
-            joint_velocities[drive_indices] = args.drive_speed
-            drive_articulation.apply_action(
-                ArticulationAction(joint_velocities=joint_velocities)
-            )
-        world.step(render=True)
-
-    simulation_app.close()
+    try:
+        while simulation_app.is_running():
+            if drive_articulation is not None and len(drive_indices) > 0:
+                joint_velocities = np.zeros(drive_articulation.num_dof)
+                joint_velocities[drive_indices] = args.drive_speed
+                drive_articulation.apply_action(
+                    ArticulationAction(joint_velocities=joint_velocities)
+                )
+            elif not args.no_drive:
+                _command_rover_forward(rover_prim, args.drive_speed, log=False)
+            world.step(render=True)
+    finally:
+        simulation_app.close()
 
 
 if __name__ == "__main__":

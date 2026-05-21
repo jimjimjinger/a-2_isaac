@@ -46,6 +46,35 @@ for ax in (ax_map, ax_fog):
     ax.set_xlabel("X (m)"); ax.set_ylabel("Y (m)")
     ax.grid(True, alpha=0.2)
 
+
+def _is_ctrl_scroll(event):
+    key = event.key
+    if key is None:
+        return False
+    if isinstance(key, str):
+        return "control" in key.lower() or "ctrl" in key.lower()
+    return False
+
+
+def _on_scroll(event):
+    if not _is_ctrl_scroll(event) or event.inaxes is None:
+        return
+    if event.xdata is None or event.ydata is None:
+        return
+
+    ax = event.inaxes
+    scale = 1 / 1.2 if event.button == "up" else 1.2
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    cx, cy = event.xdata, event.ydata
+
+    ax.set_xlim(cx - (cx - x0) * scale, cx + (x1 - cx) * scale)
+    ax.set_ylim(cy - (cy - y0) * scale, cy + (y1 - cy) * scale)
+    fig.canvas.draw_idle()
+
+
+fig.canvas.mpl_connect("scroll_event", _on_scroll)
+
 # 동적 객체들 (재사용)
 fog_img = None
 rover_dot_map, rover_dot_fog = None, None

@@ -2,13 +2,22 @@
 <package format="3">
   <name>isaac_localization</name>
   <version>0.0.1</version>
-  <description>Localization package: TRN (Terrain Relative Navigation) + EKF multi-sensor fusion for GPS-less Mars positioning.</description>
+  <description>GPS-less rover localization with wheel odometry, IMU integration, TRN, and EKF fusion.</description>
   <maintainer email="jimjimjinger@users.noreply.github.com">jimjimjinger</maintainer>
   <license>MIT</license>
+
   <buildtool_depend>ament_python</buildtool_depend>
+
   <exec_depend>geometry_msgs</exec_depend>
-  <exec_depend>isaac_interfaces</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+
+  <exec_depend>python3-matplotlib</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
   <export>
     <build_type>ament_python</build_type>
   </export>
