@@ -1,16 +1,20 @@
-"""vehicle_v3.usd 빌드 — vehicle_v2.usd(asset)에 ROS2 Action Graph 를
-구워넣은(bake) "액션그래프 내장 로버".
+"""vehicle_v3.usd 빌드 — vehicle_v2.usd 의 외형·물리를 flatten 으로 끌어와
+ROS2 Action Graph 를 구워넣은(bake) "액션그래프 내장 자립 로버".
 
 v3 = 고정된 로봇. terrain 에 reference·play 하면 그 자체로 ROS2 인터페이스를
 발행/구독한다 — 런타임 그래프 빌더 코드가 필요 없다. 실물 하드웨어처럼.
 
-구조:  vehicle_v3.usd
-         └ /Root  (reference → ./vehicle_v2.usd, defaultPrim)
-              ├ Vehicle/...     (v2 에서 합성된 외형·물리·센서 prim)
-              └ ActionGraph     (이 스크립트가 굽는 그래프)
-                  · 센서: IMU·joint·카메라 발행
-                  · 주행: /cmd_vel 구독 → ScriptNode Ackermann → 휠 관절 구동
-                  · 팔: /arm/joint_command(JointState) 구독 → m0609 관절 위치 제어
+v3 는 vehicle_v2.usd 를 *reference 하지 않는다* — flatten 으로 외형·물리·관절을
+v3 자체에 inline 한 자립(standalone) 파일이다. v2 는 빌드 입력 소스일 뿐.
+→ v2 수정은 v3 에 자동 전파되지 않음. v2 수정 후 이 스크립트 재실행 = v3 재bake.
+
+구조:  vehicle_v3.usd  (standalone, defaultPrim=/Root)
+         /Root
+           ├ Vehicle/...     (v2 에서 flatten 된 외형·물리·센서 prim)
+           └ ActionGraph     (이 스크립트가 굽는 그래프)
+               · 센서: IMU·joint·카메라 발행
+               · 주행: /cmd_vel 구독 → ScriptNode Ackermann → 휠 관절 구동
+               · 팔: /arm/joint_command(JointState) 구독 → m0609 관절 위치 제어
 
 빌드:  <isaac-python> isaac_sim/scripts/build_vehicle_v3.py
 산출물: isaac_sim/assets/vehicle/vehicle_v3.usd
@@ -30,7 +34,7 @@ app = SimulationApp({"headless": True})
 import omni.usd
 import omni.graph.core as og
 from isaacsim.core.utils.extensions import enable_extension
-from pxr import Sdf, Usd
+from pxr import Gf, Sdf, Usd, UsdGeom
 
 enable_extension("isaacsim.ros2.bridge")
 app.update()
@@ -51,6 +55,10 @@ _D455     = "/Root/Vehicle/onrobot_rg2ft/angle_bracket/realsense_d455/RSD455"
 ROVER_CAM = "/Root/Vehicle/rover/Body/Camera"
 WRIST_RGB = _D455 + "/Camera_OmniVision_OV9782_Color"
 WRIST_DEP = _D455 + "/Camera_Pseudo_Depth"
+
+# Body 카메라 최적 위치 조정 (2026-05-22 사용자 지정): translate x·z.
+# y 는 기존값 유지.
+ROVER_CAM_XZ = (0.3, -0.1)
 
 # 지민(T5) RoverAckermannDrive ScriptNode 의 6륜 Ackermann (vehicle_v2_scene.usd
 # 에서 덤프). /cmd_vel 의 linear/angular → 휠 4개 조향각 + 6개 구동속도.
@@ -175,29 +183,40 @@ def _set_targets(node_path: str, input_name: str, target_path: str) -> None:
     rel.SetTargets([Sdf.Path(target_path)])
 
 
+def _adjust_camera(stage) -> None:
+    """Body 카메라(ROVER_CAM) translate 의 x·z 를 ROVER_CAM_XZ 로 조정.
+
+    y 는 기존값 유지. flatten 전에 author 하면 v3 에 그대로 baked 된다.
+    """
+    cam = stage.GetPrimAtPath(ROVER_CAM)
+    if not cam.IsValid():
+        print(f"[build_v3] ⚠ 카메라 prim 없음 — 위치 조정 스킵: {ROVER_CAM}")
+        return
+    for op in UsdGeom.Xformable(cam).GetOrderedXformOps():
+        if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
+            cur = op.Get()
+            new = type(cur)(ROVER_CAM_XZ[0], cur[1], ROVER_CAM_XZ[1])
+            op.Set(new)
+            print(f"[build_v3] 카메라 translate {tuple(cur)} → {tuple(new)}")
+            return
+    print("[build_v3] ⚠ 카메라 translate op 없음 — 위치 조정 스킵")
+
+
 def main() -> None:
     if not os.path.isfile(V2):
         print(f"[build_v3] ✗ vehicle_v2.usd 없음: {V2}")
         app.close()
         sys.exit(1)
 
-    # ── v3 골격: /Root 가 vehicle_v2.usd 를 상대경로로 reference ──
-    if os.path.exists(V3):
-        os.remove(V3)
-    base = Usd.Stage.CreateNew(V3)
-    root = base.DefinePrim("/Root", "Xform")
-    root.GetReferences().AddReference("./vehicle_v2.usd")
-    base.SetDefaultPrim(root)
-    base.Save()
-    del base
-    print("[build_v3] v3 골격 생성 — /Root → ./vehicle_v2.usd")
-
-    # ── context 로 열어 (v2 합성) 그래프 author ──
+    # ── 새 stage 에 v2 를 reference (빌드 합성용 — 최종엔 flatten 으로 inline) ──
     ctx = omni.usd.get_context()
-    ctx.open_stage(V3)
+    ctx.new_stage()
+    stage = ctx.get_stage()
+    root = stage.DefinePrim("/Root", "Xform")
+    root.GetReferences().AddReference(V2)   # 빌드용 reference (flatten 후 사라짐)
+    stage.SetDefaultPrim(root)
     for _ in range(80):
         app.update()
-    stage = ctx.get_stage()
     if not stage.GetPrimAtPath(IMU).IsValid():
         print(f"[build_v3] ✗ v2 합성 실패 — IMU prim 없음: {IMU}")
         app.close()
@@ -351,8 +370,15 @@ def main() -> None:
     print("[build_v3] Action Graph author 완료 — 센서(IMU·joint·카메라) + "
           "주행(/cmd_vel→Ackermann→휠) + 팔(/arm/joint_command→m0609)")
 
-    stage.GetRootLayer().Save()
-    print(f"[build_v3] ✓ 저장 완료: {V3}")
+    # 카메라 위치 조정
+    _adjust_camera(stage)
+
+    # flatten — v2 reference 를 inline 해 자립(standalone) v3 생성
+    if os.path.exists(V3):
+        os.remove(V3)
+    flat = stage.Flatten(addSourceFileComment=False)
+    flat.Export(V3)
+    print(f"[build_v3] ✓ standalone v3 저장 완료 (flatten): {V3}")
     app.close()
 
 
