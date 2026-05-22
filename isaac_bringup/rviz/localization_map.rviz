@@ -1,0 +1,56 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 160
+      Enabled: true
+      Name: Grid
+      Plane: XY
+      Plane Cell Count: 20
+      Reference Frame: map
+    - Alpha: 0.7
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Obstacle Map
+      Topic:
+        Value: /map
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Minerals
+      Topic:
+        Value: /terrain/mineral_markers
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Basecamp
+      Topic:
+        Value: /terrain/basecamp_marker
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Estimated Rover
+      Topic:
+        Value: /rover/estimated_marker
+  Enabled: true
+  Global Options:
+    Background Color: 24; 24; 24
+    Fixed Frame: map
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Distance: 55
+      Name: Top Down
+      Target Frame: map
+Window Geometry:
+  Height: 900
+  Width: 1400
