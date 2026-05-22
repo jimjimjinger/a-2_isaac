@@ -130,6 +130,12 @@ def main() -> None:
     rover.spawn(initial_position=spawn_xyz)
     for _ in range(10):
         simulation_app.update()
+    # 로버 카메라 뷰포트 — GUI 모드에서만 (headless 면 viewport 무의미).
+    # run_coverage_test.py 와 동일하게 reset 전에 부착한다.
+    if not _args.headless:
+        rover.attach_camera()
+        for _ in range(5):
+            simulation_app.update()
     my_world.reset()
     rover.initialize()
 

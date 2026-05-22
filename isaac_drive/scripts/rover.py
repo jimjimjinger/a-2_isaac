@@ -23,13 +23,21 @@ from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.types import ArticulationAction
 
 
-# 로버 USD = isaac_sim 패키지 공유 자산. repo 루트 기준 상대경로로 해석
-# (rover.py = a2_isaac/isaac_drive/scripts/rover.py → parents[2] = a2_isaac).
+# 차량 USD = 통합 로버 v2 (v1 + 후방·하단 밸러스트). 팀 통일 모델.
+# repo 루트 기준 상대경로 (parents[2] = a2_isaac).
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 ROVER_USD_PATH = str(
-    _REPO_ROOT / "isaac_sim" / "assets" / "rover" / "Mars_Rover.usd"
+    _REPO_ROOT / "isaac_sim" / "assets" / "vehicle" / "vehicle_v2.usd"
 )
+# vehicle_v1.usd 내부 (defaultPrim=/Root): 단일 articulation(DOF 27).
+#   · /World/Rover            — reference 앵커 (spawn translate 대상)
+#   · .../m0609/base_link     — articulation root (get_world_pose 가 주는 pose)
+#   · .../rover/Body          — 주행 섀시 링크
+# 주행 모드 드라이브 게인(휠 속도제어·스티어 위치제어·로커 passive)은
+# vehicle_v1.usd 에 nominal default 로 박혀 있다 — 런타임 패치 불필요.
 ROVER_PRIM_PATH = "/World/Rover"
+ARTIC_PRIM_PATH = ROVER_PRIM_PATH + "/Vehicle/m0609/base_link"
+ROVER_BODY_PATH = ROVER_PRIM_PATH + "/Vehicle/rover/Body"
 
 # Ackermann 파라미터 (RLRoverLab aau_rover_simple)
 WHEELBASE_LENGTH      = 0.849
@@ -121,6 +129,7 @@ class RoverController:
         self._drive_indices = None
         self._steer_indices = None
         self._num_dof = 0
+        self._body_off = (0.0, 0.0)   # articulation root → 섀시 강체 오프셋
         self._camera_path = None
         self._camera_vp = None
         self._camera_rp = None
@@ -150,14 +159,15 @@ class RoverController:
         translate_op.Set(Gf.Vec3d(*initial_position))
         print(f"[rover] spawn at {tuple(initial_position)}")
 
-        self._robot = SingleArticulation(prim_path=ROVER_PRIM_PATH, name="rover")
+        self._robot = SingleArticulation(prim_path=ARTIC_PRIM_PATH, name="rover")
         return self._robot
 
     def attach_camera(self, translation=(0.3, 0.0, 0.3),
                       rpy_deg=(90.0, 0.0, -90.0),
                       resolution=(640, 480)):
         stage = omni.usd.get_context().get_stage()
-        self._camera_path = f"{ROVER_PRIM_PATH}/Body/Camera"
+        # vehicle_v1 의 Body 에는 이미 온보드 카메라가 있어 이름을 구분한다.
+        self._camera_path = f"{ROVER_BODY_PATH}/OverviewCamera"
         omni.kit.commands.execute("CreatePrim",
                                   prim_path=self._camera_path,
                                   prim_type="Camera")
@@ -200,7 +210,38 @@ class RoverController:
         self._drive_indices = np.array([drive_map[w] for w in DRIVE_WHEEL_ORDER])
         self._steer_indices = np.array([steer_map[w] for w in STEER_WHEEL_ORDER])
         self._num_dof = self._robot.num_dof
+        self._measure_body_offset()
         print(f"[rover] 초기화 완료. DOF={self._num_dof}")
+
+    def _measure_body_offset(self):
+        """articulation root(m0609/base_link) → 섀시(Body) 강체 오프셋 측정.
+
+        get_world_pose() 는 articulation root 인 m0609/base_link pose 를
+        준다. coverage 는 로버 섀시(Body) pose 가 필요하므로 둘의 고정
+        오프셋을 USD 정적 변환에서 한 번 재 로버 로컬프레임 (ox, oy) 으로
+        저장한다 — mount 가 FixedJoint 라 오프셋 불변. yaw 는 동일하므로
+        보정 불필요, XY 만 ~0.17m 차이.
+        """
+        stage = omni.usd.get_context().get_stage()
+        root = stage.GetPrimAtPath(ARTIC_PRIM_PATH)
+        body = stage.GetPrimAtPath(ROVER_BODY_PATH)
+        if not root.IsValid() or not body.IsValid():
+            self._body_off = (0.0, 0.0)
+            print("[rover] ⚠ Body 오프셋 측정 실패 — articulation root pose 그대로 사용")
+            return
+        cache = UsdGeom.XformCache()
+        rm = cache.GetLocalToWorldTransform(root)
+        rt = rm.ExtractTranslation()
+        bt = cache.GetLocalToWorldTransform(body).ExtractTranslation()
+        q = rm.ExtractRotationQuat()
+        iq = q.GetImaginary()
+        yaw = _quat_wxyz_to_yaw((q.GetReal(), iq[0], iq[1], iq[2]))
+        dxw, dyw = rt[0] - bt[0], rt[1] - bt[1]            # world 프레임 오프셋
+        ox = float(np.cos(yaw) * dxw + np.sin(yaw) * dyw)  # 로버 로컬프레임으로
+        oy = float(-np.sin(yaw) * dxw + np.cos(yaw) * dyw)
+        self._body_off = (ox, oy)
+        print(f"[rover] Body 오프셋 측정: 로컬 ({ox:+.3f},{oy:+.3f})m "
+              f"— get_pose_2d 가 섀시 기준으로 보정")
 
     def drive(self, lin_vel, ang_vel):
         steer_angs, wheel_vels = _ackermann(lin_vel, ang_vel)
@@ -213,9 +254,18 @@ class RoverController:
         )
 
     def get_pose_2d(self):
-        """(cx, cy, yaw) 반환. World frame."""
+        """로버 섀시(Body)의 (cx, cy, yaw) 반환. World frame.
+
+        get_world_pose() 는 articulation root(m0609/base_link) pose 라
+        섀시 중심과 ~0.17m 어긋난다. _measure_body_offset 가 잰 강체
+        오프셋을 yaw 로 회전해 빼서 섀시 pose 로 보정한다.
+        """
         pos, ori = self._robot.get_world_pose()
-        return float(pos[0]), float(pos[1]), _quat_wxyz_to_yaw(ori)
+        yaw = _quat_wxyz_to_yaw(ori)
+        ox, oy = self._body_off
+        cx = float(pos[0]) - (np.cos(yaw) * ox - np.sin(yaw) * oy)
+        cy = float(pos[1]) - (np.sin(yaw) * ox + np.cos(yaw) * oy)
+        return cx, cy, yaw
 
     @property
     def camera_path(self):

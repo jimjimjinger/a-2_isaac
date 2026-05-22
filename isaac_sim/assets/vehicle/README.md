@@ -17,8 +17,9 @@
 ## 설계 원칙
 
 1. **단일 범용 Vehicle USD** — 주행 / manipulation / localization 어디서나 베이스로 로드
-2. **모드 의존 설정은 USD 에 박지 않음** — 휠 freeze 등은 런타임 모드 레이어
-3. **정적·모드무관 자산은 USD 에 굳힘** — 매 실행 조립 제거
+2. **USD 는 nominal default(주행 가능 상태)를 담는다** — 그냥 로드하면 주행 가능.
+   모드 레이어는 그로부터의 *편차*만 런타임 적용 (예: manipulation 의 휠 freeze)
+3. **정적·default 자산은 USD 에 굳힘** — 매 실행 조립 제거
 
 ## vehicle_v1.usd 구성
 
@@ -28,9 +29,10 @@
 - gripper drive 게인, finger 물리 마찰
 - 외형 dark 색칠 (`T2DarkBody` — T2 원본에 이미 적용됨)
 - **후방 바스켓 (visual-only)** ← v1 에서 추가
+- **rover 주행 모드 드라이브 게인** (휠 속도제어·스티어 위치제어·로커 passive) ← v1 에서 보정
 
 **런타임 (USD 밖, 모드 레이어가 담당):**
-- 휠 freeze, RoverAnchor FixedJoint — manipulation 모드 전용
+- 휠 freeze + RoverAnchor FixedJoint — manipulation 모드 레이어가 주행 default 에서 편차로 적용 (로버 고정)
 - 제어 로직 (coverage 주행 / IK pick&place), 센서 발행, ROS2 그래프
 - terrain collision·rock 제거 — 환경(world) 처리
 
@@ -45,7 +47,7 @@
 - [ ] `vehicle_v1.usd` 시각 검증 — Isaac Sim 에서 열어 바스켓 위치·외형 확인
 - [ ] D455 wrist 카메라 추가 (v1.1) — Nucleus 자산을 `isaac_sim/assets/d455/` 로 로컬화 후
 - [ ] 경로 하드코딩 정리 (`/home/rokey/...` → repo 상대경로)
-- [ ] 런타임 모드 레이어 — 주행 / manipulation 제어 모듈
+- [ ] 런타임 모드 레이어 — manipulation freeze/anchor (주행은 USD default 로 해결)
 
 ## 빌드
 

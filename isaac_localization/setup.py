@@ -22,6 +22,8 @@ setup(
     entry_points={
         "console_scripts": [
             "localization_node = isaac_localization.localization_node:main",
+            "joint_state_splitter_node = "
+            "isaac_localization.sensors.joint_state_splitter:main",
         ],
     },
 )
