@@ -95,10 +95,11 @@ class CoverageNode(Node):
         self.declare_parameter("max_lin", 3.0)
         self.declare_parameter("max_ang", 1.5)
         self.declare_parameter("sector_done_ratio", 0.95)
-        self.declare_parameter("enable_minimap", True)
+        self.declare_parameter("start_clear_radius_m", 4.0)
+        self.declare_parameter("enable_minimap", False)
         self.declare_parameter("viewer_write_every", 3)
         self.declare_parameter("enable_minimap_topics", True)
-        self.declare_parameter("minimap_publish_every", 10)
+        self.declare_parameter("minimap_publish_every", 5)
         self.declare_parameter("minimap_frame_id", "map")
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
@@ -132,6 +133,8 @@ class CoverageNode(Node):
         self.mission = Mission(
             self.fog, ogrid, planner, navigator, self.pose,
             sector_done_ratio=float(self.get_parameter("sector_done_ratio").value),
+            start_clear_radius_m=float(
+                self.get_parameter("start_clear_radius_m").value),
         )
 
         # ── I5 입력: pose 구독 ──

@@ -6,20 +6,57 @@ Visualization Manager:
   Displays:
     - Alpha: 1
       Class: rviz_default_plugins/Grid
-      Color: 160; 160; 160
+      Color: 95; 95; 95
       Enabled: true
-      Name: Grid
+      Name: Ground Grid
       Plane: XY
-      Plane Cell Count: 20
+      Plane Cell Count: 50
       Reference Frame: map
-    - Alpha: 0.7
+    - Alpha: 0.85
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: true
+      Enabled: true
+      Name: Terrain Height
+      Topic:
+        Value: /terrain/height_map
+    - Alpha: 0.58
       Class: rviz_default_plugins/Map
       Color Scheme: map
       Draw Behind: false
       Enabled: true
-      Name: Obstacle Map
+      Name: Obstacles
       Topic:
         Value: /map
+    - Alpha: 0.28
+      Class: rviz_default_plugins/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Safety Margin
+      Topic:
+        Value: /terrain/safety_map
+    - Alpha: 0.45
+      Class: rviz_default_plugins/Map
+      Color Scheme: map
+      Draw Behind: false
+      Enabled: true
+      Name: Coverage Fog
+      Topic:
+        Value: /mission/minimap
+    - Class: rviz_default_plugins/Path
+      Color: 0; 210; 255
+      Enabled: true
+      Line Style: Lines
+      Line Width: 0.14
+      Name: Mission Path
+      Topic:
+        Value: /mission/path
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Mission Markers
+      Topic:
+        Value: /mission/markers
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Minerals
@@ -37,7 +74,7 @@ Visualization Manager:
         Value: /rover/estimated_marker
   Enabled: true
   Global Options:
-    Background Color: 24; 24; 24
+    Background Color: 18; 18; 18
     Fixed Frame: map
     Frame Rate: 30
   Name: root
@@ -52,5 +89,5 @@ Visualization Manager:
       Name: Top Down
       Target Frame: map
 Window Geometry:
-  Height: 900
-  Width: 1400
+  Height: 960
+  Width: 1500

@@ -29,6 +29,8 @@ class TerrainMapPublisher(Node):
         self.declare_parameter("terrain_id", "terrain_00001")
         self.declare_parameter("terrain_root", "")
         self.declare_parameter("map_topic", "/map")
+        self.declare_parameter("height_map_topic", "/terrain/height_map")
+        self.declare_parameter("safety_map_topic", "/terrain/safety_map")
         self.declare_parameter("mineral_markers_topic", "/terrain/mineral_markers")
         self.declare_parameter("basecamp_marker_topic", "/terrain/basecamp_marker")
         self.declare_parameter("estimated_odom_topic", "/rover/estimated_odom")
@@ -36,10 +38,15 @@ class TerrainMapPublisher(Node):
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("marker_publish_hz", 2.0)
         self.declare_parameter("rover_marker_scale", 0.7)
+        self.declare_parameter("safety_radius_m", 0.7)
+        self.declare_parameter("trail_max_points", 1200)
+        self.declare_parameter("trail_min_distance_m", 0.08)
 
         self.terrain_id = str(self.get_parameter("terrain_id").value)
         self.terrain_root = str(self.get_parameter("terrain_root").value)
         self.map_topic = str(self.get_parameter("map_topic").value)
+        self.height_map_topic = str(self.get_parameter("height_map_topic").value)
+        self.safety_map_topic = str(self.get_parameter("safety_map_topic").value)
         self.mineral_markers_topic = str(
             self.get_parameter("mineral_markers_topic").value
         )
@@ -55,10 +62,16 @@ class TerrainMapPublisher(Node):
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.marker_publish_hz = float(self.get_parameter("marker_publish_hz").value)
         self.rover_marker_scale = float(self.get_parameter("rover_marker_scale").value)
+        self.safety_radius_m = float(self.get_parameter("safety_radius_m").value)
+        self.trail_max_points = int(self.get_parameter("trail_max_points").value)
+        self.trail_min_distance_m = float(
+            self.get_parameter("trail_min_distance_m").value
+        )
 
         self.terrain_dir = self.resolve_terrain_dir()
         self.meta = self.load_meta(self.terrain_dir / "meta.json")
         self.obstacle_grid = np.load(self.terrain_dir / "obstacle_grid.npy")
+        self.heightmap = self.load_heightmap(self.terrain_dir / "heightmap.npy")
 
         self.resolution = float(self.meta.get("resolution_m", 0.05))
         origin = self.meta.get("origin", {})
@@ -74,6 +87,16 @@ class TerrainMapPublisher(Node):
         live_qos = QoSProfile(depth=10)
 
         self.map_pub = self.create_publisher(OccupancyGrid, self.map_topic, latched_qos)
+        self.height_map_pub = self.create_publisher(
+            OccupancyGrid,
+            self.height_map_topic,
+            latched_qos,
+        )
+        self.safety_map_pub = self.create_publisher(
+            OccupancyGrid,
+            self.safety_map_topic,
+            latched_qos,
+        )
         self.mineral_pub = self.create_publisher(
             MarkerArray,
             self.mineral_markers_topic,
@@ -91,6 +114,7 @@ class TerrainMapPublisher(Node):
         )
 
         self.latest_odom: Optional[Odometry] = None
+        self.trail_points: List[Point] = []
         self.create_subscription(
             Odometry,
             self.estimated_odom_topic,
@@ -102,6 +126,8 @@ class TerrainMapPublisher(Node):
         self.create_timer(period, self._publish_live_markers)
 
         self.map_msg = self.build_occupancy_grid()
+        self.height_map_msg = self.build_height_map()
+        self.safety_map_msg = self.build_safety_map()
         self.mineral_markers = self.build_mineral_markers()
         self.basecamp_markers = self.build_basecamp_markers()
 
@@ -110,6 +136,8 @@ class TerrainMapPublisher(Node):
         self.get_logger().info("Terrain Map Publisher initialized.")
         self.get_logger().info(f"Terrain dir      : {self.terrain_dir}")
         self.get_logger().info(f"Map topic        : {self.map_topic}")
+        self.get_logger().info(f"Height map       : {self.height_map_topic}")
+        self.get_logger().info(f"Safety map       : {self.safety_map_topic}")
         self.get_logger().info(f"Mineral markers  : {self.mineral_markers_topic}")
         self.get_logger().info(f"Basecamp marker  : {self.basecamp_marker_topic}")
         self.get_logger().info(f"Estimated odom   : {self.estimated_odom_topic}")
@@ -158,6 +186,12 @@ class TerrainMapPublisher(Node):
             raise FileNotFoundError(f"Terrain meta.json not found: {path}")
         return json.loads(path.read_text(encoding="utf-8"))
 
+    @staticmethod
+    def load_heightmap(path: Path) -> Optional[np.ndarray]:
+        if not path.exists():
+            return None
+        return np.load(path).astype(np.float32)
+
     def build_occupancy_grid(self) -> OccupancyGrid:
         grid = np.asarray(self.obstacle_grid)
         if grid.ndim != 2:
@@ -176,6 +210,70 @@ class TerrainMapPublisher(Node):
         occupancy = np.where(grid > 0, 100, 0).astype(np.int8)
         msg.data = occupancy.reshape(-1).astype(int).tolist()
         return msg
+
+    def build_height_map(self) -> OccupancyGrid:
+        if self.heightmap is None:
+            grid = np.zeros_like(np.asarray(self.obstacle_grid), dtype=np.int8)
+        else:
+            hm = np.asarray(self.heightmap, dtype=np.float32)
+            finite = np.isfinite(hm)
+            if not finite.any():
+                grid = np.zeros_like(hm, dtype=np.int8)
+            else:
+                lo, hi = np.percentile(hm[finite], [2.0, 98.0])
+                span = max(float(hi - lo), 1e-6)
+                grid = np.clip((hm - lo) / span * 100.0, 0.0, 100.0).astype(np.int8)
+
+        msg = self.grid_message_from_array(grid)
+        return msg
+
+    def build_safety_map(self) -> OccupancyGrid:
+        grid = np.asarray(self.obstacle_grid) > 0
+        radius_cells = self.safety_radius_m / max(self.resolution, 1e-6)
+        inflated = self.dilate_mask(grid, radius_cells)
+        safety_only = inflated & ~grid
+        values = np.full(grid.shape, -1, dtype=np.int8)
+        values[safety_only] = 70
+        msg = self.grid_message_from_array(values)
+        return msg
+
+    def grid_message_from_array(self, values: np.ndarray) -> OccupancyGrid:
+        grid = np.asarray(values)
+        if grid.ndim != 2:
+            raise ValueError(f"grid must be 2D, got {grid.shape}")
+
+        msg = OccupancyGrid()
+        msg.header.frame_id = self.frame_id
+        msg.info.resolution = self.resolution
+        msg.info.width = int(grid.shape[1])
+        msg.info.height = int(grid.shape[0])
+        msg.info.origin.position.x = self.origin_x
+        msg.info.origin.position.y = self.origin_y
+        msg.info.origin.position.z = 0.0
+        msg.info.origin.orientation.w = 1.0
+        msg.data = grid.reshape(-1).astype(int).tolist()
+        return msg
+
+    @staticmethod
+    def dilate_mask(mask: np.ndarray, radius_cells: float) -> np.ndarray:
+        src = np.asarray(mask, dtype=bool)
+        if radius_cells < 1.0:
+            return src.copy()
+
+        out = src.copy()
+        height, width = src.shape
+        r = int(math.ceil(radius_cells))
+        r2 = radius_cells * radius_cells
+        for dy in range(-r, r + 1):
+            for dx in range(-r, r + 1):
+                if dx * dx + dy * dy > r2 or (dx == 0 and dy == 0):
+                    continue
+                sy_src = slice(max(0, -dy), height - max(0, dy))
+                sy_dst = slice(max(0, dy), height - max(0, -dy))
+                sx_src = slice(max(0, -dx), width - max(0, dx))
+                sx_dst = slice(max(0, dx), width - max(0, -dx))
+                out[sy_dst, sx_dst] |= src[sy_src, sx_src]
+        return out
 
     def build_mineral_markers(self) -> MarkerArray:
         markers: List[Marker] = []
@@ -263,18 +361,34 @@ class TerrainMapPublisher(Node):
 
     def _on_estimated_odom(self, msg: Odometry) -> None:
         self.latest_odom = msg
+        self.update_trail(msg)
+
+    def update_trail(self, odom: Odometry) -> None:
+        p = odom.pose.pose.position
+        point = Point(x=float(p.x), y=float(p.y), z=0.12)
+        if self.trail_points:
+            last = self.trail_points[-1]
+            distance = math.hypot(point.x - last.x, point.y - last.y)
+            if distance < self.trail_min_distance_m:
+                return
+        self.trail_points.append(point)
+        if len(self.trail_points) > self.trail_max_points:
+            self.trail_points = self.trail_points[-self.trail_max_points :]
 
     def publish_static(self) -> None:
         stamp = self.get_clock().now().to_msg()
         self.map_msg.header.stamp = stamp
+        self.height_map_msg.header.stamp = stamp
+        self.safety_map_msg.header.stamp = stamp
+        self.height_map_pub.publish(self.height_map_msg)
         self.map_pub.publish(self.map_msg)
+        self.safety_map_pub.publish(self.safety_map_msg)
         self.stamp_markers(self.mineral_markers, stamp)
         self.stamp_markers(self.basecamp_markers, stamp)
         self.mineral_pub.publish(self.mineral_markers)
         self.basecamp_pub.publish(self.basecamp_markers)
 
     def _publish_live_markers(self) -> None:
-        self.publish_static()
         if self.latest_odom is None:
             return
         self.rover_marker_pub.publish(self.build_rover_marker(self.latest_odom))
@@ -315,7 +429,18 @@ class TerrainMapPublisher(Node):
             f"y={pose.position.y:.2f}, yaw={yaw:.2f}"
         )
 
-        return MarkerArray(markers=[body, text])
+        trail = Marker()
+        trail.header = body.header
+        trail.ns = "estimated_rover_trail"
+        trail.id = 3
+        trail.type = Marker.LINE_STRIP
+        trail.action = Marker.ADD
+        trail.pose.orientation.w = 1.0
+        trail.scale.x = 0.08
+        trail.color = ColorRGBA(r=0.05, g=1.0, b=0.55, a=0.85)
+        trail.points = list(self.trail_points)
+
+        return MarkerArray(markers=[trail, body, text])
 
     @staticmethod
     def stamp_markers(markers: MarkerArray, stamp) -> None:

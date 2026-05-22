@@ -62,6 +62,16 @@ ARTIC = "/World/Vehicle/rover/Vehicle/m0609/base_link"   # articulation root
 BODY  = "/World/Vehicle/rover/Vehicle/rover/Body"        # 주행 섀시
 ODOM_GRAPH = "/GroundTruthOdom"
 GT_ODOM_TOPIC = "ground_truth/odom"                      # → /ground_truth/odom
+CAMERA_GRAPH = "/ActionGraph/LocalizationSensors"
+ROVER_CAMERA = "/World/Vehicle/rover/Vehicle/rover/Body/Camera"
+WRIST_RGB_CAMERA = (
+    "/World/Vehicle/rover/Vehicle/onrobot_rg2ft/angle_bracket/"
+    "realsense_d455/RSD455/Camera_OmniVision_OV9782_Color"
+)
+WRIST_DEPTH_CAMERA = (
+    "/World/Vehicle/rover/Vehicle/onrobot_rg2ft/angle_bracket/"
+    "realsense_d455/RSD455/Camera_Pseudo_Depth"
+)
 
 
 def _yaw_from_quat(q):
@@ -97,6 +107,63 @@ def _build_odom_graph():
             ],
         },
     )
+
+
+def _repair_camera_render_products(stage):
+    """Create live render products and reconnect saved camera ROS helpers."""
+    graph = stage.GetPrimAtPath(CAMERA_GRAPH)
+    if not graph.IsValid():
+        print(f"[run_v2_scene] ⚠ 카메라 Action Graph 없음: {CAMERA_GRAPH}")
+        return
+
+    camera_targets = [ROVER_CAMERA, WRIST_RGB_CAMERA, WRIST_DEPTH_CAMERA]
+    missing = [
+        camera_path
+        for camera_path in camera_targets
+        if not stage.GetPrimAtPath(camera_path).IsValid()
+    ]
+    if missing:
+        print("[run_v2_scene] ⚠ 카메라 prim 없음:")
+        for camera_path in missing:
+            print(f"  - {camera_path}")
+        return
+
+    import omni.replicator.core as rep
+
+    rover_rp = rep.create.render_product(
+        ROVER_CAMERA, (640, 480), name="rover_camera_runtime", force_new=True
+    )
+    wrist_rgb_rp = rep.create.render_product(
+        WRIST_RGB_CAMERA, (640, 480), name="wrist_rgb_runtime", force_new=True
+    )
+    wrist_depth_rp = rep.create.render_product(
+        WRIST_DEPTH_CAMERA, (640, 480), name="wrist_depth_runtime", force_new=True
+    )
+
+    helper_settings = {
+        "CameraRgb": rover_rp.path,
+        "CameraDepth": rover_rp.path,
+        "CameraInfo": rover_rp.path,
+        "WristCameraRgb": wrist_rgb_rp.path,
+        "WristCameraDepth": wrist_depth_rp.path,
+        "WristCameraInfo": wrist_depth_rp.path,
+    }
+    for helper_name, render_product_path in helper_settings.items():
+        node_path = f"{CAMERA_GRAPH}/{helper_name}"
+        if not stage.GetPrimAtPath(node_path).IsValid():
+            print(f"[run_v2_scene] ⚠ 카메라 helper 없음: {node_path}")
+            continue
+        og.Controller.set(
+            og.Controller.attribute(f"{node_path}.inputs:renderProductPath"),
+            render_product_path,
+        )
+        og.Controller.set(og.Controller.attribute(f"{node_path}.inputs:enabled"), True)
+        og.Controller.set(og.Controller.attribute(f"{node_path}.inputs:queueSize"), 10)
+
+    print("[run_v2_scene] 카메라 render product 런타임 재연결 완료")
+    print(f"  - rover: {rover_rp.path}")
+    print(f"  - wrist rgb: {wrist_rgb_rp.path}")
+    print(f"  - wrist depth: {wrist_depth_rp.path}")
 
 
 def _measure_body_offset(stage):
@@ -146,6 +213,10 @@ def main() -> None:
     print(f"[run_v2_scene] 씬 로드: {SCENE}")
     # 씬이 terrain·차량·D455 텍스처를 참조 — 로드 완료까지 충분히 update.
     for _ in range(200):
+        simulation_app.update()
+
+    _repair_camera_render_products(omni.usd.get_context().get_stage())
+    for _ in range(10):
         simulation_app.update()
 
     world = World()

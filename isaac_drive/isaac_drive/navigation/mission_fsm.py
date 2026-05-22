@@ -21,13 +21,14 @@ class Mission:
     MIN_NEW_REVEAL_CELLS = 100
 
     def __init__(self, fog_map, obstacle_grid, planner, navigator, rover,
-                 sector_done_ratio=0.95):
+                 sector_done_ratio=0.95, start_clear_radius_m=4.0):
         self.fog = fog_map
         self.ogrid = obstacle_grid
         self.planner = planner
         self.nav = navigator
         self.rover = rover
         self.sector_done_ratio = float(sector_done_ratio)
+        self.start_clear_radius_m = float(start_clear_radius_m)
 
         # 방문 순서는 spawn 위치 기준 NN 으로 정한다(sector_visit_order).
         # __init__ 시점엔 아직 pose 가 안 들어왔으므로, 첫 update() 에서
@@ -174,11 +175,20 @@ class Mission:
         self.state = "PLAN_SECTOR"
 
     def _free_start_grid(self, start_ij):
-        """시작 셀이 inflate 막힘 영역일 때 임시로 그 주변 풀어주기."""
+        """시작 셀이 막힘 영역일 때 시작 구역만 임시로 풀어주기.
+
+        Generated maps mark the basecamp footprint as an obstacle. The rover
+        can spawn inside that footprint, so A* needs a small local opening to
+        plan out of the start area without deleting the rest of the map.
+        """
         g = self.ogrid.grid.copy()
         i, j = start_ij
-        for di in range(-2, 3):
-            for dj in range(-2, 3):
+        r = max(2, int(round(self.start_clear_radius_m / self.ogrid.cell_size)))
+        r2 = r * r
+        for di in range(-r, r + 1):
+            for dj in range(-r, r + 1):
+                if di * di + dj * dj > r2:
+                    continue
                 ii, jj = i + di, j + dj
                 if self.ogrid.in_bounds(ii, jj):
                     g[ii, jj] = 0

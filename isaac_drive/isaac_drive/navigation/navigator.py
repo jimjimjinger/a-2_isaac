@@ -64,7 +64,9 @@ class Navigator:
 
         ang_vel = float(np.clip(self.kp_ang * err, -self.max_ang, self.max_ang))
         if abs(err) > self.point_turn_th:
-            lin_vel = 0.0
+            # Ackermann vehicles cannot rotate in place; keep creeping forward
+            # while steering hard so /cmd_vel actually produces motion.
+            lin_vel = self.max_lin * 0.25
         else:
-            lin_vel = self.max_lin * np.cos(err)
+            lin_vel = self.max_lin * max(0.25, np.cos(err))
         return lin_vel, ang_vel, False
