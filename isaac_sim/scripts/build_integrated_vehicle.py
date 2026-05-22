@@ -1,22 +1,22 @@
-"""통합 로버 차량 v1 빌드 — vehicle_origin_T2.usd 베이스 보정·바스켓 추가.
+"""통합 로버 차량 v1 빌드 — vehicle_origin_T2.usd 베이스 보정·확장.
 
 vehicle_origin_T2.usd (rover + M0609 + RG2-FT 결합본, T2 제작) 를 베이스로:
   · 후방 바스켓 (visual-only, T5 build_rover_m0609_scene.py 에서 이식)
   · Vehicle 원점 재정렬 — T2 원본은 차량이 spawn 좌표(5,0,0.5)에 박혀 있어
     Vehicle 원점이 차량에서 ~5m 떨어짐. 차량을 원점으로 가져온다.
-  · MDL 머티리얼 경로 교정 — T2 원본은 rover MDL 을 /home/rokey/... 절대경로로
-    참조해 타 환경에서 외형이 깨진다(머티리얼 미로드 → fallback). repo 상대
-    경로로 재작성한다.
-  · m0609 HOME 자세 — T2 원본은 6축이 전부 0도라 로봇팔이 +Z 로 곧게
-    펴진다. HOME pose(0,0,90,0,90,0)로 설정해 팔을 차량 위에 접는다.
+  · MDL 머티리얼 경로 교정 — /home/rokey/... 절대경로 → repo 상대경로.
+  · m0609 HOME 자세 — joint drive/state 를 HOME(0,0,90,0,90,0)으로.
+  · D455 wrist 카메라 — angle_bracket 에 rsd455.usd 부착.
 을 적용해 vehicle_v1.usd 를 만든다.
 
 순수 pxr(USD) 로만 동작 — Isaac Sim/SimulationApp 불필요.
 
     python3 isaac_sim/scripts/build_integrated_vehicle.py
 
-⚠️ D455 wrist 카메라는 미포함 — 자산(Nucleus) 확보 후 v1.1 에서 추가.
-   휠 freeze·RoverAnchor 등 모드 의존 설정도 미포함(런타임 모드 레이어 담당).
+이후 m0609 HOME 자세를 정지 USD 에서도 보이게 link xform 에 굳히려면
+bake_m0609_home.py (Isaac Sim) 를 이어서 실행한다.
+
+⚠️ 휠 freeze·RoverAnchor 등 모드 의존 설정은 미포함(런타임 모드 레이어 담당).
 """
 from pathlib import Path
 import shutil
@@ -31,11 +31,12 @@ ORIGIN_USD = _VEHICLE_DIR / "vehicle_origin_T2.usd"
 OUTPUT_USD = _VEHICLE_DIR / "vehicle_v1.usd"
 
 # ── vehicle_origin_T2.usd 내부 prim 경로 ──
-VEHICLE_ROOT = "/Root/Vehicle"
-ROVER_ROOT   = "/Root/Vehicle/rover"
-M0609_ROOT   = "/Root/Vehicle/m0609"
-GRIPPER_ROOT = "/Root/Vehicle/onrobot_rg2ft"
-ROVER_BODY   = "/Root/Vehicle/rover/Body"
+VEHICLE_ROOT  = "/Root/Vehicle"
+ROVER_ROOT    = "/Root/Vehicle/rover"
+M0609_ROOT    = "/Root/Vehicle/m0609"
+GRIPPER_ROOT  = "/Root/Vehicle/onrobot_rg2ft"
+ROVER_BODY    = "/Root/Vehicle/rover/Body"
+ANGLE_BRACKET = "/Root/Vehicle/onrobot_rg2ft/angle_bracket"
 
 # ── 후방 바스켓 부착 대상 + 치수 (T5 build_rover_m0609_scene.py 에서 이식) ──
 # rover Body 기준 로컬 좌표. -X = 로봇팔 반대편 = 후방.
@@ -46,13 +47,18 @@ BASKET_HEIGHT = 0.18
 BASKET_WALL   = 0.035
 BASKET_BOTTOM = 0.035
 
-# ── m0609 HOME 자세 (T2 pickplace_visual_rover.py 의 HOME_JOINT_POSITIONS_DEG) ──
-# joint_3=90·joint_5=90 → 손목이 아래를 보는 '카메라 down' 자세.
-# UsdPhysics angular drive/state 단위는 degree.
+# ── m0609 HOME 자세 (T2 pickplace_visual_rover.py HOME_JOINT_POSITIONS_DEG) ──
+# joint_3=90·joint_5=90 → 손목이 아래를 보는 '카메라 down' 자세. 단위 degree.
 M0609_HOME_DEG = {
     "joint_1": 0.0, "joint_2": 0.0, "joint_3": 90.0,
     "joint_4": 0.0, "joint_5": 90.0, "joint_6": 0.0,
 }
+
+# ── D455 wrist 카메라 (T2 realsense_mount.py / README 2.1) ──
+# rsd455.usd 는 isaac_sim/assets/d455/ 에 로컬화돼 있음. vehicle_v1.usd 기준 상대경로.
+D455_USD_REL    = "../d455/rsd455.usd"
+D455_OFFSET_T   = (0.0, 0.045, 0.05)
+D455_OFFSET_RPY = (0.0, -90.0, 90.0)
 
 
 # ── USD 헬퍼 ────────────────────────────────────────────────────────
@@ -147,8 +153,6 @@ def recenter_vehicle(stage):
     (5,0,0.5))에 둔 상태로 저장돼 Vehicle 원점이 차량에서 ~5m 떨어져 있다.
     rover·m0609·onrobot_rg2ft 세 컴포넌트를 rover translate 만큼 동일 시프트
     하면 상대 관계는 그대로 유지되면서 rover 원점이 곧 Vehicle 원점이 된다.
-    (세 컴포넌트는 FixedJoint 로 묶여 있는데, 동일 시프트는 body 간 상대
-     pose 를 바꾸지 않으므로 joint 가 깨지지 않는다.)
     """
     rover = stage.GetPrimAtPath(ROVER_ROOT)
     if not rover.IsValid():
@@ -176,10 +180,8 @@ def recenter_vehicle(stage):
 def fix_mdl_paths(stage):
     """MDL sourceAsset 의 /home/rokey/... 절대경로를 repo 상대경로로 교정.
 
-    vehicle_origin_T2.usd 는 rover MDL 머티리얼을 T2 환경(/home/rokey/...)
-    절대경로로 참조해 타 환경에서 외형이 깨진다(머티리얼 미로드 → fallback).
     .mdl 파일명만 살려 repo 내 실제 위치로 상대경로(../rover/SubUSDs/
-    materials/) 재작성한다. OmniPBR.mdl 등 Omniverse 기본 MDL 은 그대로 둔다.
+    materials/) 재작성. OmniPBR.mdl 등 Omniverse 기본 MDL 은 그대로 둔다.
     """
     fixed = 0
     for prim in stage.Traverse():
@@ -200,11 +202,10 @@ def fix_mdl_paths(stage):
 
 
 def set_m0609_home(stage):
-    """m0609 6축 조인트를 HOME 자세로 설정 — drive target + 초기 state 둘 다.
+    """m0609 6축 조인트의 angular drive target + 초기 state 를 HOME 으로.
 
-    vehicle_origin_T2.usd 는 6축이 전부 0도라 로봇팔이 +Z 로 곧게 펴진
-    상태. T2 가 정한 HOME pose(joint_3=90·joint_5=90, '카메라 down')로
-    설정해 팔을 차량 위에 안정적으로 접는다.
+    이는 물리 play 시점에 적용된다. 정지 USD 에서도 HOME 으로 보이게 link
+    xform 까지 굳히려면 bake_m0609_home.py 를 이어서 실행한다.
     UsdPhysics angular drive/state 단위는 degree.
     """
     m0609 = stage.GetPrimAtPath(M0609_ROOT)
@@ -218,17 +219,55 @@ def set_m0609_home(stage):
         deg = M0609_HOME_DEG.get(p.GetName())
         if deg is None:
             continue
-        # drive target (시뮬이 유지하려는 목표 각도)
         drive = UsdPhysics.DriveAPI.Get(p, "angular")
         if drive:
             ta = drive.GetTargetPositionAttr() or drive.CreateTargetPositionAttr()
             ta.Set(float(deg))
-        # 초기 state (시작 자세)
         sa = p.GetAttribute("state:angular:physics:position")
         if sa:
             sa.Set(float(deg))
         done += 1
     print(f"  [m0609] HOME 자세 설정 {done}/6 joint  (joint_3=90, joint_5=90)")
+
+
+def attach_d455_camera(stage, angle_bracket_path):
+    """angle_bracket 에 RealSense D455 를 reference 로 부착 (wrist 카메라).
+
+    rsd455.usd 는 isaac_sim/assets/d455/ 에 로컬화돼 있어 상대경로로 참조.
+    angle_bracket 이 이미 rigid body 라 D455 내부 RigidBody/Collision 은
+    비활성화한다(PhysX 계층 충돌 방지). 오프셋은 T2 README 2.1 값.
+    """
+    ab = stage.GetPrimAtPath(angle_bracket_path)
+    if not ab.IsValid():
+        print(f"  [d455] angle_bracket 없음: {angle_bracket_path} — skip")
+        return None
+
+    rs_path = f"{angle_bracket_path}/realsense_d455"
+    rs = stage.DefinePrim(rs_path, "Xform")
+    rs.GetReferences().AddReference(D455_USD_REL)
+
+    xf = UsdGeom.Xformable(rs)
+    xf.ClearXformOpOrder()
+    xf.AddTranslateOp().Set(Gf.Vec3d(*D455_OFFSET_T))
+    xf.AddRotateXYZOp().Set(Gf.Vec3f(*D455_OFFSET_RPY))
+
+    # angle_bracket 이 이미 rigid body 이므로 D455 내부 RigidBody/Collision 을
+    # 비활성화한다(enabled=false). T2 realsense_mount.py 의 검증된 방식 —
+    # RigidBodyAPI 를 제거(RemoveAPI)하면 D455 내장 IMU 가 RSD455 rigid body
+    # 를 못 찾아 physx tensors 에러가 나므로, API 는 남기고 비활성화만 한다.
+    n = 0
+    for p in Usd.PrimRange(stage.GetPrimAtPath(rs_path)):
+        done = False
+        if p.HasAPI(UsdPhysics.RigidBodyAPI):
+            UsdPhysics.RigidBodyAPI(p).GetRigidBodyEnabledAttr().Set(False)
+            done = True
+        if p.HasAPI(UsdPhysics.CollisionAPI):
+            UsdPhysics.CollisionAPI(p).GetCollisionEnabledAttr().Set(False)
+            done = True
+        if done:
+            n += 1
+    print(f"  [d455] {rs_path}  (내부 RigidBody/Collision enabled=false {n} prim)")
+    return rs_path
 
 
 def main():
@@ -254,6 +293,9 @@ def main():
 
     print("[build] m0609 HOME 자세 설정 …")
     set_m0609_home(stage)
+
+    print("[build] D455 wrist 카메라 부착 …")
+    attach_d455_camera(stage, ANGLE_BRACKET)
 
     stage.GetRootLayer().Save()
     print("[build] ✓ vehicle_v1.usd 저장 완료")
