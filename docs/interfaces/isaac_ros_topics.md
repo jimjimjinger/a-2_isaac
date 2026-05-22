@@ -1,232 +1,103 @@
-# Isaac Sim ROS2 Topic Summary
+# vehicle_v3 ROS2 인터페이스
 
-Date: 2026-05-22
+> 갱신: 2026-05-22 — **vehicle_v3** (액션그래프 내장 로봇) 기준.
+> 이전 문서는 T5 의 `rover_m0609_localization.usd` 씬 기준이었으나, 현재 팀
+> 표준 로봇은 `vehicle_v3.usd` 로 통일됨.
 
-## Deliverable Files
+## vehicle_v3 = 표준 로봇
 
-Saved scene USD with Action Graphs:
+ROS2 인터페이스(센서·주행·팔)가 USD 에 내장된 "고정 로봇". terrain 에
+reference·play 하면 **런타임 그래프 코드 없이** 토픽이 살아난다 — 실물
+하드웨어처럼.
 
-```text
-/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/rover_v2/rover_m0609_localization.usd
-```
+- `vehicle_v3.usd` 는 **자립(standalone) 파일** — 외형·물리·관절·Action Graph 를
+  모두 자체 보유. 다른 USD 를 reference 하지 않는다 (flatten 으로 inline).
+- `vehicle_v2.usd` 는 v3 빌드의 *입력 소스*일 뿐. v2 수정 시 `build_vehicle_v3.py`
+  재실행 = v3 재bake.
 
-Standalone copy of the joint state splitter node:
-
-```text
-/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/rover_v2/joint_state_splitter.py
-```
-
-## Topic Table
-
-| Data | Topic | Message Type | Source | Consumer / Purpose | Status |
-|---|---|---|---|---|---|
-| Rover command | `/cmd_vel` | `geometry_msgs/msg/Twist` | External ROS2 publisher | Rover drive Action Graph | OK |
-| IMU | `/imu/data` | `sensor_msgs/msg/Imu` | `/World/Vehicle/rover/.../Body/Imu_Sensor` | Localization / EKF | OK, about 102 Hz |
-| Rover camera RGB | `/camera/rover/image_raw` | `sensor_msgs/msg/Image` | Rover body camera | Vision / terrain / mineral detection | OK, about 60 Hz |
-| Rover camera depth | `/camera/rover/depth` | `sensor_msgs/msg/Image` | Rover body camera | Vision / obstacle response | OK, about 55-68 Hz |
-| Rover camera info | `/camera/rover/camera_info` | `sensor_msgs/msg/CameraInfo` | Rover body camera render product | Deprojection / camera model | OK, about 100 Hz |
-| Wrist camera RGB | `/camera/wrist/image_raw` | `sensor_msgs/msg/Image` | D455 `Camera_OmniVision_OV9782_Color` | Manipulation vision | OK, about 26-29 Hz |
-| Wrist camera depth | `/camera/wrist/depth` | `sensor_msgs/msg/Image` | D455 `Camera_Pseudo_Depth` | Manipulation depth | OK, about 25-31 Hz |
-| Wrist camera info | `/camera/wrist/camera_info` | `sensor_msgs/msg/CameraInfo` | D455 depth render product | Wrist depth deprojection | OK, about 59 Hz |
-| Raw joint states | `/joint_states_raw` | `sensor_msgs/msg/JointState` | Isaac articulation publisher | Raw full robot state | OK |
-| Rover wheel states | `/rover/wheel_states` | `sensor_msgs/msg/JointState` | `joint_state_splitter_node` | Future wheel odometry / localization | OK, about 103 Hz |
-| Arm joint states | `/joint_states` | `sensor_msgs/msg/JointState` | `joint_state_splitter_node` | M0609 + gripper state | OK, about 101 Hz |
-
-## Intentionally Excluded
-
-| Topic | Reason |
+| 항목 | 경로 (repo 루트 기준) |
 |---|---|
-| `/clock` | Not needed for the current workflow. |
-| `/odom` | Isaac-generated odometry is not suitable as the real-world interface target. Wheel odometry will be derived later from `/rover/wheel_states`. |
-| `/tf`, `/tf_static` | Not required for the current milestone. Removed from the immediate scope. |
+| 로봇 (자립 USD, 그래프 내장) | `isaac_sim/assets/vehicle/vehicle_v3.usd` |
+| 그래프 빌더 (bake 파이프라인) | `isaac_sim/scripts/build_vehicle_v3.py` |
+| 단독 실행 런처 | `isaac_sim/scripts/run_vehicle_v3.py` |
 
-## Action Graphs
-
-The current scene creates three main Action Graphs.
-
-### `/ActionGraph/LocalizationSensors`
-
-Purpose:
-
-```text
-Publish sensor data from Isaac Sim to ROS2.
-```
-
-Published topics:
-
-```text
-/imu/data
-/camera/rover/image_raw
-/camera/rover/depth
-/camera/rover/camera_info
-/camera/wrist/image_raw
-/camera/wrist/depth
-/camera/wrist/camera_info
-```
-
-This graph contains the IMU reader and ROS2 camera helper nodes.
-
-### `/ActionGraph/RoverStatePublishers`
-
-Purpose:
-
-```text
-Publish the full articulation joint state from Isaac Sim.
-```
-
-Published topic:
-
-```text
-/joint_states_raw
-```
-
-This is intentionally kept as the raw full robot state. It includes rover wheel joints, rover steering joints, suspension joints, M0609 joints, and gripper joints.
-
-Filtering is done outside Isaac Sim by `joint_state_splitter_node`.
-
-### `/ActionGraph/RoverAckermannDrive`
-
-Purpose:
-
-```text
-Receive /cmd_vel and convert it into rover steering and wheel velocity commands.
-```
-
-Subscribed topic:
-
-```text
-/cmd_vel
-```
-
-Behavior:
-
-```text
-linear.x  -> forward/backward wheel velocity
-angular.z -> steering direction and turning radius
-```
-
-The graph computes Ackermann-style steering angles and wheel velocities, then sends:
-
-```text
-steer joint position commands
-drive wheel velocity commands
-```
-
-This is the graph that actually moves the rover from ROS2 command velocity input.
-
-## Data Flow
-
-Command flow:
-
-```text
-ROS2 /cmd_vel
-  -> /ActionGraph/RoverAckermannDrive
-  -> rover steer joints + drive wheel joints
-```
-
-Sensor flow:
-
-```text
-Isaac IMU + cameras
-  -> /ActionGraph/LocalizationSensors
-  -> /imu/data
-  -> /camera/rover/...
-  -> /camera/wrist/...
-```
-
-Joint state flow:
-
-```text
-Isaac articulation
-  -> /ActionGraph/RoverStatePublishers
-  -> /joint_states_raw
-  -> joint_state_splitter_node
-  -> /rover/wheel_states
-  -> /joint_states
-```
-
-## Joint State Splitter
-
-The node that splits Isaac's full joint state is here:
-
-```text
-/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_localization/isaac_localization/sensors/joint_state_splitter.py
-```
-
-It is registered in:
-
-```text
-/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_localization/setup.py
-```
-
-Run command:
+실행:
 
 ```bash
-source /opt/ros/humble/setup.bash
-source /home/rokey/dev_ws/rover_ws/install/setup.bash
+<isaac-python> isaac_sim/scripts/run_vehicle_v3.py --terrain terrain_00004
+```
+
+## 토픽 표
+
+### 발행 (로봇 → 외부 · 센서)
+
+| 데이터 | 토픽 | 메시지 타입 | 소스 | 용도 |
+|---|---|---|---|---|
+| IMU | `/imu/data` | `sensor_msgs/Imu` | Body/Imu_Sensor | Localization / EKF |
+| 전체 관절 상태 | `/joint_states_raw` | `sensor_msgs/JointState` | articulation (27 DOF) | 원시 로봇 상태 (splitter 입력) |
+| 로버 카메라 RGB | `/camera/rover/image_raw` | `sensor_msgs/Image` | Body 카메라 | Vision / 미네랄 탐지 |
+| 로버 카메라 depth | `/camera/rover/depth` | `sensor_msgs/Image` | Body 카메라 | 장애물 대응 |
+| 로버 카메라 info | `/camera/rover/camera_info` | `sensor_msgs/CameraInfo` | Body 카메라 | deprojection / 카메라 모델 |
+| 손목 카메라 RGB | `/camera/wrist/image_raw` | `sensor_msgs/Image` | D455 Color cam | manipulation vision (T2) |
+| 손목 카메라 depth | `/camera/wrist/depth` | `sensor_msgs/Image` | D455 Pseudo_Depth | manipulation depth |
+| 손목 카메라 info | `/camera/wrist/camera_info` | `sensor_msgs/CameraInfo` | D455 | 손목 depth deprojection |
+
+### 구독 (외부 → 로봇 · 제어)
+
+| 데이터 | 토픽 | 메시지 타입 | 발행자 | 동작 |
+|---|---|---|---|---|
+| 주행 명령 | `/cmd_vel` | `geometry_msgs/Twist` | `coverage_node` 등 | 내장 Ackermann → 6 구동휠 + 4 조향휠 |
+| 팔 명령 | `/arm/joint_command` | `sensor_msgs/JointState` | `arm_executor_node` | m0609 6축 + 그리퍼 관절 위치 (계약 **I11**) |
+
+## 의도적 제외 (현재)
+
+| 토픽 | 사유 |
+|---|---|
+| `/odom` | Isaac 생성 odom 은 실세계 인터페이스로 부적합. 추후 v3 에 in-graph 화 예정(남음). 현재 coverage 는 `sim_ros2_bridge.py` 의 ground-truth odom 사용. |
+| `/tf`, `/tf_static` | 현 마일스톤 범위 밖. pick-place 단계에서 추가 예정(남음). |
+| `/clock` | 현 워크플로에 불필요. |
+
+## 내장 Action Graph
+
+v3 의 그래프는 `/Root/ActionGraph` 하나 (terrain 에 reference 되면
+`/World/Rover/ActionGraph` 로 자동 remap). 센서·주행·팔 노드가 한 그래프에:
+
+| 그룹 | 노드 구성 | 토픽 |
+|---|---|---|
+| 센서 | `IsaacReadIMU`→`ROS2PublishImu` / `ROS2PublishJointState` / `IsaacCreateRenderProduct`×3 + `ROS2Camera(Info)Helper`×6 | `/imu/data` `/joint_states_raw` `/camera/*` 발행 |
+| 주행 | `ROS2SubscribeTwist` → `ScriptNode`(6륜 Ackermann) → `IsaacArticulationController`×2 | `/cmd_vel` 구독 |
+| 팔 | `ROS2SubscribeJointState` → `IsaacArticulationController` | `/arm/joint_command` 구독 |
+
+그래프 정의의 단일 소스 = `build_vehicle_v3.py` (코드). USD 는 그 산출물(bake).
+
+## joint_state_splitter (별도 ROS2 노드)
+
+v3 가 발행하는 `/joint_states_raw` 는 전체 관절 원시 상태. `isaac_localization`
+패키지의 `joint_state_splitter_node` 가 이를 둘로 분리:
+
+```
+/joint_states_raw  ──splitter──▶  /rover/wheel_states   (휠 10)
+                                  /joint_states         (팔/그리퍼 12)
+```
+
+실행:
+
+```bash
 ros2 run isaac_localization joint_state_splitter_node
 ```
 
-Input:
+- `/rover/wheel_states`: `FL/FR/CL/CR/RL/RR_Drive_Continuous` + `FL/FR/RL/RR_Steer_Revolute` — wheel odometry / localization 용
+- `/joint_states`: `joint_1`~`joint_6` + `finger_joint` + knuckle/finger mimic 관절 — M0609 + 그리퍼 상태
 
-```text
-/joint_states_raw
+## 데이터 흐름
+
+```
+주행:  coverage_node ─/cmd_vel─▶ vehicle_v3 (내장 Ackermann) ─▶ 휠 관절
+팔:    arm_executor  ─/arm/joint_command─▶ vehicle_v3 ─▶ m0609 관절
+센서:  vehicle_v3 ─▶ /imu/data · /camera/* · /joint_states_raw
+                                          └▶ joint_state_splitter ─▶ /rover/wheel_states · /joint_states
 ```
 
-Outputs:
+## 관련 문서
 
-```text
-/rover/wheel_states
-/joint_states
-```
-
-## Split Rules
-
-`/rover/wheel_states` contains:
-
-```text
-FL_Drive_Continuous
-FR_Drive_Continuous
-CL_Drive_Continuous
-CR_Drive_Continuous
-RL_Drive_Continuous
-RR_Drive_Continuous
-FL_Steer_Revolute
-FR_Steer_Revolute
-RL_Steer_Revolute
-RR_Steer_Revolute
-```
-
-`/joint_states` contains:
-
-```text
-joint_1
-joint_2
-joint_3
-joint_4
-joint_5
-joint_6
-finger_joint
-left_inner_knuckle_joint
-left_outer_knuckle_joint
-right_inner_knuckle_joint
-right_inner_finger_joint
-left_inner_finger_joint
-```
-
-## Main Isaac Scene Script
-
-The Isaac Sim scene and Action Graph setup is here:
-
-```text
-/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_manipulation/scripts/build_rover_m0609_scene.py
-```
-
-Main run command:
-
-```bash
-source /opt/ros/humble/setup.bash
-source /home/rokey/dev_ws/rover_ws/install/setup.bash
-cd /home/rokey/dev_ws/rover_ws/src/a2_isaac
-isaac-python isaac_manipulation/scripts/build_rover_m0609_scene.py --no-drive --auto-play
-```
+- [`INTERFACE_CONTRACTS.md`](INTERFACE_CONTRACTS.md) — I11 `/arm/joint_command` 정식 계약, 미션 인터페이스 I1~I5
