@@ -29,12 +29,12 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 ROVER_USD_PATH = str(
     _REPO_ROOT / "isaac_sim" / "assets" / "vehicle" / "vehicle_v2.usd"
 )
-# vehicle_v1.usd 내부 (defaultPrim=/Root): 단일 articulation(DOF 27).
+# vehicle_v2.usd 내부 (defaultPrim=/Root): 단일 articulation(DOF 27).
 #   · /World/Rover            — reference 앵커 (spawn translate 대상)
 #   · .../m0609/base_link     — articulation root (get_world_pose 가 주는 pose)
 #   · .../rover/Body          — 주행 섀시 링크
 # 주행 모드 드라이브 게인(휠 속도제어·스티어 위치제어·로커 passive)은
-# vehicle_v1.usd 에 nominal default 로 박혀 있다 — 런타임 패치 불필요.
+# vehicle_v2.usd 에 nominal default 로 박혀 있다 — 런타임 패치 불필요.
 ROVER_PRIM_PATH = "/World/Rover"
 ARTIC_PRIM_PATH = ROVER_PRIM_PATH + "/Vehicle/m0609/base_link"
 ROVER_BODY_PATH = ROVER_PRIM_PATH + "/Vehicle/rover/Body"
@@ -166,7 +166,7 @@ class RoverController:
                       rpy_deg=(90.0, 0.0, -90.0),
                       resolution=(640, 480)):
         stage = omni.usd.get_context().get_stage()
-        # vehicle_v1 의 Body 에는 이미 온보드 카메라가 있어 이름을 구분한다.
+        # vehicle_v2 의 Body 에는 이미 온보드 카메라가 있어 이름을 구분한다.
         self._camera_path = f"{ROVER_BODY_PATH}/OverviewCamera"
         omni.kit.commands.execute("CreatePrim",
                                   prim_path=self._camera_path,
