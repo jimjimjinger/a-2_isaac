@@ -10,6 +10,7 @@ v3 = 고정된 로봇. terrain 에 reference·play 하면 그 자체로 ROS2 인
               └ ActionGraph     (이 스크립트가 굽는 그래프)
                   · 센서: IMU·joint·카메라 발행
                   · 주행: /cmd_vel 구독 → ScriptNode Ackermann → 휠 관절 구동
+                  · 팔: /arm/joint_command(JointState) 구독 → m0609 관절 위치 제어
 
 빌드:  <isaac-python> isaac_sim/scripts/build_vehicle_v3.py
 산출물: isaac_sim/assets/vehicle/vehicle_v3.usd
@@ -228,6 +229,9 @@ def main() -> None:
                 ("Ackermann", "omni.graph.scriptnode.ScriptNode"),
                 ("SteerCtrl", "isaacsim.core.nodes.IsaacArticulationController"),
                 ("DriveCtrl", "isaacsim.core.nodes.IsaacArticulationController"),
+                # ── 팔 제어 (저수준 관절 명령) ──
+                ("SubJointCmd", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
+                ("ArmCtrl", "isaacsim.core.nodes.IsaacArticulationController"),
             ],
             keys.CREATE_ATTRIBUTES: [
                 # ScriptNode 커스텀 포트 — Ackermann 입출력
@@ -272,6 +276,8 @@ def main() -> None:
                 # 주행
                 ("SubTwist.inputs:topicName", "/cmd_vel"),
                 ("Ackermann.inputs:script", ACK_SCRIPT),
+                # 팔 — arm_executor_node 가 /arm/joint_command 로 관절 위치 지령
+                ("SubJointCmd.inputs:topicName", "/arm/joint_command"),
             ],
             keys.CONNECT: [
                 # 센서 — IMU
@@ -324,6 +330,12 @@ def main() -> None:
                  "DriveCtrl.inputs:jointNames"),
                 ("Ackermann.outputs:wheelVelocities",
                  "DriveCtrl.inputs:velocityCommand"),
+                # 팔 — /arm/joint_command → m0609 관절 (관절명·위치는 메시지가 지정)
+                ("OnTick.outputs:tick", "SubJointCmd.inputs:execIn"),
+                ("SubJointCmd.outputs:execOut", "ArmCtrl.inputs:execIn"),
+                ("SubJointCmd.outputs:jointNames", "ArmCtrl.inputs:jointNames"),
+                ("SubJointCmd.outputs:positionCommand",
+                 "ArmCtrl.inputs:positionCommand"),
             ],
         },
     )
@@ -335,8 +347,9 @@ def main() -> None:
     _set_targets(f"{GRAPH}/RPWristDepth", "inputs:cameraPrim", WRIST_DEP)
     _set_targets(f"{GRAPH}/SteerCtrl", "inputs:targetPrim", ARTIC)
     _set_targets(f"{GRAPH}/DriveCtrl", "inputs:targetPrim", ARTIC)
+    _set_targets(f"{GRAPH}/ArmCtrl", "inputs:targetPrim", ARTIC)
     print("[build_v3] Action Graph author 완료 — 센서(IMU·joint·카메라) + "
-          "주행(/cmd_vel→Ackermann→휠)")
+          "주행(/cmd_vel→Ackermann→휠) + 팔(/arm/joint_command→m0609)")
 
     stage.GetRootLayer().Save()
     print(f"[build_v3] ✓ 저장 완료: {V3}")
