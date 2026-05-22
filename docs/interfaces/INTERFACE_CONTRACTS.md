@@ -30,6 +30,8 @@
 
 5개 외 UI 관련 인터페이스(I6~I10)는 [`deferred_interfaces.md`](deferred_interfaces.md)에서 관리. T3 (이찬휘) ↔ T4 (성선규) 사이 Day 4+ 합의.
 
+**I11** `/arm/joint_command` — vehicle_v3 로봇의 저수준 팔 제어 인터페이스 (2026-05-22 추가, 본 문서 하단 참조). v3 그래프-내장 로봇 아키텍처 도입에 따른 신규 로봇 제어 인터페이스.
+
 ---
 
 ## 🌐 공통 규칙
@@ -550,6 +552,75 @@ T5 (이지민)가 publish 멈추면:
 
 ---
 
+## I11. `/arm/joint_command` (arm_executor → vehicle_v3 로봇)
+
+> 2026-05-22 추가. vehicle_v3 그래프-내장 로봇 아키텍처 도입에 따른 신규 인터페이스. PM (T4 성선규) 승인.
+
+### 핵심 한 줄
+**M0609 6축 팔 + RG2-FT 그리퍼 관절을 직접 움직이는 저수준 제어 토픽.** 주행의 `/cmd_vel`에 대응하는 팔 버전. `arm_executor_node`(고수준 `ExecuteArmTask` 액션 서버)가 스크립트 시퀀스를 풀어 이 토픽으로 관절 위치를 지령하면, `vehicle_v3.usd` 내장 Action Graph(`ROS2SubscribeJointState`→`IsaacArticulationController`)가 해당 관절에 적용한다.
+
+### 메시지 정의 (인라인 형식)
+**ROS2 표준 사용**: `sensor_msgs/JointState`
+
+```
+std_msgs/Header header     # 미사용 가능 (stamp 참조 안 함)
+string[]  name             # 움직일 관절 이름 (부분 집합 OK)
+float64[] position         # 각 관절 목표 위치 (rad) — name 과 동일 길이
+float64[] velocity         # 미사용 (빈 배열)
+float64[] effort           # 미사용 (빈 배열)
+```
+
+### 관절 이름
+
+| 부위 | 관절 이름 |
+|------|----------|
+| M0609 팔 | `joint_1` `joint_2` `joint_3` `joint_4` `joint_5` `joint_6` |
+| RG2-FT 그리퍼 | `finger_joint` (knuckle/finger mimic 관절은 자동 추종) |
+
+`name`에 넣은 관절만 제어된다 — 일부만 보내도 됨. `position` 길이는 `name`과 일치해야 함.
+
+### 예시 dummy payload
+
+**케이스 A: 팔 3축 + 그리퍼 닫기**
+```yaml
+name:     ["joint_1", "joint_2", "joint_4", "finger_joint"]
+position: [0.6, -0.4, 0.5, 0.3]
+velocity: []
+effort:   []
+```
+
+**케이스 B: 그리퍼만 열기**
+```yaml
+name:     ["finger_joint"]
+position: [0.0]
+```
+
+### 발급 규칙
+
+- **위치 제어** — `position`만 사용 (velocity/effort는 무시).
+- `arm_executor_node`가 스크립트 5단계(extend→descend→grasp→lift→stow)의 각 step 관절 목표를 발행.
+- 그리퍼: `finger_joint` 위치로 개폐 (0 = 열림 / 커질수록 닫힘).
+- HOME 자세: `joint_3 ≈ joint_5 ≈ 1.57 rad`, 나머지 ≈ 0 (접힘 상태).
+
+### Producer / Consumer
+
+| | |
+|---|---|
+| Producer | `arm_executor_node` (T2 최진우 / manipulation) — `ExecuteArmTask` 액션 step 실행 |
+| Consumer | `vehicle_v3.usd` 내장 그래프 `ArmCtrl` 노드 |
+
+### 계층 구조
+
+```
+T3 ──ExecuteArmTask 액션──▶ arm_executor_node ──/arm/joint_command──▶ vehicle_v3 ──▶ m0609 관절
+  (고수준: "저 미네랄 집어")    (스크립트 5단계)       (저수준: 관절 위치)
+```
+
+- 고수준 `ExecuteArmTask` 액션은 `isaac_interfaces/action/ExecuteArmTask.action`에 기정의 (변경 없음).
+- `vehicle_v3.usd` = 그래프 내장 로봇. terrain에 reference·play 하면 이 토픽이 자동 노출됨 (런처 코드 불필요).
+
+---
+
 ## 🔒 변경 정책
 
 ### Day 1 sign-off
@@ -593,6 +664,9 @@ T5 이지민 Localization+Infra (5080)     ___________  날짜 ____
 - Initial draft (Day 0)
 - 5 critical interfaces defined
 
-[YYYY-MM-DD]
-- (변경 사항 기록)
+[2026-05-22]
+- I11 `/arm/joint_command` 추가 — vehicle_v3 그래프-내장 로봇의 저수준 팔
+  제어 인터페이스 (sensor_msgs/JointState). PM (T4 성선규) 승인.
+- vehicle_v3 아키텍처(그래프를 코드로 빌드해 USD 에 bake) 도입에 따른 신규
+  로봇 인터페이스. 고수준 ExecuteArmTask 액션은 변경 없음.
 ```
