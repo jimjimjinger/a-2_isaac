@@ -1,18 +1,20 @@
-"""통합 로버 차량 v1 빌드 — vehicle_origin_T2.usd 베이스에 후방 바스켓 추가.
+"""통합 로버 차량 v1 빌드 — vehicle_origin_T2.usd 베이스 보정·바스켓 추가.
 
-vehicle_origin_T2.usd (rover + M0609 + RG2-FT 결합본, T2 제작) 를 베이스로
-후방 바스켓(visual-only)을 더해 vehicle_v1.usd 를 만든다.
+vehicle_origin_T2.usd (rover + M0609 + RG2-FT 결합본, T2 제작) 를 베이스로:
+  · 후방 바스켓 (visual-only, T5 build_rover_m0609_scene.py 에서 이식)
+  · Vehicle 원점 재정렬 — T2 원본은 차량이 spawn 좌표(5,0,0.5)에 박혀 있어
+    Vehicle 원점이 차량에서 ~5m 떨어짐. 차량을 원점으로 가져온다.
+  · MDL 머티리얼 경로 교정 — T2 원본은 rover MDL 을 /home/rokey/... 절대경로로
+    참조해 타 환경에서 외형이 깨진다(머티리얼 미로드 → fallback). repo 상대
+    경로로 재작성한다.
+을 적용해 vehicle_v1.usd 를 만든다.
 
 순수 pxr(USD) 로만 동작 — Isaac Sim/SimulationApp 불필요.
 
     python3 isaac_sim/scripts/build_integrated_vehicle.py
 
-참고:
-  · 외형 dark 색칠은 vehicle_origin_T2.usd 에 이미 적용돼 있음(`T2DarkBody`
-    머티리얼) — 별도 색칠 단계 불필요.
-  · D455 wrist 카메라는 미포함 — 자산(Nucleus) 확보 후 v1.1 에서 추가.
-  · 휠 freeze·RoverAnchor 등 모드 의존 설정은 의도적으로 USD 에 넣지 않음
-    (런타임 모드 레이어가 담당).
+⚠️ D455 wrist 카메라는 미포함 — 자산(Nucleus) 확보 후 v1.1 에서 추가.
+   휠 freeze·RoverAnchor 등 모드 의존 설정도 미포함(런타임 모드 레이어 담당).
 """
 from pathlib import Path
 import shutil
@@ -26,8 +28,14 @@ _VEHICLE_DIR = _ISAAC_SIM / "assets" / "vehicle"
 ORIGIN_USD = _VEHICLE_DIR / "vehicle_origin_T2.usd"
 OUTPUT_USD = _VEHICLE_DIR / "vehicle_v1.usd"
 
+# ── vehicle_origin_T2.usd 내부 prim 경로 ──
+VEHICLE_ROOT = "/Root/Vehicle"
+ROVER_ROOT   = "/Root/Vehicle/rover"
+M0609_ROOT   = "/Root/Vehicle/m0609"
+GRIPPER_ROOT = "/Root/Vehicle/onrobot_rg2ft"
+ROVER_BODY   = "/Root/Vehicle/rover/Body"
+
 # ── 후방 바스켓 부착 대상 + 치수 (T5 build_rover_m0609_scene.py 에서 이식) ──
-ROVER_BODY = "/Root/Vehicle/rover/Body"
 # rover Body 기준 로컬 좌표. -X = 로봇팔 반대편 = 후방.
 BASKET_LOCAL  = (-0.38, 0.0, 0.02)
 BASKET_LENGTH = 0.22
@@ -62,6 +70,14 @@ def _define_local_box(stage, path, translation, scale, material=None):
         UsdShade.MaterialBindingAPI.Apply(cube.GetPrim())
         UsdShade.MaterialBindingAPI(cube.GetPrim()).Bind(material)
     return cube.GetPrim()
+
+
+def _get_translate_op(prim):
+    """prim 의 xformOp:translate op 반환 (없으면 None)."""
+    for op in UsdGeom.Xformable(prim).GetOrderedXformOps():
+        if op.GetOpName() == "xformOp:translate":
+            return op
+    return None
 
 
 # ── 빌드 단계 ───────────────────────────────────────────────────────
@@ -114,6 +130,65 @@ def attach_rear_basket(stage, rover_body):
     return basket_path
 
 
+def recenter_vehicle(stage):
+    """Vehicle 원점을 차량(rover)에 맞춘다.
+
+    T2 vehicle_origin_T2.usd 는 빌드 시 차량을 spawn 좌표(rover translate
+    (5,0,0.5))에 둔 상태로 저장돼 Vehicle 원점이 차량에서 ~5m 떨어져 있다.
+    rover·m0609·onrobot_rg2ft 세 컴포넌트를 rover translate 만큼 동일 시프트
+    하면 상대 관계는 그대로 유지되면서 rover 원점이 곧 Vehicle 원점이 된다.
+    (세 컴포넌트는 FixedJoint 로 묶여 있는데, 동일 시프트는 body 간 상대
+     pose 를 바꾸지 않으므로 joint 가 깨지지 않는다.)
+    """
+    rover = stage.GetPrimAtPath(ROVER_ROOT)
+    if not rover.IsValid():
+        print("  [recenter] rover prim 없음 — skip")
+        return
+    rover_t = _get_translate_op(rover)
+    if rover_t is None:
+        print("  [recenter] rover translate 없음 — skip")
+        return
+    off = Gf.Vec3d(rover_t.Get())
+    if off == Gf.Vec3d(0, 0, 0):
+        print("  [recenter] rover 가 이미 원점 — skip")
+        return
+    for path in (ROVER_ROOT, M0609_ROOT, GRIPPER_ROOT):
+        prim = stage.GetPrimAtPath(path)
+        if not prim.IsValid():
+            continue
+        op = _get_translate_op(prim)
+        if op is not None:
+            op.Set(Gf.Vec3d(op.Get()) - off)
+    print(f"  [recenter] -({off[0]:.3f},{off[1]:.3f},{off[2]:.3f}) 시프트 "
+          f"→ Vehicle 원점 = 차량")
+
+
+def fix_mdl_paths(stage):
+    """MDL sourceAsset 의 /home/rokey/... 절대경로를 repo 상대경로로 교정.
+
+    vehicle_origin_T2.usd 는 rover MDL 머티리얼을 T2 환경(/home/rokey/...)
+    절대경로로 참조해 타 환경에서 외형이 깨진다(머티리얼 미로드 → fallback).
+    .mdl 파일명만 살려 repo 내 실제 위치로 상대경로(../rover/SubUSDs/
+    materials/) 재작성한다. OmniPBR.mdl 등 Omniverse 기본 MDL 은 그대로 둔다.
+    """
+    fixed = 0
+    for prim in stage.Traverse():
+        if prim.GetTypeName() != "Shader":
+            continue
+        attr = prim.GetAttribute("info:mdl:sourceAsset")
+        if not attr:
+            continue
+        val = attr.Get()
+        if not val:
+            continue
+        old = val.path
+        if "SubUSDs/materials/" in old:
+            fname = old.rsplit("/", 1)[-1]
+            attr.Set(Sdf.AssetPath(f"../rover/SubUSDs/materials/{fname}"))
+            fixed += 1
+    print(f"  [mdl] sourceAsset 경로 교정 {fixed}개 → ../rover/SubUSDs/materials/")
+
+
 def main():
     if not ORIGIN_USD.is_file():
         sys.exit(f"[build] ✗ 원본 USD 없음: {ORIGIN_USD}")
@@ -128,6 +203,12 @@ def main():
 
     print("[build] 후방 바스켓 부착 …")
     attach_rear_basket(stage, ROVER_BODY)
+
+    print("[build] Vehicle 원점 재정렬 …")
+    recenter_vehicle(stage)
+
+    print("[build] MDL 머티리얼 경로 교정 …")
+    fix_mdl_paths(stage)
 
     stage.GetRootLayer().Save()
     print("[build] ✓ vehicle_v1.usd 저장 완료")
