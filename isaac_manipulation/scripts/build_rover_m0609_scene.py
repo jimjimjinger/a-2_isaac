@@ -36,15 +36,16 @@ from isaacsim import SimulationApp
 
 simulation_app = SimulationApp({"headless": False})
 
-import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import omni.kit.commands
 import omni.kit.app
 import omni.usd
+import omni.graph.core as og
+import omni.replicator.core as rep
 import carb
+import usdrt
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 # 시끄러운 로그 silence
@@ -60,24 +61,45 @@ for ch in (
     except Exception:
         pass
 
-# RobotAssembler 확장 활성화
-omni.kit.app.get_app().get_extension_manager().set_extension_enabled_immediate(
-    "isaacsim.robot_setup.assembler", True
-)
+try:
+    _carb.set_bool("/app/omni.graph.scriptnode/opt_in", True)
+except Exception:
+    _carb.set("/app/omni.graph.scriptnode/opt_in", True)
+
+# 필요한 Isaac/OmniGraph 확장 활성화
+_ext_manager = omni.kit.app.get_app().get_extension_manager()
+for _ext in (
+    "isaacsim.robot_setup.assembler",
+    "isaacsim.sensors.physics",
+    "isaacsim.ros2.bridge",
+    "omni.graph.window.action",
+    "omni.graph.window.generic",
+    "omni.graph.scriptnode",
+    "omni.graph.bundle.action",
+    "omni.graph.ui",
+    "omni.graph.visualization.nodes",
+    "omni.kit.graph.delegate.default",
+    "omni.kit.graph.editor.core",
+):
+    _ext_manager.set_extension_enabled_immediate(_ext, True)
 
 from isaacsim.asset.importer.urdf import _urdf
 from isaacsim.core.api import World
 from isaacsim.core.prims import SingleArticulation
+from isaacsim.core.utils.prims import move_prim
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
+os.environ.setdefault("ROS_DISTRO", "humble")
+os.environ.setdefault("RMW_IMPLEMENTATION", "rmw_fastrtps_cpp")
 
 # ─── 경로 ──────────────────────────────────────────────────────────────────
 A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
-ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
+ROVER_USD = A2_ROOT / "isaac_sim/assets/rover_v2/vehicle/vehicle.usd"
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"
 RG2_URDF = A2_ROOT / "isaac_sim/assets/onrobot_rg2/urdf/onrobot_rg2.urdf"
+LOCALIZATION_SCENE_USD = A2_ROOT / "isaac_sim/assets/rover_v2/rover_m0609_localization.usd"
 
 # URDF 안의 link 이름 (dual_cam_pick_place config 와 동일)
 M0609_EE_LINK = "link_6"
@@ -95,6 +117,19 @@ ROVER_SPAWN_QUAT_WXYZ = (1.0, 0.0, 0.0, 0.0)
 
 # 로버 단독 주행 테스트용. Script Editor 없이 이 파일 실행만으로 전진시킨다.
 AUTO_DRIVE_SPEED = 5.0
+
+# Rover command/state graph topics and Ackermann geometry values.
+ROVER_ACKERMANN_GRAPH_PATH = "/ActionGraph/RoverAckermannDrive"
+ROVER_CMD_VEL_TOPIC = "/cmd_vel"
+ROVER_STATE_GRAPH_PATH = "/ActionGraph/RoverStatePublishers"
+JOINT_STATES_RAW_TOPIC = "/joint_states_raw"
+ACKERMANN_WHEELBASE_LENGTH = 0.849
+ACKERMANN_MIDDLE_WHEEL_DISTANCE = 0.894
+ACKERMANN_REAR_FRONT_WHEEL_DISTANCE = 0.77
+ACKERMANN_WHEEL_RADIUS = 0.1
+ACKERMANN_OFFSET = -0.0135
+ACKERMANN_STEERING_GAIN = 1.1
+ACKERMANN_WHEEL_VELOCITY_GAIN = 1.5
 
 # M0609 mount offsets from rover origin (사용자가 GUI 에서 시각 확인 후 정한 값,
 # 2026-05-20). rover 위에 딱 붙는 자세: world Z=1.21232 → offset Z=0.21232.
@@ -116,6 +151,28 @@ BASKET_WIDTH = 0.46
 BASKET_HEIGHT = 0.18
 BASKET_WALL = 0.035
 BASKET_BOTTOM = 0.035
+
+# IMU sensor attached to rover body. Action Graph should read this prim.
+IMU_SENSOR_NAME = "Imu_Sensor"
+IMU_LOCAL_X = 0.0
+IMU_LOCAL_Y = 0.0
+IMU_LOCAL_Z = 0.12
+IMU_SENSOR_PERIOD = -1.0
+
+# Rover camera. One USD Camera prim publishes both RGB and depth.
+CAMERA_NAME = "Camera"
+CAMERA_LOCAL_X = 0.35
+CAMERA_LOCAL_Y = 0.0
+CAMERA_LOCAL_Z = 0.30
+CAMERA_RPY_DEG = (90.0, 0.0, -90.0)
+CAMERA_RESOLUTION = (640, 480)
+CAMERA_FRAME_ID = "rover_camera"
+
+# Wrist D455 cameras are already included in the integrated vehicle USD.
+WRIST_COLOR_CAMERA_NAME = "Camera_OmniVision_OV9782_Color"
+WRIST_DEPTH_CAMERA_NAME = "Camera_Pseudo_Depth"
+WRIST_CAMERA_RESOLUTION = (640, 480)
+WRIST_CAMERA_FRAME_ID = "wrist_camera"
 
 
 # ─── URDF / Assembler 헬퍼 ───────────────────────────────────────────────────
@@ -155,6 +212,48 @@ def _find_prim_path_by_name(root_path: str, link_name: str):
     return None
 
 
+def _find_articulation_root_path(root_path: str) -> str:
+    """Find the first articulation root under a loaded vehicle USD."""
+    stage = omni.usd.get_context().get_stage()
+    root_prim = stage.GetPrimAtPath(root_path)
+    if not root_prim.IsValid():
+        raise RuntimeError(f"vehicle root prim not found: {root_path}")
+
+    for prim in Usd.PrimRange(root_prim):
+        try:
+            if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
+                return str(prim.GetPath())
+        except Exception:
+            pass
+        schemas = {str(schema) for schema in prim.GetAppliedSchemas()}
+        if "PhysicsArticulationRootAPI" in schemas:
+            return str(prim.GetPath())
+
+    carb.log_warn(f"articulation root not found under {root_path}; using vehicle root")
+    return root_path
+
+
+def _move_prim_under(root_path: str, parent_path: str) -> str:
+    """Move an imported root prim under parent_path before assembly."""
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath(root_path)
+    if not prim.IsValid():
+        raise RuntimeError(f"prim not found: {root_path}")
+
+    name = prim.GetName()
+    dst_path = f"{parent_path}/{name}"
+    if root_path == dst_path:
+        return root_path
+    if stage.GetPrimAtPath(dst_path).IsValid():
+        raise RuntimeError(f"destination already exists: {dst_path}")
+
+    move_prim(root_path, dst_path)
+    for _ in range(5):
+        simulation_app.update()
+    print(f"  [Scene] moved prim: {root_path} -> {dst_path}")
+    return dst_path
+
+
 def _assemble(robot_base, robot_base_mount, robot_attach, robot_attach_mount,
               namespace, variant):
     """RobotAssembler 로 두 robot 을 fixed joint 로 결합.
@@ -184,19 +283,11 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
     stage = omni.usd.get_context().get_stage()
     root = stage.GetPrimAtPath(root_path)
     if not root.IsValid():
-        carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: root invalid {root_path}")
+        carb.log_warn(f"_paint_subtree_dark: root invalid {root_path}")
         return 0
 
     rgb_vec = Gf.Vec3f(*rgb)
-
-    # 디버그: subtree 의 모든 prim 타입 카운트 (왜 Mesh 가 0개인지 진단)
-    type_counts = {}
     all_predicate = Usd.PrimAllPrimsPredicate
-    for prim in Usd.PrimRange(root, predicate=all_predicate):
-        t = str(prim.GetTypeName()) or "<empty>"
-        type_counts[t] = type_counts.get(t, 0) + 1
-    top_types = sorted(type_counts.items(), key=lambda x: -x[1])[:15]
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark prim type counts: {top_types}")
 
     # (1) 모든 Shader prim 의 Color3f inputs 를 dark 로 set (이름 무관)
     modified = 0
@@ -219,7 +310,6 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
                 modified += 1
             except Exception:
                 pass
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: modified {modified} Color3f shader inputs")
 
     # (2) 새 PreviewSurface material 생성
     mat_path = f"{root_path}/Looks/T2DarkBody"
@@ -260,7 +350,6 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
             bindingStrength=UsdShade.Tokens.strongerThanDescendants,
         )
         bound += 1
-    carb.log_warn(f"[T2-DEBUG] _paint_subtree_dark: rebound {bound} prims (Mesh/GeomSubset/with-binding)")
     return modified + bound
 
 
@@ -371,20 +460,297 @@ def _attach_rear_basket(rover_body: str) -> str:
     return basket_path
 
 
+def _attach_imu_sensor(rover_body: str) -> str:
+    """Create an Isaac IMU sensor under rover Body."""
+    stage = omni.usd.get_context().get_stage()
+    body_prim = stage.GetPrimAtPath(rover_body)
+    if not body_prim.IsValid():
+        raise RuntimeError(f"rover Body prim not found: {rover_body}")
+
+    imu_path = f"{rover_body}/{IMU_SENSOR_NAME}"
+    if stage.GetPrimAtPath(imu_path).IsValid():
+        print(f"  [Scene] IMU sensor already exists: {imu_path}")
+        return imu_path
+
+    ret = omni.kit.commands.execute(
+        "IsaacSensorCreateImuSensor",
+        path=f"/{IMU_SENSOR_NAME}",
+        parent=rover_body,
+        sensor_period=IMU_SENSOR_PERIOD,
+        translation=Gf.Vec3d(IMU_LOCAL_X, IMU_LOCAL_Y, IMU_LOCAL_Z),
+        orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+        linear_acceleration_filter_size=1,
+        angular_velocity_filter_size=1,
+        orientation_filter_size=1,
+    )
+
+    sensor_prim = ret[1] if isinstance(ret, tuple) else ret
+    if sensor_prim is None or not stage.GetPrimAtPath(imu_path).IsValid():
+        raise RuntimeError(f"Failed to create IMU sensor at {imu_path}")
+
+    print(f"  [Scene] IMU sensor attached: {imu_path}")
+    return imu_path
+
+
+def _attach_rover_camera(rover_body: str):
+    """Create/reuse the rover camera and return (camera_path, render_product_path)."""
+    stage = omni.usd.get_context().get_stage()
+    body_prim = stage.GetPrimAtPath(rover_body)
+    if not body_prim.IsValid():
+        raise RuntimeError(f"rover Body prim not found: {rover_body}")
+
+    camera_path = f"{rover_body}/{CAMERA_NAME}"
+    if not stage.GetPrimAtPath(camera_path).IsValid():
+        omni.kit.commands.execute(
+            "CreatePrim",
+            prim_path=camera_path,
+            prim_type="Camera",
+        )
+        cam_prim = stage.GetPrimAtPath(camera_path)
+        cam_xf = UsdGeom.Xformable(cam_prim)
+        cam_xf.ClearXformOpOrder()
+        cam_xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Vec3d(CAMERA_LOCAL_X, CAMERA_LOCAL_Y, CAMERA_LOCAL_Z)
+        )
+        cam_xf.AddRotateXYZOp(UsdGeom.XformOp.PrecisionDouble).Set(
+            Gf.Vec3d(*CAMERA_RPY_DEG)
+        )
+        print(f"  [Scene] camera attached: {camera_path}")
+    else:
+        print(f"  [Scene] camera already exists: {camera_path}")
+
+    UsdGeom.Imageable(stage.GetPrimAtPath(camera_path)).MakeInvisible()
+    render_product = rep.create.render_product(camera_path, CAMERA_RESOLUTION)
+    render_product_path = render_product.path
+    print(f"  [Scene] camera render product: {render_product_path}")
+    return camera_path, render_product_path
+
+
+def _create_wrist_camera_render_products(rover_prim_path: str):
+    """Create render products for the D455 wrist RGB and pseudo-depth cameras."""
+    stage = omni.usd.get_context().get_stage()
+    color_camera_path = _find_prim_path_by_name(rover_prim_path, WRIST_COLOR_CAMERA_NAME)
+    depth_camera_path = _find_prim_path_by_name(rover_prim_path, WRIST_DEPTH_CAMERA_NAME)
+
+    if not color_camera_path:
+        raise RuntimeError(
+            f"wrist color camera prim not found: {WRIST_COLOR_CAMERA_NAME}"
+        )
+    if not depth_camera_path:
+        raise RuntimeError(
+            f"wrist depth camera prim not found: {WRIST_DEPTH_CAMERA_NAME}"
+        )
+    if not stage.GetPrimAtPath(color_camera_path).IsValid():
+        raise RuntimeError(f"invalid wrist color camera path: {color_camera_path}")
+    if not stage.GetPrimAtPath(depth_camera_path).IsValid():
+        raise RuntimeError(f"invalid wrist depth camera path: {depth_camera_path}")
+
+    color_render_product = rep.create.render_product(
+        color_camera_path,
+        WRIST_CAMERA_RESOLUTION,
+    )
+    depth_render_product = rep.create.render_product(
+        depth_camera_path,
+        WRIST_CAMERA_RESOLUTION,
+    )
+
+    print(f"  [Scene] wrist color camera: {color_camera_path}")
+    print(f"  [Scene] wrist depth camera: {depth_camera_path}")
+    print(f"  [Scene] wrist color render product: {color_render_product.path}")
+    print(f"  [Scene] wrist depth render product: {depth_render_product.path}")
+    return color_render_product.path, depth_render_product.path
+
+
+def _create_localization_ros2_graph(
+    imu_path: str,
+    camera_render_product_path: str = "",
+    wrist_color_render_product_path: str = "",
+    wrist_depth_render_product_path: str = "",
+) -> str:
+    """Create ROS2 publishers for localization sensors and rover camera."""
+    stage = omni.usd.get_context().get_stage()
+    graph_path = "/ActionGraph/LocalizationSensors"
+
+    if stage.GetPrimAtPath(graph_path).IsValid():
+        stage.RemovePrim(Sdf.Path(graph_path))
+
+    create_nodes = [
+        ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+        ("Context", "isaacsim.ros2.bridge.ROS2Context"),
+        ("ReadIMU", "isaacsim.sensors.physics.IsaacReadIMU"),
+        ("PublishImu", "isaacsim.ros2.bridge.ROS2PublishImu"),
+    ]
+    connect = [
+        ("OnPlaybackTick.outputs:tick", "ReadIMU.inputs:execIn"),
+        ("ReadIMU.outputs:execOut", "PublishImu.inputs:execIn"),
+        ("Context.outputs:context", "PublishImu.inputs:context"),
+        ("ReadIMU.outputs:sensorTime", "PublishImu.inputs:timeStamp"),
+        ("ReadIMU.outputs:angVel", "PublishImu.inputs:angularVelocity"),
+        ("ReadIMU.outputs:linAcc", "PublishImu.inputs:linearAcceleration"),
+        ("ReadIMU.outputs:orientation", "PublishImu.inputs:orientation"),
+    ]
+    set_values = [
+        ("ReadIMU.inputs:imuPrim", [usdrt.Sdf.Path(imu_path)]),
+        ("ReadIMU.inputs:readGravity", True),
+        ("ReadIMU.inputs:useLatestData", False),
+        ("PublishImu.inputs:topicName", "/imu/data"),
+        ("PublishImu.inputs:frameId", "sim_imu"),
+        ("PublishImu.inputs:publishAngularVelocity", True),
+        ("PublishImu.inputs:publishLinearAcceleration", True),
+        ("PublishImu.inputs:publishOrientation", True),
+    ]
+
+    if camera_render_product_path:
+        create_nodes.extend(
+            [
+                ("CameraRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("CameraDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("CameraInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+            ]
+        )
+        connect.extend(
+            [
+                ("OnPlaybackTick.outputs:tick", "CameraRgb.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "CameraDepth.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "CameraInfo.inputs:execIn"),
+                ("Context.outputs:context", "CameraRgb.inputs:context"),
+                ("Context.outputs:context", "CameraDepth.inputs:context"),
+                ("Context.outputs:context", "CameraInfo.inputs:context"),
+            ]
+        )
+        set_values.extend(
+            [
+                ("CameraRgb.inputs:renderProductPath", camera_render_product_path),
+                ("CameraRgb.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraRgb.inputs:topicName", "/camera/rover/image_raw"),
+                ("CameraRgb.inputs:type", "rgb"),
+                ("CameraDepth.inputs:renderProductPath", camera_render_product_path),
+                ("CameraDepth.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraDepth.inputs:topicName", "/camera/rover/depth"),
+                ("CameraDepth.inputs:type", "depth"),
+                ("CameraInfo.inputs:renderProductPath", camera_render_product_path),
+                ("CameraInfo.inputs:frameId", CAMERA_FRAME_ID),
+                ("CameraInfo.inputs:topicName", "/camera/rover/camera_info"),
+            ]
+        )
+
+    if wrist_color_render_product_path and wrist_depth_render_product_path:
+        create_nodes.extend(
+            [
+                ("WristCameraRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("WristCameraDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("WristCameraInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+            ]
+        )
+        connect.extend(
+            [
+                ("OnPlaybackTick.outputs:tick", "WristCameraRgb.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "WristCameraDepth.inputs:execIn"),
+                ("OnPlaybackTick.outputs:tick", "WristCameraInfo.inputs:execIn"),
+                ("Context.outputs:context", "WristCameraRgb.inputs:context"),
+                ("Context.outputs:context", "WristCameraDepth.inputs:context"),
+                ("Context.outputs:context", "WristCameraInfo.inputs:context"),
+            ]
+        )
+        set_values.extend(
+            [
+                (
+                    "WristCameraRgb.inputs:renderProductPath",
+                    wrist_color_render_product_path,
+                ),
+                ("WristCameraRgb.inputs:frameId", WRIST_CAMERA_FRAME_ID),
+                ("WristCameraRgb.inputs:topicName", "/camera/wrist/image_raw"),
+                ("WristCameraRgb.inputs:type", "rgb"),
+                (
+                    "WristCameraDepth.inputs:renderProductPath",
+                    wrist_depth_render_product_path,
+                ),
+                ("WristCameraDepth.inputs:frameId", WRIST_CAMERA_FRAME_ID),
+                ("WristCameraDepth.inputs:topicName", "/camera/wrist/depth"),
+                ("WristCameraDepth.inputs:type", "depth"),
+                (
+                    "WristCameraInfo.inputs:renderProductPath",
+                    wrist_depth_render_product_path,
+                ),
+                ("WristCameraInfo.inputs:frameId", WRIST_CAMERA_FRAME_ID),
+                ("WristCameraInfo.inputs:topicName", "/camera/wrist/camera_info"),
+            ]
+        )
+
+    og.Controller.edit(
+        {"graph_path": graph_path, "evaluator_name": "execution"},
+        {
+            og.Controller.Keys.CREATE_NODES: create_nodes,
+            og.Controller.Keys.CONNECT: connect,
+            og.Controller.Keys.SET_VALUES: set_values,
+        },
+    )
+
+    print(f"  [Scene] ROS2 localization graph created: {graph_path}")
+    print(f"          /imu/data IMU prim : {imu_path}")
+    if camera_render_product_path:
+        print("          /camera/rover/image_raw")
+        print("          /camera/rover/depth")
+        print("          /camera/rover/camera_info")
+    if wrist_color_render_product_path and wrist_depth_render_product_path:
+        print("          /camera/wrist/image_raw")
+        print("          /camera/wrist/depth")
+        print("          /camera/wrist/camera_info")
+    return graph_path
+
+
 def _freeze_rover_drives(rover_prim) -> int:
-    """rover 의 모든 drive 를 freeze: target=0, stiffness/damping 매우 큼.
-    휠/조향이 멋대로 돌지 않게."""
+    """Freeze only rover wheel/steer drives while leaving arm/gripper drives intact."""
     n = 0
     for prim in Usd.PrimRange(rover_prim):
-        for drv_type in ("angular", "linear"):
-            drv = UsdPhysics.DriveAPI.Get(prim, drv_type)
-            if drv:
-                drv.GetTargetPositionAttr().Set(0.0)
-                drv.GetTargetVelocityAttr().Set(0.0)
-                drv.GetStiffnessAttr().Set(1e8)
-                drv.GetDampingAttr().Set(1e6)
-                drv.GetMaxForceAttr().Set(1e7)
-                n += 1
+        name = prim.GetName()
+        if not (_is_drive_joint_name(name) or _is_steer_joint_name(name)):
+            continue
+
+        drv = UsdPhysics.DriveAPI.Get(prim, "angular")
+        if not drv:
+            continue
+
+        drv.GetTargetPositionAttr().Set(0.0)
+        drv.GetTargetVelocityAttr().Set(0.0)
+        drv.GetStiffnessAttr().Set(1e8)
+        drv.GetDampingAttr().Set(1e6)
+        drv.GetMaxForceAttr().Set(1e7)
+        n += 1
+    return n
+
+
+def _configure_rover_drives_for_controller(rover_prim, log: bool = True) -> int:
+    """Allow OmniGraph/Python articulation controllers to command rover joints.
+
+    _freeze_rover_drives() is useful while assembling the scene, but it also
+    makes wheel drives fight velocity commands. For /cmd_vel graph control the
+    drive wheels must be velocity-controlled, while steering joints stay
+    position-controlled.
+    """
+    n = 0
+    for prim in Usd.PrimRange(rover_prim):
+        name = prim.GetName()
+        drv = UsdPhysics.DriveAPI.Get(prim, "angular")
+        if not drv:
+            continue
+
+        if _is_drive_joint_name(name):
+            drv.GetTargetPositionAttr().Set(0.0)
+            drv.GetTargetVelocityAttr().Set(0.0)
+            drv.GetStiffnessAttr().Set(0.0)
+            drv.GetDampingAttr().Set(1e5)
+            drv.GetMaxForceAttr().Set(1e7)
+            n += 1
+        elif _is_steer_joint_name(name):
+            drv.GetTargetPositionAttr().Set(0.0)
+            drv.GetTargetVelocityAttr().Set(0.0)
+            drv.GetStiffnessAttr().Set(1e8)
+            drv.GetDampingAttr().Set(1e6)
+            drv.GetMaxForceAttr().Set(1e7)
+
+    if log:
+        print(f"  [Drive] rover drives configured for controller ({n} wheel drives)")
     return n
 
 
@@ -437,7 +803,7 @@ def _is_steer_joint_name(name: str) -> bool:
     )
 
 
-def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
+def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED, log: bool = True) -> int:
     """Drive wheel target velocity 설정.
 
     새 모델은 Stage 에 FL_Drive, FR_Drive ... 형태로 보이고, 예전 모델은
@@ -457,7 +823,8 @@ def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
             drv.GetStiffnessAttr().Set(0.0)
             drv.GetDampingAttr().Set(1e5)
             drv.GetMaxForceAttr().Set(1e7)
-            print(f"  [Drive] {prim.GetPath()} targetVelocity={speed}")
+            if log:
+                print(f"  [Drive] {prim.GetPath()} targetVelocity={speed}")
             n += 1
         elif _is_steer_joint_name(name):
             drv.GetTargetPositionAttr().Set(0.0)
@@ -466,7 +833,8 @@ def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
             drv.GetDampingAttr().Set(1e6)
             drv.GetMaxForceAttr().Set(1e7)
 
-    print(f"  [Drive] forward command applied to {n} wheel drives")
+    if log:
+        print(f"  [Drive] forward command applied to {n} wheel drives")
     return n
 
 
@@ -476,6 +844,281 @@ def _find_drive_dof_indices(dof_names):
         if _is_drive_joint_name(name):
             indices.append(idx)
     return np.array(indices, dtype=np.int32)
+
+
+def _joint_order_index(name: str, order) -> int:
+    upper = name.upper()
+    for idx, key in enumerate(order):
+        if upper.startswith(key) or f"_{key}" in upper or f"{key}_" in upper:
+            return idx
+    return len(order)
+
+
+def _ordered_rover_joint_names(rover_prim):
+    """Return joint names in the same order as Isaac Lab's Ackermann action."""
+    drive_names = []
+    steer_names = []
+
+    for prim in Usd.PrimRange(rover_prim):
+        name = prim.GetName()
+        if not UsdPhysics.DriveAPI.Get(prim, "angular"):
+            continue
+        if _is_drive_joint_name(name):
+            drive_names.append(name)
+        elif _is_steer_joint_name(name):
+            steer_names.append(name)
+
+    drive_order = ("FL", "FR", "CL", "CR", "ML", "MR", "RL", "RR")
+    steer_order = ("FL", "FR", "RL", "RR")
+    drive_names = sorted(set(drive_names), key=lambda n: _joint_order_index(n, drive_order))
+    steer_names = sorted(set(steer_names), key=lambda n: _joint_order_index(n, steer_order))
+
+    # Lab action emits six wheel speeds: FL, FR, middle-left, middle-right, RL, RR.
+    if len(drive_names) > 6:
+        carb.log_warn(f"[AckermannGraph] found {len(drive_names)} drive joints; using first 6: {drive_names[:6]}")
+        drive_names = drive_names[:6]
+    if len(steer_names) > 4:
+        carb.log_warn(f"[AckermannGraph] found {len(steer_names)} steer joints; using first 4: {steer_names[:4]}")
+        steer_names = steer_names[:4]
+
+    return steer_names, drive_names
+
+
+def _collect_controlled_joint_names(root_paths, exclude_names=()):
+    """Collect named joints with drive APIs under the given prim roots."""
+    stage = omni.usd.get_context().get_stage()
+    excluded = set(exclude_names)
+    names = []
+    seen = set()
+
+    for root_path in root_paths:
+        root = stage.GetPrimAtPath(root_path)
+        if not root.IsValid():
+            continue
+        for prim in Usd.PrimRange(root):
+            name = prim.GetName()
+            if name in excluded or name in seen:
+                continue
+            if _is_drive_joint_name(name) or _is_steer_joint_name(name):
+                continue
+            if not (
+                UsdPhysics.DriveAPI.Get(prim, "angular")
+                or UsdPhysics.DriveAPI.Get(prim, "linear")
+            ):
+                continue
+            names.append(name)
+            seen.add(name)
+
+    return names
+
+
+def _make_ackermann_script(steer_joint_names, drive_joint_names) -> str:
+    """Python body for OmniGraph ScriptNode.
+
+    This mirrors rover_envs.mdp.actions.ackermann_actions.ackermann(), but
+    runs inside the USD Action Graph so the saved scene can receive /cmd_vel.
+    """
+    return f"""
+import math
+import omni.graph.core as og
+
+STEER_JOINT_NAMES = {list(steer_joint_names)!r}
+DRIVE_JOINT_NAMES = {list(drive_joint_names)!r}
+WHEELBASE_LENGTH = {ACKERMANN_WHEELBASE_LENGTH!r}
+MIDDLE_WHEEL_DISTANCE = {ACKERMANN_MIDDLE_WHEEL_DISTANCE!r}
+REAR_FRONT_WHEEL_DISTANCE = {ACKERMANN_REAR_FRONT_WHEEL_DISTANCE!r}
+WHEEL_RADIUS = {ACKERMANN_WHEEL_RADIUS!r}
+OFFSET = {ACKERMANN_OFFSET!r}
+STEERING_GAIN = {ACKERMANN_STEERING_GAIN!r}
+WHEEL_VELOCITY_GAIN = {ACKERMANN_WHEEL_VELOCITY_GAIN!r}
+
+
+def _component(value, index):
+    try:
+        return float(value[index])
+    except Exception:
+        try:
+            return float(getattr(value, ("x", "y", "z")[index]))
+        except Exception:
+            return 0.0
+
+
+def setup(db):
+    pass
+
+
+def compute(db):
+    lin_vel = _component(db.inputs.linearVelocity, 0)
+    ang_vel = _component(db.inputs.angularVelocity, 2)
+
+    direction = 1.0 if lin_vel >= 0.0 else -1.0
+    if ang_vel > 0.0:
+        turn_direction = 1.0
+    elif ang_vel < 0.0:
+        turn_direction = -1.0
+    else:
+        turn_direction = 0.0
+
+    lin = abs(lin_vel)
+    ang = abs(ang_vel)
+    turning_radius = float("inf") if ang == 0.0 else lin / ang
+    minimum_radius = MIDDLE_WHEEL_DISTANCE * 0.8
+
+    r_ml = turning_radius - (MIDDLE_WHEEL_DISTANCE / 2.0) * turn_direction
+    r_mr = turning_radius + (MIDDLE_WHEEL_DISTANCE / 2.0) * turn_direction
+    r_fl = math.hypot(r_ml, WHEELBASE_LENGTH / 2.0)
+    r_fr = math.hypot(r_mr, WHEELBASE_LENGTH / 2.0)
+    r_rl = math.hypot(r_ml, WHEELBASE_LENGTH / 2.0)
+    r_rr = math.hypot(r_mr, WHEELBASE_LENGTH / 2.0)
+
+    if turning_radius < minimum_radius:
+        vel_fl = -ang * turn_direction
+        vel_fr = ang * turn_direction
+        vel_rl = -ang * turn_direction
+        vel_rr = ang * turn_direction
+        vel_ml = -ang * turn_direction
+        vel_mr = ang * turn_direction
+    else:
+        vel_fl = (r_fl * ang if ang > 0.0 else lin) * direction
+        vel_fr = (r_fr * ang if ang > 0.0 else lin) * direction
+        vel_rl = (r_rl * ang if ang > 0.0 else lin) * direction
+        vel_rr = (r_rr * ang if ang > 0.0 else lin) * direction
+        vel_ml = (r_ml * ang if ang > 0.0 else lin) * direction
+        vel_mr = (r_mr * ang if ang > 0.0 else lin) * direction
+
+    if turning_radius < minimum_radius:
+        theta_fl = -math.pi / 4.0
+        theta_fr = math.pi / 4.0
+        theta_rl = math.pi / 4.0
+        theta_rr = -math.pi / 4.0
+    else:
+        theta_fl = math.atan2((WHEELBASE_LENGTH / 2.0) - OFFSET, r_fl) * turn_direction
+        theta_fr = math.atan2((WHEELBASE_LENGTH / 2.0) - OFFSET, r_fr) * turn_direction
+        theta_rl = math.atan2((WHEELBASE_LENGTH / 2.0) + OFFSET, r_rl) * -turn_direction
+        theta_rr = math.atan2((WHEELBASE_LENGTH / 2.0) + OFFSET, r_rr) * -turn_direction
+
+    db.outputs.steerJointNames = STEER_JOINT_NAMES
+    db.outputs.driveJointNames = DRIVE_JOINT_NAMES
+    db.outputs.steeringAngles = [
+        STEERING_GAIN * theta_fl,
+        STEERING_GAIN * theta_fr,
+        STEERING_GAIN * theta_rl,
+        STEERING_GAIN * theta_rr,
+    ][:len(STEER_JOINT_NAMES)]
+    db.outputs.wheelVelocities = [
+        WHEEL_VELOCITY_GAIN * vel_fl / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_fr / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_ml / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_mr / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_rl / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_rr / (WHEEL_RADIUS * 2.0),
+    ][:len(DRIVE_JOINT_NAMES)]
+    db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+    return True
+"""
+
+
+def _create_rover_ackermann_drive_graph(robot_root: str, rover_prim) -> str:
+    """Create a saved Action Graph that drives the rover from ROS2 /cmd_vel."""
+    stage = omni.usd.get_context().get_stage()
+    graph_path = ROVER_ACKERMANN_GRAPH_PATH
+
+    if stage.GetPrimAtPath(graph_path).IsValid():
+        stage.RemovePrim(Sdf.Path(graph_path))
+
+    steer_joint_names, drive_joint_names = _ordered_rover_joint_names(rover_prim)
+    if len(steer_joint_names) != 4:
+        carb.log_warn(f"[AckermannGraph] expected 4 steer joints, found {len(steer_joint_names)}: {steer_joint_names}")
+    if len(drive_joint_names) != 6:
+        carb.log_warn(f"[AckermannGraph] expected 6 drive joints, found {len(drive_joint_names)}: {drive_joint_names}")
+
+    script = _make_ackermann_script(steer_joint_names, drive_joint_names)
+
+    og.Controller.edit(
+        {"graph_path": graph_path, "evaluator_name": "execution"},
+        {
+            og.Controller.Keys.CREATE_NODES: [
+                ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                ("Context", "isaacsim.ros2.bridge.ROS2Context"),
+                ("SubscribeCmdVel", "isaacsim.ros2.bridge.ROS2SubscribeTwist"),
+                ("Ackermann", "omni.graph.scriptnode.ScriptNode"),
+                ("SteerController", "isaacsim.core.nodes.IsaacArticulationController"),
+                ("DriveController", "isaacsim.core.nodes.IsaacArticulationController"),
+            ],
+            og.Controller.Keys.CREATE_ATTRIBUTES: [
+                ("Ackermann.inputs:linearVelocity", "any"),
+                ("Ackermann.inputs:angularVelocity", "any"),
+                ("Ackermann.outputs:steerJointNames", "token[]"),
+                ("Ackermann.outputs:driveJointNames", "token[]"),
+                ("Ackermann.outputs:steeringAngles", "double[]"),
+                ("Ackermann.outputs:wheelVelocities", "double[]"),
+            ],
+            og.Controller.Keys.CONNECT: [
+                ("OnPlaybackTick.outputs:tick", "SubscribeCmdVel.inputs:execIn"),
+                ("Context.outputs:context", "SubscribeCmdVel.inputs:context"),
+                ("SubscribeCmdVel.outputs:execOut", "Ackermann.inputs:execIn"),
+                ("SubscribeCmdVel.outputs:linearVelocity", "Ackermann.inputs:linearVelocity"),
+                ("SubscribeCmdVel.outputs:angularVelocity", "Ackermann.inputs:angularVelocity"),
+                ("Ackermann.outputs:execOut", "SteerController.inputs:execIn"),
+                ("Ackermann.outputs:execOut", "DriveController.inputs:execIn"),
+                ("Ackermann.outputs:steerJointNames", "SteerController.inputs:jointNames"),
+                ("Ackermann.outputs:steeringAngles", "SteerController.inputs:positionCommand"),
+                ("Ackermann.outputs:driveJointNames", "DriveController.inputs:jointNames"),
+                ("Ackermann.outputs:wheelVelocities", "DriveController.inputs:velocityCommand"),
+            ],
+            og.Controller.Keys.SET_VALUES: [
+                ("SubscribeCmdVel.inputs:topicName", ROVER_CMD_VEL_TOPIC),
+                ("Ackermann.inputs:script", script),
+                ("SteerController.inputs:robotPath", robot_root),
+                ("DriveController.inputs:robotPath", robot_root),
+            ],
+        },
+    )
+
+    print(f"  [Scene] ROS2 Ackermann drive graph created: {graph_path}")
+    print(f"          subscribe Twist: {ROVER_CMD_VEL_TOPIC}")
+    print(f"          steer joints   : {steer_joint_names}")
+    print(f"          drive joints   : {drive_joint_names}")
+    return graph_path
+
+
+def _create_rover_state_publishers_graph(robot_root: str) -> str:
+    """Publish raw articulation joint states with Isaac's built-in ROS2 node.
+
+    Filtering into /rover/wheel_states and arm-focused /joint_states should be
+    done by a normal ROS2 node outside Isaac Sim. This keeps the Isaac graph on
+    official bridge nodes and avoids rclpy inside ScriptNode.
+    """
+    stage = omni.usd.get_context().get_stage()
+    graph_path = ROVER_STATE_GRAPH_PATH
+
+    if stage.GetPrimAtPath(graph_path).IsValid():
+        stage.RemovePrim(Sdf.Path(graph_path))
+
+    og.Controller.edit(
+        {"graph_path": graph_path, "evaluator_name": "execution"},
+        {
+            og.Controller.Keys.CREATE_NODES: [
+                ("OnPlaybackTick", "omni.graph.action.OnPlaybackTick"),
+                ("Context", "isaacsim.ros2.bridge.ROS2Context"),
+                ("ReadSimTime", "isaacsim.core.nodes.IsaacReadSimulationTime"),
+                ("PublishJointStateRaw", "isaacsim.ros2.bridge.ROS2PublishJointState"),
+            ],
+            og.Controller.Keys.CONNECT: [
+                ("OnPlaybackTick.outputs:tick", "PublishJointStateRaw.inputs:execIn"),
+                ("Context.outputs:context", "PublishJointStateRaw.inputs:context"),
+                ("ReadSimTime.outputs:simulationTime", "PublishJointStateRaw.inputs:timeStamp"),
+            ],
+            og.Controller.Keys.SET_VALUES: [
+                ("PublishJointStateRaw.inputs:topicName", JOINT_STATES_RAW_TOPIC),
+                ("PublishJointStateRaw.inputs:targetPrim", [usdrt.Sdf.Path(robot_root)]),
+            ],
+        },
+    )
+
+    print(f"  [Scene] ROS2 rover state publishers graph created: {graph_path}")
+    print(f"          {JOINT_STATES_RAW_TOPIC}: raw articulation JointState")
+    return graph_path
 
 
 # ─── Scene 구축 ─────────────────────────────────────────────────────────────
@@ -523,8 +1166,10 @@ def build_scene():
             for child in mars_prim.GetChildren():
                 print(f"    {child.GetPath()}")
 
-    # ② rover_instance 대신 Mars_Rover.usd reference (T2 가 선택한 detailed 모델)
-    print("\n[2/5] Adding Mars_Rover.usd …")
+    # ② rover + M0609 + RG2-FT 통합 vehicle.usd reference
+    print("\n[2/5] Adding integrated vehicle.usd …")
+    if not ROVER_USD.exists():
+        raise FileNotFoundError(ROVER_USD)
     rover_prim_path = "/World/Vehicle/rover"
     stage.DefinePrim("/World/Vehicle", "Xform")
     rover_prim = stage.DefinePrim(rover_prim_path, "Xform")
@@ -544,141 +1189,34 @@ def build_scene():
     xform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(1, 1, 1))
     for _ in range(10):
         simulation_app.update()
-    n = _freeze_rover_drives(rover_prim)
-    print(f"  [Scene] rover @ {ROVER_SPAWN_POS}  (drives frozen: {n})")
 
-    # ③ M0609 URDF import (fix_base=False → floating-base).
-    carb.log_warn(f"[T2-DEBUG] === STEP 3: M0609 URDF import ===")
-    carb.log_warn(f"[T2-DEBUG] CONFIG M0609_BASE_POS = {M0609_BASE_POS}")
-    carb.log_warn(f"[T2-DEBUG] CONFIG M0609_MOUNT_OFFSET_Z = {M0609_MOUNT_OFFSET_Z}")
-    robot_root = _import_urdf(str(M0609_URDF), fix_base=False)
-
-    # DEBUG: import 직후 실제 prim 구조 확인
-    m0609_root_prim = stage.GetPrimAtPath(robot_root)
-    carb.log_warn(f"[T2-DEBUG] robot_root = {robot_root}  valid={m0609_root_prim.IsValid()}  type={m0609_root_prim.GetTypeName()}")
-    carb.log_warn(f"[T2-DEBUG] robot_root APIs: {m0609_root_prim.GetAppliedSchemas()}")
-    carb.log_warn(f"[T2-DEBUG] robot_root children: {[c.GetName() for c in m0609_root_prim.GetChildren()][:10]}")
-    # 어느 prim 이 ArticulationRootAPI 가지고 있나
-    for prim in Usd.PrimRange(m0609_root_prim):
-        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
-            carb.log_warn(f"[T2-DEBUG] ArticulationRoot prim: {prim.GetPath()}")
-
-    # import 직후 base_link world pos
-    bl_path = _find_prim_path_by_name(robot_root, "base_link")
-    if bl_path:
-        bl = stage.GetPrimAtPath(bl_path)
-        bl_world = UsdGeom.Xformable(bl).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world BEFORE translate: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
-
-    # URDF importer 가 만든 articulation root prim 을 옮긴다.
-    # ⚠️ 핵심: USD xformOp 만 직접 수정하면 USD prim 은 옮겨지지만 PhysX 내부
-    # rigid body pose 는 안 바뀜 (GUI 표시와 시각 위치 분리). GUI 의 transform
-    # gizmo 가 사용하는 'TransformPrimSRTCommand' 를 통해 set 해야 양쪽 sync.
-    omni.kit.commands.execute(
-        "TransformPrimSRTCommand",
-        path=robot_root,
-        new_translation=Gf.Vec3d(*M0609_BASE_POS),
-        new_rotation_euler=Gf.Vec3d(0, 0, 0),
-        new_scale=Gf.Vec3d(1, 1, 1),
-    )
-    for _ in range(10):
-        simulation_app.update()
-    carb.log_warn(f"[T2-DEBUG] M0609 root translate → {M0609_BASE_POS} (via TransformPrimSRTCommand)")
-
-    # translate 직후 실제 world 위치 (정상이면 base_link ≈ M0609_BASE_POS)
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER translate: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})  ← 기대값 {M0609_BASE_POS}")
-    root_world = UsdGeom.Xformable(m0609_root_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()).ExtractTranslation()
-    carb.log_warn(f"[T2-DEBUG] robot_root world AFTER translate: ({root_world[0]:+.3f}, {root_world[1]:+.3f}, {root_world[2]:+.3f})")
-
-    # ④ RG2 URDF import (floating, M0609 ee 에 결합)
-    print("\n[4/5] Importing RG2 URDF + assembling to M0609 ee …")
-    gripper_root = _import_urdf(str(RG2_URDF), fix_base=False)
-    robot_ee = _find_prim_path_by_name(robot_root, M0609_EE_LINK) \
-               or f"{robot_root}/{M0609_EE_LINK}"
-    gripper_base = _find_prim_path_by_name(gripper_root, RG2_BASE_LINK) \
-                   or f"{gripper_root}/{RG2_BASE_LINK}"
-    _assemble(robot_root, robot_ee, gripper_root, gripper_base,
-              "Gripper", "m0609_rg2")
-    print(f"  [Assembly] M0609/{M0609_EE_LINK} ↔ RG2/{RG2_BASE_LINK}")
-
-    # DEBUG: RG2 assemble 후 M0609 위치 변동 확인
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER RG2 assemble: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
-
-    # ⑤ rover Body ↔ M0609 base_link 결합 (rover 가 M0609 articulation 의 sub-tree 가 됨)
-    print("\n[5/5] Assembling rover ↔ M0609 …")
-    m0609_base = _find_prim_path_by_name(robot_root, "base_link") \
-                 or f"{robot_root}/base_link"
+    robot_root = _find_articulation_root_path(rover_prim_path)
     rover_body = _find_prim_path_by_name(rover_prim_path, "Body") \
                  or f"{rover_prim_path}/Body"
-    print(f"  [Assembly] rover/Body ({rover_body}) ↔ M0609/base_link ({m0609_base})")
-    # ⚠️ RobotAssembler 는 attach 의 mount 점을 base 의 mount 점 위치로 강제
-    # 정렬함 (offset=0). m0609 를 rover Body 위 (0.15274, 0, 0.21232) offset
-    # 위치에 두려면, rover 측에 그 offset 위치를 가리키는 Xform "mount point"
-    # 를 만들어서 그걸 attach_mount 로 사용.
-    # ⚠️ EditTarget 을 root layer 로 명시 — 이전 _assemble 가 sublayer 로 바꿔둔 상태일 수 있음.
-    stage.SetEditTarget(Usd.EditTarget(stage.GetRootLayer()))
-    rover_mount_path = f"{rover_body}/M0609_Mount"
-    mount_prim = stage.DefinePrim(rover_mount_path, "Xform")
-    if not mount_prim.IsValid():
-        raise RuntimeError(f"Failed to create mount prim at {rover_mount_path}")
-    UsdGeom.Xformable(mount_prim).AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
-        Gf.Vec3d(
-            float(M0609_BASE_POS[0] - ROVER_SPAWN_POS[0]),
-            float(M0609_BASE_POS[1] - ROVER_SPAWN_POS[1]),
-            float(M0609_BASE_POS[2] - ROVER_SPAWN_POS[2]),
-        )
+    m0609_base = _find_prim_path_by_name(rover_prim_path, "base_link") \
+                 or robot_root
+
+    n = _freeze_rover_drives(rover_prim)
+    print(f"  [Scene] integrated vehicle @ {ROVER_SPAWN_POS}  (drives frozen: {n})")
+    print(f"  [Scene] articulation root: {robot_root}")
+    print(f"  [Scene] rover body       : {rover_body}")
+
+    imu_path = _attach_imu_sensor(rover_body)
+    _, camera_render_product_path = _attach_rover_camera(rover_body)
+    wrist_color_render_product_path, wrist_depth_render_product_path = (
+        _create_wrist_camera_render_products(rover_prim_path)
     )
-    for _ in range(5):
-        simulation_app.update()
-    # 검증: mount Xform 이 의도된 world 위치에 author 됐는지
-    mount_world = UsdGeom.Xformable(mount_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default()).ExtractTranslation()
-    carb.log_warn(f"[T2-DEBUG] M0609_Mount world pos: ({mount_world[0]:+.3f}, {mount_world[1]:+.3f}, {mount_world[2]:+.3f}) (기대: {M0609_BASE_POS})")
-    # 이제 m0609.base_link 가 M0609_Mount 위치로 정렬됨 → rover.Body 위 offset 자세
-    _assemble(
-        robot_root, m0609_base,
-        rover_prim_path, rover_mount_path,
-        "RoverMount", "m0609_on_rover",
+    _create_localization_ros2_graph(
+        imu_path,
+        camera_render_product_path,
+        wrist_color_render_product_path,
+        wrist_depth_render_product_path,
     )
-
-    # DEBUG: rover assemble 후 M0609 / rover Body 위치 (이게 시뮬 시작 전 최종)
-    if bl_path:
-        bl_world = UsdGeom.Xformable(stage.GetPrimAtPath(bl_path)).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] base_link world AFTER rover assemble: ({bl_world[0]:+.3f}, {bl_world[1]:+.3f}, {bl_world[2]:+.3f})")
-    rb_prim = stage.GetPrimAtPath(rover_body)
-    if rb_prim.IsValid():
-        rb_world = UsdGeom.Xformable(rb_prim).ComputeLocalToWorldTransform(
-            Usd.TimeCode.Default()).ExtractTranslation()
-        carb.log_warn(f"[T2-DEBUG] rover Body world AFTER rover assemble: ({rb_world[0]:+.3f}, {rb_world[1]:+.3f}, {rb_world[2]:+.3f})")
-
-    # rover drive re-freeze (assemble 중에 풀릴 수 있음)
-    _freeze_rover_drives(rover_prim)
-
-    _attach_rear_basket(rover_body)
-
-    # 시각: m0609 (+ RG2) 를 rover 처럼 어두운 색으로 paint
-    _paint_subtree_dark(robot_root, rgb=(0.08, 0.08, 0.08))
+    _create_rover_ackermann_drive_graph(robot_root, rover_prim)
+    _create_rover_state_publishers_graph(robot_root)
 
     for _ in range(10):
         simulation_app.update()
-
-    # 디버그: 주요 link world pose (시뮬 시작 전 최종)
-    print("\n[DEBUG] Key world positions (pre-simulation):")
-    for path in (rover_body, m0609_base, robot_ee, gripper_base):
-        prim = stage.GetPrimAtPath(path)
-        if prim and prim.IsValid():
-            t = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-                Usd.TimeCode.Default()).ExtractTranslation()
-            print(f"  {path}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
 
     return rover_prim, robot_root, rover_body, m0609_base
 
@@ -691,6 +1229,8 @@ def main():
                         help="씬만 띄우고 로버 전진 명령은 주지 않음")
     parser.add_argument("--drive-speed", type=float, default=AUTO_DRIVE_SPEED,
                         help="로버 전진 wheel target velocity")
+    parser.add_argument("--save-scene", action="store_true",
+                        help=f"구성된 localization scene USD 저장: {LOCALIZATION_SCENE_USD}")
     args = parser.parse_args()
 
     world = World(stage_units_in_meters=1.0)
@@ -699,58 +1239,62 @@ def main():
     print("\n[World] Reset …")
     world.reset()
 
-    # reset 후 rover drive 가 풀릴 수 있어 다시 freeze
-    _freeze_rover_drives(rover_prim)
+    # reset 후 drive 상태가 바뀔 수 있어 다시 설정한다. --no-drive 는 Python
+    # 주행만 끄는 옵션이고, /cmd_vel Action Graph 제어는 계속 허용해야 한다.
+    _configure_rover_drives_for_controller(rover_prim)
 
     # ⚠️ Articulation.set_world_pose 호출 제거. FixedJoint 가 양쪽 articulation 의
     # 상대 위치를 잡고 있는데 set_world_pose 가 한쪽만 강제 이동하면 joint 가
     # 깨지면서 m0609 가 분리됨. FixedJoint 가 USD authored pose 를 그대로 유지함.
     stage = omni.usd.get_context().get_stage()
 
-    # DEBUG: world.reset 후 위치
-    stage = omni.usd.get_context().get_stage()
-    carb.log_warn(f"[T2-DEBUG] === AFTER world.reset + set_world_pose ===")
-    for label, p in [("rover Body", rover_body_path), ("M0609 base_link", m0609_base_path)]:
-        prim = stage.GetPrimAtPath(p)
-        if prim.IsValid():
-            t = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
-                Usd.TimeCode.Default()).ExtractTranslation()
-            carb.log_warn(f"[T2-DEBUG] {label}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
+    if args.save_scene:
+        LOCALIZATION_SCENE_USD.parent.mkdir(parents=True, exist_ok=True)
+        stage.GetRootLayer().Export(str(LOCALIZATION_SCENE_USD))
+        print(f"\n[Save] scene USD saved: {LOCALIZATION_SCENE_USD}")
 
     drive_articulation = None
     drive_indices = np.array([], dtype=np.int32)
 
     if not args.no_drive:
+        try:
+            drive_articulation = SingleArticulation(
+                prim_path=robot_root,
+                name="rover_m0609_drive_articulation",
+            )
+            drive_articulation.initialize()
+            drive_indices = _find_drive_dof_indices(drive_articulation.dof_names)
+            print("[Drive] articulation root:", robot_root)
+            print(f"[Drive] drive DOF count = {len(drive_indices)}")
+            for idx in drive_indices:
+                print(f"  {idx}: {drive_articulation.dof_names[idx]}")
+        except Exception as exc:
+            carb.log_warn(f"[Drive] articulation drive init failed; USD drive fallback only: {exc}")
+            drive_articulation = None
+            drive_indices = np.array([], dtype=np.int32)
+
+    if not args.no_drive:
         print(f"\n[Drive] rover forward speed = {args.drive_speed}")
         _command_rover_forward(rover_prim, args.drive_speed)
-        drive_articulation = SingleArticulation(
-            prim_path=robot_root,
-            name="rover_m0609_drive_articulation",
-        )
-        drive_articulation.initialize()
-        drive_indices = _find_drive_dof_indices(drive_articulation.dof_names)
-        print("[Drive] articulation root:", robot_root)
-        print("[Drive] DOF names:")
-        for i, name in enumerate(drive_articulation.dof_names):
-            mark = "  <-- drive" if i in set(drive_indices.tolist()) else ""
-            print(f"  {i}: {name}{mark}")
-        print(f"[Drive] drive DOF count = {len(drive_indices)}")
 
     if args.auto_play or not args.no_drive:
         world.play()
         print("\n[Play] auto-play ON")
 
     print("\n=== 씬 준비 완료. 정지하려면 터미널에서 Ctrl+C ===")
-    while simulation_app.is_running():
-        if drive_articulation is not None and len(drive_indices) > 0:
-            joint_velocities = np.zeros(drive_articulation.num_dof)
-            joint_velocities[drive_indices] = args.drive_speed
-            drive_articulation.apply_action(
-                ArticulationAction(joint_velocities=joint_velocities)
-            )
-        world.step(render=True)
-
-    simulation_app.close()
+    try:
+        while simulation_app.is_running():
+            if drive_articulation is not None and len(drive_indices) > 0:
+                joint_velocities = np.zeros(drive_articulation.num_dof)
+                joint_velocities[drive_indices] = args.drive_speed
+                drive_articulation.apply_action(
+                    ArticulationAction(joint_velocities=joint_velocities)
+                )
+            elif not args.no_drive:
+                _command_rover_forward(rover_prim, args.drive_speed, log=False)
+            world.step(render=True)
+    finally:
+        simulation_app.close()
 
 
 if __name__ == "__main__":
