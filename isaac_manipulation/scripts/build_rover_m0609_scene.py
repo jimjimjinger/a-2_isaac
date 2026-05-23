@@ -10,6 +10,12 @@ manipulator 자산(rover+M0609+RG2)을 spawn.
 사용:
     isaac-python scripts/build_rover_m0609_scene.py
     isaac-python scripts/build_rover_m0609_scene.py --auto-play
+    # 결합 stage 를 단일 USD 로 저장 (reference 유지, 가벼움):
+    isaac-python scripts/build_rover_m0609_scene.py \
+        --export ../isaac_sim/assets/rover_m0609_assembled.usd
+    # 자가포함 (flatten, 다른 PC 배포용, 큰 파일):
+    isaac-python scripts/build_rover_m0609_scene.py \
+        --export ../isaac_sim/assets/rover_m0609_assembled.usd --export-flatten
 """
 from __future__ import annotations
 
@@ -270,6 +276,32 @@ def _freeze_rover_drives(rover_prim) -> int:
     return n
 
 
+def _export_stage(out_path: str, flatten: bool) -> None:
+    """현재 in-memory stage 를 USD 로 저장.
+
+    flatten=False : root layer 만 export → mars_world/Mars_Rover.usd 등 외부
+                    reference 는 그대로 link 됨 (가볍지만 의존성 필요).
+    flatten=True  : 모든 reference 를 합성해서 단일 파일로 직렬화 (자가포함,
+                    파일 크기 큼). 다른 PC/엔진으로 배포할 때 사용.
+
+    ⚠️ Flatten 은 RobotAssembler 가 만든 FixedJoint 와 URDF importer 가 author
+    한 ArticulationRoot 등 physics schema 를 유지하므로 Isaac Sim 에 다시
+    로드 시 articulation 이 그대로 재구성됨.
+    """
+    stage = omni.usd.get_context().get_stage()
+    out_path = os.path.abspath(out_path)
+    out_dir = os.path.dirname(out_path)
+    if out_dir and not os.path.isdir(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+    if flatten:
+        flat_layer = stage.Flatten()
+        flat_layer.Export(out_path)
+        print(f"\n[Export] flattened USD (자가포함) → {out_path}")
+    else:
+        stage.GetRootLayer().Export(out_path)
+        print(f"\n[Export] root layer (reference 유지) → {out_path}")
+
+
 # ─── Scene 구축 ─────────────────────────────────────────────────────────────
 def build_scene():
     stage = omni.usd.get_context().get_stage()
@@ -476,6 +508,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--auto-play", action="store_true",
                         help="씬 빌드 후 자동으로 Play")
+    parser.add_argument("--export", type=str, default=None, metavar="PATH",
+                        help="씬 빌드 후 결합된 USD 를 PATH 로 저장")
+    parser.add_argument("--export-flatten", action="store_true",
+                        help="--export 시 모든 reference 를 flatten (자가포함, 큰 파일)")
     args = parser.parse_args()
 
     world = World(stage_units_in_meters=1.0)
@@ -501,6 +537,10 @@ def main():
             t = UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(
                 Usd.TimeCode.Default()).ExtractTranslation()
             carb.log_warn(f"[T2-DEBUG] {label}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
+
+    # 결합된 stage 를 USD 로 저장 (요청 시). world.reset 후라 physics state 안정.
+    if args.export:
+        _export_stage(args.export, args.export_flatten)
 
     if args.auto_play:
         world.play()
