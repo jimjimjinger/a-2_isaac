@@ -53,7 +53,7 @@ reference·play 하면 **런타임 그래프 코드 없이** 토픽이 살아난
 
 | 토픽 | 사유 |
 |---|---|
-| `/odom` | Isaac 생성 odom 은 실세계 인터페이스로 부적합. 추후 v3 에 in-graph 화 예정(남음). 현재 coverage 는 `sim_ros2_bridge.py` 의 ground-truth odom 사용. |
+| `/odom` | Isaac 생성 odom 은 실세계 인터페이스로 부적합 (실세계는 wheel encoder 적분이 정직한 path). 현재 coverage 는 v3 가 발행하는 `/ground_truth/odom` (dev cheat) 을 `odom_to_estimated_pose` 어댑터로 받아 사용. 추후 정직한 wheel odometry 는 `/rover/wheel_states` 에서 유도 예정. |
 | `/tf`, `/tf_static` | 현 마일스톤 범위 밖. pick-place 단계에서 추가 예정(남음). |
 | `/clock` | 현 워크플로에 불필요. |
 
