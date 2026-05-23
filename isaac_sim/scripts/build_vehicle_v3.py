@@ -15,6 +15,9 @@ v3 자체에 inline 한 자립(standalone) 파일이다. v2 는 빌드 입력 �
                · 센서: IMU·joint·카메라 발행
                · 주행: /cmd_vel 구독 → ScriptNode Ackermann → 휠 관절 구동
                · 팔: /arm/joint_command(JointState) 구독 → m0609 관절 위치 제어
+               · GT (dev cheat): /ground_truth/odom 발행 — 로버 절대 world pose
+                 (ScriptNode 으로 articulation world transform 직접 읽음).
+                 졸업 시점엔 이 노드만 빼고 재bake 하면 cheat 제거.
 
 빌드:  <isaac-python> isaac_sim/scripts/build_vehicle_v3.py
 산출물: isaac_sim/assets/vehicle/vehicle_v3.usd
@@ -162,6 +165,49 @@ def compute(db):
 '''
 
 
+# Dev cheat — 로버 articulation 의 절대 world pose 를 in-graph 로 읽어
+# /ground_truth/odom 으로 발행. ScriptNode 가 stage traverse 로 articulation
+# root 를 찾아 LocalToWorldTransform 계산. terrain 무관(자기 path 의존 X).
+GT_SCRIPT = '''
+from pxr import UsdGeom
+import omni.usd
+import omni.graph.core as og
+
+
+def setup(db):
+    pass
+
+
+def compute(db):
+    stage = omni.usd.get_context().get_stage()
+    artic = None
+    # articulation root prim 찾기 (PhysicsArticulationRootAPI 있는 첫 prim)
+    for prim in stage.Traverse():
+        if prim.HasAPI("PhysicsArticulationRootAPI"):
+            artic = prim
+            break
+    # fallback: m0609/base_link 이름 패턴
+    if artic is None:
+        for prim in stage.Traverse():
+            if prim.GetName() == "base_link" and "m0609" in str(prim.GetPath()):
+                artic = prim
+                break
+    if artic is None:
+        return False
+    cache = UsdGeom.XformCache()
+    M = cache.GetLocalToWorldTransform(artic)
+    t = M.ExtractTranslation()
+    q = M.ExtractRotationQuat()
+    db.outputs.position = [float(t[0]), float(t[1]), float(t[2])]
+    qi = q.GetImaginary()
+    # ROS2 quaternion 순서: [x, y, z, w]
+    db.outputs.orientation = [float(qi[0]), float(qi[1]), float(qi[2]),
+                              float(q.GetReal())]
+    db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+    return True
+'''
+
+
 def _set_targets(node_path: str, input_name: str, target_path: str) -> None:
     """OmniGraph 노드의 target(relationship) 입력 설정.
 
@@ -251,6 +297,9 @@ def main() -> None:
                 # ── 팔 제어 (저수준 관절 명령) ──
                 ("SubJointCmd", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
                 ("ArmCtrl", "isaacsim.core.nodes.IsaacArticulationController"),
+                # ── GT pose 발행 (dev cheat, 졸업 시 이 두 노드만 제거) ──
+                ("ReadGtPose", "omni.graph.scriptnode.ScriptNode"),
+                ("PubGtOdom", "isaacsim.ros2.bridge.ROS2PublishOdometry"),
             ],
             keys.CREATE_ATTRIBUTES: [
                 # ScriptNode 커스텀 포트 — Ackermann 입출력
@@ -260,6 +309,9 @@ def main() -> None:
                 ("Ackermann.outputs:driveJointNames", "token[]"),
                 ("Ackermann.outputs:steeringAngles", "double[]"),
                 ("Ackermann.outputs:wheelVelocities", "double[]"),
+                # ScriptNode 커스텀 포트 — GT pose 출력
+                ("ReadGtPose.outputs:position", "vectord[3]"),
+                ("ReadGtPose.outputs:orientation", "double[4]"),
             ],
             keys.SET_VALUES: [
                 # 센서
@@ -297,6 +349,11 @@ def main() -> None:
                 ("Ackermann.inputs:script", ACK_SCRIPT),
                 # 팔 — arm_executor_node 가 /arm/joint_command 로 관절 위치 지령
                 ("SubJointCmd.inputs:topicName", "/arm/joint_command"),
+                # GT pose — dev cheat, 졸업 시 제거
+                ("ReadGtPose.inputs:script", GT_SCRIPT),
+                ("PubGtOdom.inputs:topicName", "/ground_truth/odom"),
+                ("PubGtOdom.inputs:odomFrameId", "world"),
+                ("PubGtOdom.inputs:chassisFrameId", "base_link"),
             ],
             keys.CONNECT: [
                 # 센서 — IMU
@@ -355,6 +412,14 @@ def main() -> None:
                 ("SubJointCmd.outputs:jointNames", "ArmCtrl.inputs:jointNames"),
                 ("SubJointCmd.outputs:positionCommand",
                  "ArmCtrl.inputs:positionCommand"),
+                # GT pose — ScriptNode 가 절대 world pose 읽어 PubOdom 으로
+                ("OnTick.outputs:tick", "ReadGtPose.inputs:execIn"),
+                ("ReadGtPose.outputs:execOut", "PubGtOdom.inputs:execIn"),
+                ("ReadGtPose.outputs:position", "PubGtOdom.inputs:position"),
+                ("ReadGtPose.outputs:orientation",
+                 "PubGtOdom.inputs:orientation"),
+                ("ReadSimTime.outputs:simulationTime",
+                 "PubGtOdom.inputs:timeStamp"),
             ],
         },
     )
@@ -368,7 +433,8 @@ def main() -> None:
     _set_targets(f"{GRAPH}/DriveCtrl", "inputs:targetPrim", ARTIC)
     _set_targets(f"{GRAPH}/ArmCtrl", "inputs:targetPrim", ARTIC)
     print("[build_v3] Action Graph author 완료 — 센서(IMU·joint·카메라) + "
-          "주행(/cmd_vel→Ackermann→휠) + 팔(/arm/joint_command→m0609)")
+          "주행(/cmd_vel→Ackermann→휠) + 팔(/arm/joint_command→m0609) + "
+          "GT(/ground_truth/odom, dev cheat)")
 
     # 카메라 위치 조정
     _adjust_camera(stage)
