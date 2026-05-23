@@ -28,3 +28,7 @@ physics_compare/
 # 위 글로벌 ignore 패턴의 예외 — isaac_sim/assets/ 안의 것만 추적.
 !isaac_sim/assets/doosan-robot2/
 !isaac_sim/assets/onrobot_rg2/
+
+# T2 perception 학습 데이터 / 데모 출력 — 용량 (>400MB) 큼, manual_capture.py 로 재생성 가능
+isaac_perception/dataset/
+isaac_perception/runs/
