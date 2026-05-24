@@ -6,6 +6,85 @@
 
 ---
 
+## 0. 시스템 기술 스택
+
+### 웹 서버 구성
+
+| 라이브러리 | 역할 |
+|-----------|------|
+| **FastAPI** | REST API + WebSocket 서버 프레임워크 |
+| **uvicorn** | ASGI 웹 서버 (FastAPI 실행 엔진) |
+| **rclpy** | ROS2 Python 클라이언트 |
+| **MultiThreadedExecutor** | ROS2 콜백 병렬 처리 (4스레드) |
+| **OpenCV (cv2)** | ROS2 Image 메시지 → JPEG 인코딩 |
+| **numpy** | 픽셀 배열 변환 |
+
+### 서버 내부 구조
+
+```
+FastAPI (비동기, asyncio)  ─────────────────────────────
+    ├── WS /ws/camera      ← JPEG 카메라 스트림 (30 FPS)
+    ├── WS /ws/control     ← 브라우저 키 입력 수신
+    ├── WS /ws/status      ← IMU / 속도 데이터 (10 Hz)
+    ├── GET /health        ← 서버 상태 확인
+    ├── GET /debug         ← 카메라 수신 프레임 확인
+    └── Static /           ← index.html 정적 파일 서빙
+
+별도 스레드 (threading.Thread)
+    └── rclpy MultiThreadedExecutor (4스레드)
+            ├── sub: /camera/rover/image_raw
+            ├── sub: /imu/data
+            ├── pub: /cmd_vel
+            └── timer 20Hz: 속도 smoothing → /cmd_vel 발행
+```
+
+> FastAPI(비동기)와 rclpy(동기)의 충돌을 피하기 위해 rclpy를 별도 스레드에서 실행하고  
+> `threading.Lock`으로 데이터를 공유하는 구조.
+
+### 전체 통신 구조
+
+```
+Isaac Sim (PC 로컬)
+  vehicle_v3.usd + terrain_only.usd
+  ROS2 Action Graph
+    /cmd_vel 수신 → 휠 구동
+    /camera/rover/image_raw 발행 (60 Hz)
+    /imu/data 발행 (102 Hz)
+        │
+        │ ROS2 토픽 (PC 내부)
+        ▼
+웹 서버 main.py  192.168.10.66:8001
+  RoverBridgeNode (rclpy)
+    이미지 → JPEG → WS /ws/camera
+    키 상태 → 속도 smoothing → /cmd_vel
+    IMU → JSON → WS /ws/status
+        │
+        │ Wi-Fi WebSocket (192.168.10.x 대역)
+        ▼
+브라우저 / 핸드폰
+  http://192.168.10.66:8001
+```
+
+### 조종 신호 흐름
+
+```
+핸드폰 터치 / PC 키보드
+    ↓ WS /ws/control  (키 이벤트 발생 시)
+웹 서버 key_state 업데이트
+    ↓ 20Hz 타이머 + 속도 smoothing (4 m/s² 기울기)
+/cmd_vel (geometry_msgs/Twist) 발행
+    ↓ ROS2 토픽
+Isaac Sim 휠 구동 → 로버 이동
+    ↓
+카메라 새 프레임 생성
+    ↓ /camera/rover/image_raw
+웹 서버 JPEG 인코딩
+    ↓ WS /ws/camera  (새 프레임 도착 시만 전송)
+브라우저 화면 업데이트 (onload 후 blob URL 해제)
+```
+
+---
+
 ## 1. 분석 요약
 
 ### 1-1. `mars_terrain_generator_v2.py` ↔ `vehicle_v3.usd` 관계
@@ -264,7 +343,113 @@ self._cur_linear += max(-max_dl, min(max_dl, target_linear - self._cur_linear))
 
 ---
 
-## 9. 미해결 사항 / 향후 과제
+## 9. 로버 복구 모드 (강화학습 + M0609)
+
+### 9-1. 개요
+
+로버가 화성 지형에서 넘어졌을 때 M0609 로봇 팔이 자동으로 일으켜 세우는 복구 시스템.  
+Isaac Lab PPO 강화학습으로 복구 정책을 훈련하고, 웹 UI의 RECOVERY 버튼으로 수동 트리거 가능.
+
+### 9-2. 시스템 구조
+
+```
+Isaac Lab 학습 (오프라인)
+  recovery_env_cfg.py + recovery_mdp.py
+  train_recovery.py → policies/recovery_policy.pt
+
+                    ↓
+
+실시간 Isaac Sim
+  vehicle_v3.usd + m0609_isaac_sim.usd
+  RecoveryNode (recovery_node.py)
+    /imu/data → 넘어짐 감지 (|roll|>45° 또는 |pitch|>45°, 2초 지속)
+    /recovery/start 서비스 수신
+    recovery_policy.pt inference (22dim obs → 6dim action)
+    /m0609/joint_command 발행
+    /recovery/status 발행
+
+                    ↓
+
+웹 브라우저 / 핸드폰
+  RECOVERY 버튼 → POST /recovery/start
+  상태 표시: IDLE / FALLEN / RECOVERING / SUCCESS / TIMEOUT
+```
+
+### 9-3. RL 환경 설계
+
+| 항목 | 내용 |
+|------|------|
+| 알고리즘 | PPO (rsl_rl) |
+| 환경 수 | 256개 병렬 |
+| 물리 주기 | 200 Hz (화성 중력 3.72 m/s²) |
+| 정책 주기 | 50 Hz (decimation=4) |
+| 에피소드 길이 | 최대 10초 |
+
+**Observation (22차원)**
+
+| 항목 | 차원 |
+|------|:----:|
+| rover roll / pitch / yaw | 3 |
+| rover position z | 1 |
+| rover linear velocity (x,y,z) | 3 |
+| rover angular velocity (x,y,z) | 3 |
+| M0609 joint position (6축) | 6 |
+| M0609 joint velocity (6축) | 6 |
+
+**Action (6차원)**: M0609 joint_1~6 위치 목표 (normalized −1~+1)
+
+**Reward 설계**
+
+| 항목 | 가중치 | 내용 |
+|------|:------:|------|
+| upright_reward | +2.0 | exp(−3×(|roll|+|pitch|)) — 기립에 가까울수록 |
+| success_bonus | +100.0 | roll/pitch < 15° 달성 시 |
+| joint_vel_penalty | −0.01 | 관절 속도² 합 (부드러운 동작 유도) |
+| joint_limit_penalty | −1.0 | 관절 한계 초과 시 |
+
+**초기 상태**: rover roll 60~120° (옆으로 넘어진 상태), M0609 홈 자세
+
+### 9-4. 생성된 파일
+
+| 파일 | 설명 |
+|------|------|
+| `isaac_rl/isaac_rl/recovery/recovery_env_cfg.py` | Isaac Lab 환경 설정 (Scene, Obs, Action, Reward, Termination) |
+| `isaac_rl/isaac_rl/recovery/recovery_mdp.py` | Obs/Reward/Termination/Event 함수 구현 |
+| `isaac_rl/isaac_rl/recovery/train_recovery.py` | PPO 학습 진입점 |
+| `isaac_rl/isaac_rl/recovery/recovery_node.py` | ROS2 배포 노드 (낙하 감지 + 정책 inference) |
+| `web_controller/main.py` | `/recovery/start`, `/recovery/stop`, `/recovery/status` 엔드포인트 추가 |
+| `web_controller/static/index.html` | RECOVERY 버튼 + 상태 표시 추가 |
+
+### 9-5. 실행 방법
+
+**① RL 학습 (최초 1회, GPU 필요)**
+
+```bash
+/mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p \
+  ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery/train_recovery.py \
+  --num_envs 256 --headless --max_iterations 3000
+
+# TensorBoard로 학습 모니터링
+tensorboard --logdir ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/logs/recovery
+```
+
+**② 복구 노드 실행 (Isaac Sim 실행 후)**
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/dev_ws/rover_ws/install/setup.bash
+ros2 run isaac_rl recovery_node
+```
+
+**③ 웹 버튼 사용**
+
+- 브라우저 오른쪽 상단 **RECOVERY** 버튼 클릭
+- 상태: `IDLE` → `RECOVERING` → `SUCCESS`
+- 로버가 넘어지면 2초 후 **자동 트리거**
+
+---
+
+## 10. 미해결 사항 / 향후 과제
 
 | 항목 | 내용 |
 |------|------|

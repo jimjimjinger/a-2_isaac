@@ -33,6 +33,8 @@ try:
     from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
     from geometry_msgs.msg import Twist
     from sensor_msgs.msg import Image, Imu
+    from std_msgs.msg import String
+    from std_srvs.srv import Trigger
     _HAS_ROS = True
 except ImportError:
     _HAS_ROS = False
@@ -77,6 +79,7 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
         self._cur_angular = 0.0
         self._LINEAR_ACCEL  = 4.0   # m/s²  — 가속/감속 기울기
         self._ANGULAR_ACCEL = 3.0   # rad/s²
+        self._recovery_status = "IDLE"  # IDLE / FALLEN / RECOVERING / SUCCESS / TIMEOUT
 
         if _HAS_ROS:
             # Isaac Sim ROS2 Bridge는 BEST_EFFORT QoS로 발행 —
@@ -92,6 +95,11 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
                 Image, "/camera/rover/image_raw", self._on_image, _sensor_qos)
             self.create_subscription(
                 Imu, "/imu/data", self._on_imu, _sensor_qos)
+            self.create_subscription(
+                String, "/recovery/status", self._on_recovery_status, 10)
+            # 복구 서비스 클라이언트
+            self._recovery_start_cli = self.create_client(Trigger, "/recovery/start")
+            self._recovery_stop_cli  = self.create_client(Trigger, "/recovery/stop")
             # 20 Hz cmd_vel 발행
             self.create_timer(0.05, self._publish_cmd)
             self.get_logger().info(
@@ -146,6 +154,31 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
                 "gy": round(msg.angular_velocity.y, 3),
                 "gz": round(msg.angular_velocity.z, 3),
             }
+
+    # ── 복구 상태 콜백 ───────────────────────────────────────────────────────
+    def _on_recovery_status(self, msg: String):
+        with self._lock:
+            self._recovery_status = msg.data
+
+    def call_recovery_start(self):
+        if not _HAS_ROS:
+            return {"ok": False, "message": "ROS 없음"}
+        if not self._recovery_start_cli.service_is_ready():
+            return {"ok": False, "message": "recovery_node 미실행"}
+        future = self._recovery_start_cli.call_async(Trigger.Request())
+        return {"ok": True, "message": "복구 시작 요청 전송"}
+
+    def call_recovery_stop(self):
+        if not _HAS_ROS:
+            return {"ok": False, "message": "ROS 없음"}
+        if not self._recovery_stop_cli.service_is_ready():
+            return {"ok": False, "message": "recovery_node 미실행"}
+        future = self._recovery_stop_cli.call_async(Trigger.Request())
+        return {"ok": True, "message": "복구 중지 요청 전송"}
+
+    def get_recovery_status(self) -> str:
+        with self._lock:
+            return self._recovery_status
 
     # ── 키보드 상태 설정 (WebSocket에서 호출) ─────────────────────────────────
     def set_keys(self, key_state: dict):
@@ -335,6 +368,24 @@ def move(linear: float = 0.0, angular: float = 0.0):
 @app.get("/health")
 def health():
     return {"status": "ok", "ros": _HAS_ROS, "node_ready": _node is not None}
+
+@app.post("/recovery/start")
+def recovery_start():
+    if _node is None:
+        return {"ok": False, "message": "노드 미준비"}
+    return _node.call_recovery_start()
+
+@app.post("/recovery/stop")
+def recovery_stop():
+    if _node is None:
+        return {"ok": False, "message": "노드 미준비"}
+    return _node.call_recovery_stop()
+
+@app.get("/recovery/status")
+def recovery_status():
+    if _node is None:
+        return {"status": "UNKNOWN"}
+    return {"status": _node.get_recovery_status()}
 
 @app.get("/debug")
 def debug():

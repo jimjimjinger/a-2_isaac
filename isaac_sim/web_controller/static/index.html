@@ -282,6 +282,50 @@
   }
   #no-camera.hidden { display: none; }
 
+  /* ── 복구 버튼 (오른쪽 상단) ───────────────────────── */
+  #recovery-panel {
+    position: absolute;
+    top: 18px; right: 60px;
+    z-index: 20;
+    pointer-events: auto;
+  }
+  #recovery-btn {
+    padding: 7px 18px;
+    font-family: 'Courier New', monospace;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    background: rgba(0,0,0,0.6);
+    border: 1.5px solid rgba(255,170,0,0.6);
+    border-radius: 4px;
+    color: #ffaa00;
+    cursor: pointer;
+    backdrop-filter: blur(4px);
+    transition: all 0.15s ease;
+  }
+  #recovery-btn:hover {
+    background: rgba(255,170,0,0.2);
+    border-color: #ffaa00;
+    box-shadow: 0 0 12px rgba(255,170,0,0.5);
+  }
+  #recovery-btn.active {
+    background: rgba(255,170,0,0.3);
+    border-color: #ffaa00;
+    color: #fff;
+    animation: blink 0.8s step-end infinite;
+  }
+  #recovery-btn.success {
+    border-color: #00ff88;
+    color: #00ff88;
+  }
+  #recovery-status {
+    margin-top: 4px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: rgba(255,170,0,0.7);
+    text-align: center;
+  }
+
   /* ── 비상 정지 배너 ──────────────────────────────────── */
   #estop-banner {
     position: fixed;
@@ -450,6 +494,12 @@
       <span class="stat-value" id="st-angular">0.00</span>
     </div>
   </div>
+</div>
+
+<!-- 복구 버튼 -->
+<div id="recovery-panel">
+  <button id="recovery-btn" onclick="toggleRecovery()">RECOVERY</button>
+  <div id="recovery-status">IDLE</div>
 </div>
 
 <!-- 비상 정지 배너 -->
@@ -745,6 +795,46 @@ function addTouchKey(el, action) {
 for (const [action, el] of Object.entries(keyEls)) {
   addTouchKey(el, action);
 }
+
+// ── 복구 버튼 ──────────────────────────────────────────────────────────────
+const recoveryBtn    = document.getElementById('recovery-btn');
+const recoveryStatus = document.getElementById('recovery-status');
+let _recovering = false;
+
+async function toggleRecovery() {
+  if (_recovering) {
+    await fetch('/recovery/stop', { method: 'POST' });
+    _recovering = false;
+  } else {
+    await fetch('/recovery/start', { method: 'POST' });
+    _recovering = true;
+  }
+}
+
+// 복구 상태 폴링 (2초 간격)
+async function pollRecoveryStatus() {
+  try {
+    const res  = await fetch('/recovery/status');
+    const data = await res.json();
+    const s    = data.status || 'IDLE';
+    recoveryStatus.textContent = s;
+
+    const colors = {
+      IDLE:       'rgba(255,170,0,0.5)',
+      FALLEN:     '#ff4444',
+      RECOVERING: '#ffaa00',
+      SUCCESS:    '#00ff88',
+      TIMEOUT:    '#ff4444',
+    };
+    recoveryStatus.style.color = colors[s] || 'rgba(255,255,255,0.4)';
+
+    recoveryBtn.classList.remove('active', 'success');
+    if (s === 'RECOVERING') recoveryBtn.classList.add('active');
+    if (s === 'SUCCESS')    recoveryBtn.classList.add('success');
+    _recovering = (s === 'RECOVERING');
+  } catch {}
+}
+setInterval(pollRecoveryStatus, 2000);
 
 // ── 초기화 ────────────────────────────────────────────────────────────────
 connectCamera();
