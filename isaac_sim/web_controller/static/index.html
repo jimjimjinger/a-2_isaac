@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROVER CONTROL</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    font-family: 'Courier New', monospace;
+    color: #00ff88;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* ── 카메라 피드 ─────────────────────────────────────── */
+  #camera-view {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a0a;
+  }
+  #camera-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* 스캔라인 오버레이 (레이싱 느낌) */
+  #scanlines {
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* 모서리 비네팅 */
+  #vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center,
+      transparent 60%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* ── HUD 레이어 ──────────────────────────────────────── */
+  #hud {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* 모서리 브라켓 */
+  .corner {
+    position: absolute;
+    width: 40px; height: 40px;
+    border-color: rgba(0,255,136,0.6);
+    border-style: solid;
+  }
+  .corner-tl { top:12px; left:12px;
+    border-width: 2px 0 0 2px; }
+  .corner-tr { top:12px; right:12px;
+    border-width: 2px 2px 0 0; }
+  .corner-bl { bottom:12px; left:12px;
+    border-width: 0 0 2px 2px; }
+  .corner-br { bottom:12px; right:12px;
+    border-width: 0 2px 2px 0; }
+
+  /* ── 상단 바 ─────────────────────────────────────────── */
+  #top-bar {
+    position: absolute;
+    top: 18px;
+    left: 60px; right: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px;
+    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(0,255,136,0.25);
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+  }
+  .top-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  #status-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: #ff3333;
+    box-shadow: 0 0 6px #ff3333;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  #status-dot.connected {
+    background: #00ff88;
+    box-shadow: 0 0 8px #00ff88;
+  }
+  #status-text {
+    color: rgba(255,255,255,0.75);
+    font-size: 11px;
+  }
+  .title-label {
+    font-size: 15px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    color: #00ff88;
+    text-shadow: 0 0 12px rgba(0,255,136,0.6);
+  }
+  #fps-display {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 1px;
+  }
+
+  /* ── 속도계 (왼쪽 하단) ──────────────────────────────── */
+  #speed-panel {
+    position: absolute;
+    bottom: 30px; left: 30px;
+    width: 150px; height: 150px;
+  }
+  #speed-svg {
+    width: 100%; height: 100%;
+  }
+  #speed-value {
+    position: absolute;
+    bottom: 28px; left: 0; right: 0;
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+    color: #00ff88;
+    text-shadow: 0 0 10px rgba(0,255,136,0.8);
+  }
+  #speed-unit {
+    position: absolute;
+    bottom: 14px; left: 0; right: 0;
+    text-align: center;
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.5);
+  }
+
+  /* ── WASD 키 표시 (오른쪽 하단) ─────────────────────── */
+  #controls-panel {
+    position: absolute;
+    bottom: 25px; right: 30px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .key-row {
+    display: flex;
+    gap: 4px;
+  }
+  .key {
+    width: 38px; height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    border: 1.5px solid rgba(0,255,136,0.35);
+    border-radius: 5px;
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.45);
+    transition: all 0.07s ease;
+    backdrop-filter: blur(3px);
+  }
+  .key.active {
+    background: rgba(0,255,136,0.25);
+    border-color: #00ff88;
+    color: #00ff88;
+    box-shadow: 0 0 10px rgba(0,255,136,0.5),
+                inset 0 0 8px rgba(0,255,136,0.1);
+  }
+  .key-spacer {
+    width: 38px;
+  }
+  .key-hint {
+    margin-top: 6px;
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+  }
+
+  /* ── 조향 표시기 (하단 중앙) ────────────────────────── */
+  #steering-panel {
+    position: absolute;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  #steering-wheel {
+    width: 70px; height: 70px;
+    transition: transform 0.1s ease;
+  }
+  #steering-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* ── 상태 정보 (왼쪽 중간) ──────────────────────────── */
+  #status-panel {
+    position: absolute;
+    top: 50%; left: 20px;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(0,255,136,0.2);
+    border-radius: 4px;
+    padding: 10px 12px;
+    backdrop-filter: blur(3px);
+    min-width: 130px;
+  }
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    font-size: 10px;
+  }
+  .stat-label {
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 1px;
+  }
+  .stat-value {
+    color: #00ff88;
+    font-weight: bold;
+    text-shadow: 0 0 6px rgba(0,255,136,0.5);
+    min-width: 55px;
+    text-align: right;
+  }
+  .stat-divider {
+    border: none;
+    border-top: 1px solid rgba(0,255,136,0.1);
+    margin: 2px 0;
+  }
+
+  /* ── 카메라 없을 때 플레이스홀더 ────────────────────── */
+  #no-camera {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    z-index: 1;
+    color: rgba(255,255,255,0.3);
+  }
+  #no-camera .icon {
+    font-size: 48px;
+    opacity: 0.4;
+  }
+  #no-camera .msg {
+    font-size: 12px;
+    letter-spacing: 2px;
+  }
+  #no-camera.hidden { display: none; }
+
+  /* ── 비상 정지 배너 ──────────────────────────────────── */
+  #estop-banner {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(200,0,0,0.85);
+    border: 2px solid #ff3333;
+    border-radius: 8px;
+    padding: 16px 40px;
+    font-size: 22px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(255,0,0,0.8);
+    z-index: 50;
+    display: none;
+    animation: blink 0.5s step-end infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.4; } }
+</style>
+</head>
+<body>
+
+<!-- 카메라 피드 -->
+<div id="camera-view">
+  <img id="camera-img" alt="">
+</div>
+<div id="scanlines"></div>
+<div id="vignette"></div>
+
+<!-- 카메라 없을 때 표시 -->
+<div id="no-camera">
+  <div class="icon">📷</div>
+  <div class="msg">CAMERA FEED UNAVAILABLE</div>
+  <div class="msg" style="font-size:10px;opacity:0.6">Isaac Sim이 실행 중인지 확인하세요</div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <!-- 모서리 브라켓 -->
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+
+  <!-- 상단 바 -->
+  <div id="top-bar">
+    <div class="top-section">
+      <div id="status-dot"></div>
+      <span id="status-text">DISCONNECTED</span>
+    </div>
+    <div class="title-label">ROVER CONTROL</div>
+    <div class="top-section">
+      <span id="fps-display">CAM: -- FPS</span>
+    </div>
+  </div>
+
+  <!-- 속도계 (왼쪽 하단) -->
+  <div id="speed-panel">
+    <svg id="speed-svg" viewBox="0 0 150 150">
+      <!-- 배경 호 -->
+      <path d="M 20 125 A 70 70 0 0 1 130 125"
+        fill="none" stroke="rgba(0,255,136,0.1)" stroke-width="12"
+        stroke-linecap="round"/>
+      <!-- 속도 호 (JS에서 업데이트) -->
+      <path id="speed-arc" d="M 20 125 A 70 70 0 0 1 130 125"
+        fill="none" stroke="#00ff88" stroke-width="12"
+        stroke-linecap="round"
+        stroke-dasharray="220 220"
+        stroke-dashoffset="220"
+        style="filter:drop-shadow(0 0 6px rgba(0,255,136,0.8))"/>
+      <!-- 역방향 호 (후진 — 빨간색) -->
+      <path id="speed-arc-back" d="M 20 125 A 70 70 0 0 1 130 125"
+        fill="none" stroke="#ff4444" stroke-width="12"
+        stroke-linecap="round"
+        stroke-dasharray="220 220"
+        stroke-dashoffset="220"
+        style="filter:drop-shadow(0 0 6px rgba(255,68,68,0.8))"/>
+      <!-- 틱 마크 -->
+      <g stroke="rgba(0,255,136,0.4)" stroke-width="1">
+        <line x1="75" y1="15" x2="75" y2="22" transform="rotate(-90, 75, 125)"/>
+        <line x1="75" y1="15" x2="75" y2="22" transform="rotate(-45, 75, 125)"/>
+        <line x1="75" y1="15" x2="75" y2="22" transform="rotate(0, 75, 125)"/>
+        <line x1="75" y1="15" x2="75" y2="22" transform="rotate(45, 75, 125)"/>
+        <line x1="75" y1="15" x2="75" y2="22" transform="rotate(90, 75, 125)"/>
+      </g>
+      <!-- SPEED 라벨 -->
+      <text x="75" y="60" text-anchor="middle"
+        font-family="Courier New" font-size="9" fill="rgba(255,255,255,0.35)"
+        letter-spacing="2">SPEED</text>
+    </svg>
+    <div id="speed-value">0.0</div>
+    <div id="speed-unit">m/s</div>
+  </div>
+
+  <!-- 조향 표시기 (하단 중앙) -->
+  <div id="steering-panel">
+    <svg id="steering-wheel" viewBox="0 0 70 70">
+      <circle cx="35" cy="35" r="30"
+        fill="none" stroke="rgba(0,255,136,0.5)" stroke-width="3"/>
+      <circle cx="35" cy="35" r="20"
+        fill="none" stroke="rgba(0,255,136,0.25)" stroke-width="1.5"/>
+      <!-- 스포크 (JS에서 회전) -->
+      <g id="steering-spokes" stroke="rgba(0,255,136,0.6)" stroke-width="2.5"
+         stroke-linecap="round">
+        <line x1="35" y1="5"  x2="35" y2="15"/>
+        <line x1="35" y1="55" x2="35" y2="65"/>
+        <line x1="5"  y1="35" x2="15" y2="35"/>
+        <line x1="55" y1="35" x2="65" y2="35"/>
+      </g>
+      <circle cx="35" cy="35" r="5"
+        fill="rgba(0,255,136,0.5)"/>
+    </svg>
+    <div id="steering-label">STEERING</div>
+  </div>
+
+  <!-- WASD 키 (오른쪽 하단) -->
+  <div id="controls-panel">
+    <div class="key-row">
+      <div class="key-spacer"></div>
+      <div class="key" id="key-w">W</div>
+      <div class="key-spacer"></div>
+    </div>
+    <div class="key-row">
+      <div class="key" id="key-a">A</div>
+      <div class="key" id="key-s">S</div>
+      <div class="key" id="key-d">D</div>
+    </div>
+    <div class="key-hint">SPACE: STOP</div>
+  </div>
+
+  <!-- IMU / 상태 패널 (왼쪽 중간) -->
+  <div id="status-panel">
+    <div class="stat-row">
+      <span class="stat-label">LIN X</span>
+      <span class="stat-value" id="st-ax">0.000</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">LIN Y</span>
+      <span class="stat-value" id="st-ay">0.000</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">LIN Z</span>
+      <span class="stat-value" id="st-az">0.000</span>
+    </div>
+    <hr class="stat-divider">
+    <div class="stat-row">
+      <span class="stat-label">ANG X</span>
+      <span class="stat-value" id="st-gx">0.000</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">ANG Y</span>
+      <span class="stat-value" id="st-gy">0.000</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">ANG Z</span>
+      <span class="stat-value" id="st-gz">0.000</span>
+    </div>
+    <hr class="stat-divider">
+    <div class="stat-row">
+      <span class="stat-label">CMD V</span>
+      <span class="stat-value" id="st-speed">0.00</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">CMD W</span>
+      <span class="stat-value" id="st-angular">0.00</span>
+    </div>
+  </div>
+</div>
+
+<!-- 비상 정지 배너 -->
+<div id="estop-banner">⛔ E-STOP</div>
+
+<script>
+// ── 설정 ──────────────────────────────────────────────────────────────────
+const WS_BASE = `ws://${location.host}`;
+const MAX_LINEAR  = 2.5;   // m/s
+const MAX_ANGULAR = 1.5;   // rad/s
+const RECONNECT_INTERVAL = 2000;  // ms
+
+// ── 상태 ──────────────────────────────────────────────────────────────────
+const keys = {};           // 현재 눌린 키 상태
+let estop = false;         // Space 비상 정지
+let camConnected = false;
+let ctrlConnected = false;
+let statusConnected = false;
+
+// ── DOM 참조 ──────────────────────────────────────────────────────────────
+const camImg       = document.getElementById('camera-img');
+const noCamera     = document.getElementById('no-camera');
+const statusDot    = document.getElementById('status-dot');
+const statusText   = document.getElementById('status-text');
+const fpsDisplay   = document.getElementById('fps-display');
+const speedValue   = document.getElementById('speed-value');
+const speedArc     = document.getElementById('speed-arc');
+const speedArcBack = document.getElementById('speed-arc-back');
+const steeringSpokes = document.getElementById('steering-spokes');
+const estopBanner  = document.getElementById('estop-banner');
+
+// ── 카메라 WebSocket ───────────────────────────────────────────────────────
+let camWs = null;
+let camFrameCount = 0;
+let camFpsTimer = Date.now();
+let camFps = 0;
+let lastFrameTime = 0;
+
+function connectCamera() {
+  camWs = new WebSocket(`${WS_BASE}/ws/camera`);
+  camWs.binaryType = 'arraybuffer';
+
+  camWs.onopen = () => {
+    camConnected = true;
+    updateConnectionUI();
+  };
+
+  camWs.onmessage = (e) => {
+    const blob = new Blob([e.data], { type: 'image/jpeg' });
+    const url  = URL.createObjectURL(blob);
+    const prev = camImg.src;
+
+    // onload 후에 이전 URL 해제 — 브라우저가 JPEG 디코딩 완료 전에
+    // blob URL이 해제되면 렌더링이 실패하여 화면이 고정되는 현상 방지
+    camImg.onload = () => {
+      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+      noCamera.classList.add('hidden');
+    };
+    camImg.onerror = () => {
+      URL.revokeObjectURL(url);
+    };
+    camImg.src = url;
+
+    // FPS 계산
+    camFrameCount++;
+    const now = Date.now();
+    const elapsed = (now - camFpsTimer) / 1000;
+    if (elapsed >= 1.0) {
+      camFps = (camFrameCount / elapsed).toFixed(1);
+      fpsDisplay.textContent = `CAM: ${camFps} FPS`;
+      camFrameCount = 0;
+      camFpsTimer = now;
+    }
+  };
+
+  camWs.onclose = () => {
+    camConnected = false;
+    updateConnectionUI();
+    noCamera.classList.remove('hidden');
+    setTimeout(connectCamera, RECONNECT_INTERVAL);
+  };
+
+  camWs.onerror = () => camWs.close();
+}
+
+// ── 조종 WebSocket ─────────────────────────────────────────────────────────
+let ctrlWs = null;
+
+function connectControl() {
+  ctrlWs = new WebSocket(`${WS_BASE}/ws/control`);
+
+  ctrlWs.onopen = () => {
+    ctrlConnected = true;
+    updateConnectionUI();
+    // 연결 즉시 현재 키 상태 전송
+    sendKeys();
+  };
+
+  ctrlWs.onclose = () => {
+    ctrlConnected = false;
+    updateConnectionUI();
+    setTimeout(connectControl, RECONNECT_INTERVAL);
+  };
+
+  ctrlWs.onerror = () => ctrlWs.close();
+}
+
+function sendKeys() {
+  if (!ctrlWs || ctrlWs.readyState !== WebSocket.OPEN) return;
+  const payload = estop ? {} : { ...keys };
+  ctrlWs.send(JSON.stringify(payload));
+}
+
+// ── 상태 WebSocket ─────────────────────────────────────────────────────────
+let statusWs = null;
+
+function connectStatus() {
+  statusWs = new WebSocket(`${WS_BASE}/ws/status`);
+
+  statusWs.onopen  = () => { statusConnected = true; updateConnectionUI(); };
+  statusWs.onclose = () => {
+    statusConnected = false;
+    setTimeout(connectStatus, RECONNECT_INTERVAL);
+  };
+  statusWs.onerror = () => statusWs.close();
+
+  statusWs.onmessage = (e) => {
+    try { updateStatus(JSON.parse(e.data)); } catch {}
+  };
+}
+
+// ── UI 업데이트 ────────────────────────────────────────────────────────────
+function updateConnectionUI() {
+  const allOk = camConnected && ctrlConnected;
+  statusDot.className = allOk ? 'connected' : '';
+  statusText.textContent = allOk ? 'CONNECTED' :
+    ctrlConnected ? 'CAM OFFLINE' :
+    camConnected  ? 'CTRL OFFLINE' : 'DISCONNECTED';
+}
+
+function updateStatus(data) {
+  // IMU
+  document.getElementById('st-ax').textContent = fmt(data.ax);
+  document.getElementById('st-ay').textContent = fmt(data.ay);
+  document.getElementById('st-az').textContent = fmt(data.az);
+  document.getElementById('st-gx').textContent = fmt(data.gx);
+  document.getElementById('st-gy').textContent = fmt(data.gy);
+  document.getElementById('st-gz').textContent = fmt(data.gz);
+  document.getElementById('st-speed').textContent   = fmtFixed(data.speed, 2);
+  document.getElementById('st-angular').textContent = fmtFixed(data.angular, 2);
+
+  // 서버가 알려준 실제 속도 명령 기준으로 표시
+  updateSpeedGauge(data.speed);
+  updateSteering(data.angular);
+  if (data.cam_fps != null)
+    fpsDisplay.textContent = `CAM: ${data.cam_fps} FPS`;
+}
+
+function fmt(v)        { return (v >= 0 ? '+' : '') + Number(v).toFixed(3); }
+function fmtFixed(v,d) { return (v >= 0 ? '+' : '') + Number(v).toFixed(d); }
+
+// ── 속도계 ─────────────────────────────────────────────────────────────────
+const ARC_LEN = 220;  // 반원 호의 전체 길이(px 단위, SVG stroke-dasharray 기준)
+
+function updateSpeedGauge(speed) {
+  const absSpd = Math.abs(speed);
+  const ratio  = Math.min(absSpd / MAX_LINEAR, 1.0);
+  const offset = ARC_LEN * (1 - ratio);
+
+  const color = absSpd > MAX_LINEAR * 0.85 ? '#ff4444' :
+                absSpd > MAX_LINEAR * 0.55 ? '#ffaa00' : '#00ff88';
+
+  if (speed >= 0) {
+    speedArc.style.stroke = color;
+    speedArc.setAttribute('stroke-dashoffset', offset.toFixed(1));
+    speedArcBack.setAttribute('stroke-dashoffset', ARC_LEN.toFixed(1));
+  } else {
+    speedArcBack.setAttribute('stroke-dashoffset', offset.toFixed(1));
+    speedArc.setAttribute('stroke-dashoffset', ARC_LEN.toFixed(1));
+  }
+
+  speedValue.textContent = absSpd.toFixed(1);
+  speedValue.style.color = color;
+}
+
+// ── 조향 ────────────────────────────────────────────────────────────────────
+function updateSteering(angular) {
+  // angular: + 좌회전, - 우회전 (ROS 표준)
+  const deg = -(angular / MAX_ANGULAR) * 45;
+  steeringSpokes.setAttribute('transform', `rotate(${deg.toFixed(1)}, 35, 35)`);
+}
+
+// ── 키보드 이벤트 ──────────────────────────────────────────────────────────
+const KEY_ACTIONS = {
+  'w': 'w', 'W': 'w',
+  'a': 'a', 'A': 'a',
+  's': 's', 'S': 's',
+  'd': 'd', 'D': 'd',
+  'ArrowUp':    'w',
+  'ArrowLeft':  'a',
+  'ArrowDown':  's',
+  'ArrowRight': 'd',
+};
+
+const keyEls = {
+  'w': document.getElementById('key-w'),
+  'a': document.getElementById('key-a'),
+  's': document.getElementById('key-s'),
+  'd': document.getElementById('key-d'),
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+
+  // Space: 비상 정지 토글
+  if (e.code === 'Space') {
+    e.preventDefault();
+    estop = !estop;
+    if (estop) {
+      // 모든 키 클리어
+      for (const k in keys) delete keys[k];
+      for (const el of Object.values(keyEls)) el.classList.remove('active');
+      estopBanner.style.display = 'block';
+    } else {
+      estopBanner.style.display = 'none';
+    }
+    sendKeys();
+    return;
+  }
+
+  const action = KEY_ACTIONS[e.key];
+  if (!action) return;
+  e.preventDefault();
+
+  keys[action] = true;
+  if (keyEls[action]) keyEls[action].classList.add('active');
+
+  // E-STOP 중에는 키 입력만 기록하고 전송하지 않음
+  if (!estop) sendKeys();
+});
+
+document.addEventListener('keyup', (e) => {
+  const action = KEY_ACTIONS[e.key];
+  if (!action) return;
+  e.preventDefault();
+
+  delete keys[action];
+  if (keyEls[action]) keyEls[action].classList.remove('active');
+
+  if (!estop) sendKeys();
+});
+
+// 포커스를 잃으면 모든 키 해제 (탭 전환 등)
+window.addEventListener('blur', () => {
+  for (const k in keys) delete keys[k];
+  for (const el of Object.values(keyEls)) el.classList.remove('active');
+  sendKeys();
+});
+
+// ── 로컬 키 기반 즉각 UI 업데이트 (서버 응답 대기 없이) ───────────────────
+setInterval(() => {
+  if (estop) return;
+
+  let linear  = 0.0;
+  let angular = 0.0;
+  if (keys.w) linear  += MAX_LINEAR;
+  if (keys.s) linear  -= MAX_LINEAR;
+  if (keys.a) angular += MAX_ANGULAR;
+  if (keys.d) angular -= MAX_ANGULAR;
+
+  updateSpeedGauge(linear);
+  updateSteering(angular);
+}, 50);  // 20Hz
+
+// ── 모바일 터치 버튼 지원 ─────────────────────────────────────────────────
+function addTouchKey(el, action) {
+  el.style.pointerEvents = 'auto';
+  el.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    keys[action] = true;
+    el.classList.add('active');
+    if (!estop) sendKeys();
+  });
+  const release = (e) => {
+    e.preventDefault();
+    delete keys[action];
+    el.classList.remove('active');
+    if (!estop) sendKeys();
+  };
+  el.addEventListener('touchend', release);
+  el.addEventListener('touchcancel', release);
+}
+for (const [action, el] of Object.entries(keyEls)) {
+  addTouchKey(el, action);
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────────────
+connectCamera();
+connectControl();
+connectStatus();
+</script>
+</body>
+</html>
