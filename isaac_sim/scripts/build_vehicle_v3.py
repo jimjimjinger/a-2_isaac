@@ -59,6 +59,12 @@ ROVER_CAM = "/Root/Vehicle/rover/Body/Camera"
 WRIST_RGB = _D455 + "/Camera_OmniVision_OV9782_Color"
 WRIST_DEP = _D455 + "/Camera_Pseudo_Depth"
 
+# Sun 위치 추적용 카메라 — Body 상단, +z(하늘) 향함. T5 localization 의 sun_yaw
+# 노드가 /camera/sun/{image_raw, camera_info} 를 받아 절대 방위 추정.
+# 외형 invisible 처리(편법) — 기구 충돌 0 (UsdGeom.Camera 는 mesh/collision X).
+SUN_CAM = "/Root/Vehicle/rover/Body/SunCamera"
+SUN_CAM_XYZ = (0.0, 0.0, 0.5)   # Body 좌표 기준 위치 (m)
+
 # Body 카메라 최적 위치 조정 (2026-05-22 사용자 지정): translate x·z.
 # y 는 기존값 유지.
 ROVER_CAM_XZ = (0.3, -0.1)
@@ -229,6 +235,28 @@ def _set_targets(node_path: str, input_name: str, target_path: str) -> None:
     rel.SetTargets([Sdf.Path(target_path)])
 
 
+def _create_sun_camera(stage) -> None:
+    """Body 상단에 +z 향하는 sun 추적 카메라 prim 생성.
+
+    UsdGeom.Camera 는 mesh/collision 가 없어 기구 충돌 발생 0. visibility=invisible
+    로 viewport 시각 흔적 제거(사용자 요청). flatten 전에 author 하므로 v3 USD 에
+    그대로 baked 된다.
+    """
+    cam = UsdGeom.Camera.Define(stage, SUN_CAM)
+    xf = UsdGeom.Xformable(cam)
+    # translate
+    xf.AddTranslateOp().Set(Gf.Vec3d(*SUN_CAM_XYZ))
+    # rotate — X 축 -90° 회전: 카메라 -z(시선) 가 world +z(하늘) 향함
+    xf.AddRotateXOp().Set(-90.0)
+    # 카메라 광학 — sun blob 잡기에 충분
+    cam.GetFocalLengthAttr().Set(24.0)
+    cam.GetHorizontalApertureAttr().Set(20.955)
+    cam.GetClippingRangeAttr().Set(Gf.Vec2f(0.1, 100000.0))
+    # viewport 시각 흔적 제거 (편법) — ROS 카메라 캡쳐와 무관
+    UsdGeom.Imageable(cam.GetPrim()).MakeInvisible()
+    print(f"[build_v3] sun camera 생성: {SUN_CAM} translate={SUN_CAM_XYZ}")
+
+
 def _adjust_camera(stage) -> None:
     """Body 카메라(ROVER_CAM) translate 의 x·z 를 ROVER_CAM_XZ 로 조정.
 
@@ -283,12 +311,15 @@ def main() -> None:
                 ("RPRover", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                 ("RPWristRgb", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                 ("RPWristDepth", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                ("RPSun", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
                 ("CamRoverRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                 ("CamRoverDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                 ("CamRoverInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                 ("CamWristRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                 ("CamWristDepth", "isaacsim.ros2.bridge.ROS2CameraHelper"),
                 ("CamWristInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
+                ("CamSunRgb", "isaacsim.ros2.bridge.ROS2CameraHelper"),
+                ("CamSunInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                 # ── 주행 (지민 RoverAckermannDrive 포팅) ──
                 ("SubTwist", "isaacsim.ros2.bridge.ROS2SubscribeTwist"),
                 ("Ackermann", "omni.graph.scriptnode.ScriptNode"),
@@ -344,6 +375,14 @@ def main() -> None:
                 ("CamWristDepth.inputs:frameId", "wrist_camera"),
                 ("CamWristInfo.inputs:topicName", "/camera/wrist/camera_info"),
                 ("CamWristInfo.inputs:frameId", "wrist_camera"),
+                # Sun 카메라 (T5 sun_yaw 노드 입력) — 작게(320×240) 충분
+                ("RPSun.inputs:width", 320),
+                ("RPSun.inputs:height", 240),
+                ("CamSunRgb.inputs:topicName", "/camera/sun/image_raw"),
+                ("CamSunRgb.inputs:type", "rgb"),
+                ("CamSunRgb.inputs:frameId", "sun_camera"),
+                ("CamSunInfo.inputs:topicName", "/camera/sun/camera_info"),
+                ("CamSunInfo.inputs:frameId", "sun_camera"),
                 # 주행
                 ("SubTwist.inputs:topicName", "/cmd_vel"),
                 ("Ackermann.inputs:script", ACK_SCRIPT),
@@ -389,6 +428,14 @@ def main() -> None:
                 ("RPWristDepth.outputs:execOut", "CamWristInfo.inputs:execIn"),
                 ("RPWristDepth.outputs:renderProductPath",
                  "CamWristInfo.inputs:renderProductPath"),
+                # Sun 카메라
+                ("OnTick.outputs:tick", "RPSun.inputs:execIn"),
+                ("RPSun.outputs:execOut", "CamSunRgb.inputs:execIn"),
+                ("RPSun.outputs:renderProductPath",
+                 "CamSunRgb.inputs:renderProductPath"),
+                ("RPSun.outputs:execOut", "CamSunInfo.inputs:execIn"),
+                ("RPSun.outputs:renderProductPath",
+                 "CamSunInfo.inputs:renderProductPath"),
                 # 주행 — /cmd_vel → Ackermann → 휠 컨트롤러
                 ("OnTick.outputs:tick", "SubTwist.inputs:execIn"),
                 ("SubTwist.outputs:execOut", "Ackermann.inputs:execIn"),
@@ -429,6 +476,7 @@ def main() -> None:
     _set_targets(f"{GRAPH}/RPRover", "inputs:cameraPrim", ROVER_CAM)
     _set_targets(f"{GRAPH}/RPWristRgb", "inputs:cameraPrim", WRIST_RGB)
     _set_targets(f"{GRAPH}/RPWristDepth", "inputs:cameraPrim", WRIST_DEP)
+    _set_targets(f"{GRAPH}/RPSun", "inputs:cameraPrim", SUN_CAM)
     _set_targets(f"{GRAPH}/SteerCtrl", "inputs:targetPrim", ARTIC)
     _set_targets(f"{GRAPH}/DriveCtrl", "inputs:targetPrim", ARTIC)
     _set_targets(f"{GRAPH}/ArmCtrl", "inputs:targetPrim", ARTIC)
@@ -438,6 +486,7 @@ def main() -> None:
 
     # 카메라 위치 조정
     _adjust_camera(stage)
+    _create_sun_camera(stage)   # ← 새 sun 추적 카메라 (T5 sun_yaw 노드 입력)
 
     # flatten — v2 reference 를 inline 해 자립(standalone) v3 생성
     if os.path.exists(V3):
