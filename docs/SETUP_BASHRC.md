@@ -2,6 +2,8 @@
 
 > 8일 프로젝트 동안 자주 칠 명령어 95%를 alias로 등록 + ROS2 source 자동화 + 팀원 간 ROS_DOMAIN_ID 충돌 방지.
 > 본인 트랙에 맞게 §4 추가 사항 함께 적용 권장.
+>
+> **Isaac Sim 5.1 환경**은 별도 가이드 [SETUP_ISAAC_PYPI.md](SETUP_ISAAC_PYPI.md) 참조 (팀 표준 = PyPI binary).
 
 ---
 

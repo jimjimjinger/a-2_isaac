@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# isaac-pypi — Isaac Sim 5.1 (PyPI binary) + ROS2 humble 환경 launcher.
+#
+# 왜 PyPI binary 인가:
+#   사용자(T4) 환경의 source build Isaac Sim 5.1 의 syntheticdata/replicator
+#   통합이 incomplete 한 상태였음 — 카메라 토픽/GT odom 이 dtype 에러로 발행
+#   안 됨. NVIDIA 가 PyPI 로 빌드·배포한 binary 는 한 set 로 정합성 보장되어
+#   같은 USD 가 멀쩡히 동작. 자세한 진단: docs/troubleshooting/
+#     2026-05-24_isaac_camera_topic_regression.md
+#
+# 사용:
+#   tools/isaac-pypi <python-script> [args...]
+#   tools/isaac-pypi isaac_sim/scripts/run_vehicle_v3.py --terrain terrain_00004
+#
+# 환경변수 (override 가능):
+#   ISAAC_PYPI_VENV   PyPI venv 경로 (default: ~/dev_ws/isaac_sim_pypi/venv)
+#   ISAAC_ROS2_WS     humble_ws 경로 (default: ~/dev_ws/isaac_sim/IsaacSim-ros_workspaces/humble_ws)
+#                     .bashrc 에 이미 export 되어 있을 가능성 큼 (SETUP_BASHRC.md 참조)
+#
+# 셋업 가이드: docs/SETUP_ISAAC_PYPI.md
+
+set -e
+
+ISAAC_PYPI_VENV="${ISAAC_PYPI_VENV:-$HOME/dev_ws/isaac_sim_pypi/venv}"
+ISAAC_ROS2_WS="${ISAAC_ROS2_WS:-$HOME/dev_ws/isaac_sim/IsaacSim-ros_workspaces/humble_ws}"
+
+SETUP="$ISAAC_ROS2_WS/install/local_setup.bash"
+PYPI_PY="$ISAAC_PYPI_VENV/bin/python"
+PYPI_HUMBLE_LIB="$ISAAC_PYPI_VENV/lib/python3.11/site-packages/isaacsim/exts/isaacsim.ros2.bridge/humble/lib"
+
+if [ ! -f "$SETUP" ]; then
+    echo "[isaac-pypi] ✗ humble_ws setup.bash not found: $SETUP" >&2
+    echo "[isaac-pypi]   ISAAC_ROS2_WS 환경변수로 본인 경로를 가리키세요." >&2
+    echo "[isaac-pypi]   가이드: docs/SETUP_ISAAC_PYPI.md" >&2
+    exit 1
+fi
+if [ ! -x "$PYPI_PY" ]; then
+    echo "[isaac-pypi] ✗ PyPI venv python not found: $PYPI_PY" >&2
+    echo "[isaac-pypi]   ISAAC_PYPI_VENV 환경변수로 본인 venv 경로를 가리키세요." >&2
+    echo "[isaac-pypi]   설치 가이드: docs/SETUP_ISAAC_PYPI.md" >&2
+    exit 1
+fi
+if [ ! -d "$PYPI_HUMBLE_LIB" ]; then
+    echo "[isaac-pypi] ✗ PyPI humble lib not found: $PYPI_HUMBLE_LIB" >&2
+    echo "[isaac-pypi]   isaacsim 5.1.0 wheel 이 venv 에 잘 설치됐는지 확인:" >&2
+    echo "[isaac-pypi]     source $ISAAC_PYPI_VENV/bin/activate && pip list | grep isaacsim" >&2
+    exit 1
+fi
+
+source "$SETUP"
+
+# Isaac 내장 RMW (FastDDS) 구현체 .so 경로를 LD_LIBRARY_PATH 에 추가.
+# 안 하면 'failed to load any RMW implementations' 로 ROS2 bridge startup 실패.
+export ROS_DISTRO=humble
+export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$PYPI_HUMBLE_LIB"
+
+exec "$PYPI_PY" "$@"
