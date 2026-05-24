@@ -147,19 +147,56 @@ class EKFFusionNode(Node):
         self.publish_tf_enabled = bool(self.get_parameter("publish_tf").value)
 
         # -----------------------------
+        # Initial Pose Prior — real-Mars-rover EDL 패턴.
+        # mission control 이 위성사진 + DTE uplink 로 초기 절대 위치를 알려주는 것과
+        # 동일하게, 시뮬에서는 terrain meta.json 의 spawn_locations 값을 launch
+        # 시점에 parameter 로 주입한다. 매 frame 받는 GT cheat 와 다름 (한 번만).
+        # -----------------------------
+        self.declare_parameter("initial_x", 0.0)
+        self.declare_parameter("initial_y", 0.0)
+        self.declare_parameter("initial_z", 0.0)
+        self.declare_parameter("initial_yaw", 0.0)
+        initial_x = float(self.get_parameter("initial_x").value)
+        initial_y = float(self.get_parameter("initial_y").value)
+        initial_z = float(self.get_parameter("initial_z").value)
+        initial_yaw = float(self.get_parameter("initial_yaw").value)
+
+        # -----------------------------
         # EKF internal state
         # -----------------------------
         self.x = np.zeros((self.STATE_SIZE, 1), dtype=np.float64)
+        self.x[self.IDX_X, 0] = initial_x
+        self.x[self.IDX_Y, 0] = initial_y
+        self.x[self.IDX_Z, 0] = initial_z
+        self.x[self.IDX_YAW, 0] = initial_yaw
 
         self.P = np.eye(self.STATE_SIZE, dtype=np.float64)
-        self.P[self.IDX_X, self.IDX_X] = 1.0
-        self.P[self.IDX_Y, self.IDX_Y] = 1.0
-        self.P[self.IDX_Z, self.IDX_Z] = 1.0
+        # 초기 위치 prior 가 들어왔으면 covariance 작게 (신뢰), 0 default 면 큰 그대로.
+        prior_given = any(
+            v != 0.0 for v in (initial_x, initial_y, initial_z, initial_yaw)
+        )
+        if prior_given:
+            self.P[self.IDX_X, self.IDX_X] = 0.01      # orbital imagery 정확도
+            self.P[self.IDX_Y, self.IDX_Y] = 0.01
+            self.P[self.IDX_Z, self.IDX_Z] = 0.04
+            self.P[self.IDX_YAW, self.IDX_YAW] = 0.0012  # celestial fix (≈ 2°)
+            self.get_logger().info(
+                f"Initial pose prior applied: x={initial_x:.2f} y={initial_y:.2f} "
+                f"z={initial_z:.2f} yaw={math.degrees(initial_yaw):.1f}°"
+            )
+        else:
+            self.P[self.IDX_X, self.IDX_X] = 1.0
+            self.P[self.IDX_Y, self.IDX_Y] = 1.0
+            self.P[self.IDX_Z, self.IDX_Z] = 1.0
+        # roll/pitch 는 prior 와 무관하게 IMU 가 빠르게 잡음
         self.P[self.IDX_ROLL, self.IDX_ROLL] = 0.5
         self.P[self.IDX_PITCH, self.IDX_PITCH] = 0.5
-        self.P[self.IDX_YAW, self.IDX_YAW] = 0.5
+        if not prior_given:
+            self.P[self.IDX_YAW, self.IDX_YAW] = 0.5
 
-        self.initialized = False
+        # prior 있으면 첫 wheel_odom 메시지로 state 가 덮어쓰여지지 않도록 True 로 시작.
+        # (wheel_odom 자체는 자기 origin=(0,0,0) 이라 첫 msg 가 절대값 prior 를 망가뜨림)
+        self.initialized = prior_given
 
         # wheel odom relative delta 계산용
         self.prev_wheel_pose: Optional[Tuple[float, float, float, float, float, float]] = None
