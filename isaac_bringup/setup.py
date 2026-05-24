@@ -18,6 +18,9 @@ setup(
             "launch/manipulation.launch.py",
             "launch/localization.launch.py",
         ]),
+        (f"share/{package_name}/rviz", [
+            "rviz/localization_map.rviz",
+        ]),
     ],
     install_requires=["setuptools"],
     zip_safe=True,
