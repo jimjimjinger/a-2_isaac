@@ -41,6 +41,9 @@ reference·play 하면 **런타임 그래프 코드 없이** 토픽이 살아난
 | 손목 카메라 RGB | `/camera/wrist/image_raw` | `sensor_msgs/Image` | D455 Color cam | manipulation vision (T2) |
 | 손목 카메라 depth | `/camera/wrist/depth` | `sensor_msgs/Image` | D455 Pseudo_Depth | manipulation depth |
 | 손목 카메라 info | `/camera/wrist/camera_info` | `sensor_msgs/CameraInfo` | D455 | 손목 depth deprojection |
+| Sun 카메라 RGB | `/camera/sun/image_raw` | `sensor_msgs/Image` | Body 상단 SunCamera (320×240, +z 향함) | T5 sun_yaw 노드 입력 — 절대 방위 추정 |
+| Sun 카메라 info | `/camera/sun/camera_info` | `sensor_msgs/CameraInfo` | SunCamera | sun_yaw deprojection / 카메라 모델 |
+| **GT odometry (dev cheat)** | `/ground_truth/odom` | `nav_msgs/Odometry` | ScriptNode `ReadGtPose` → `ROS2PublishOdometry` | T5 localization 완성 전까지 perfect pose 대용 — frame_id=`world`, child=`base_link`. **졸업 시 PubGtOdom + ReadGtPose 두 노드 제거 → 재bake 로 cheat 제거** |
 
 ### 구독 (외부 → 로봇 · 제어)
 
@@ -64,9 +67,10 @@ v3 의 그래프는 `/Root/ActionGraph` 하나 (terrain 에 reference 되면
 
 | 그룹 | 노드 구성 | 토픽 |
 |---|---|---|
-| 센서 | `IsaacReadIMU`→`ROS2PublishImu` / `ROS2PublishJointState` / `IsaacCreateRenderProduct`×3 + `ROS2Camera(Info)Helper`×6 | `/imu/data` `/joint_states_raw` `/camera/*` 발행 |
+| 센서 (몸체) | `IsaacReadIMU`→`ROS2PublishImu` / `ROS2PublishJointState` / `IsaacCreateRenderProduct`×4 + `ROS2Camera(Info)Helper`×8 | `/imu/data` `/joint_states_raw` `/camera/rover/*` `/camera/wrist/*` `/camera/sun/*` 발행 |
 | 주행 | `ROS2SubscribeTwist` → `ScriptNode`(6륜 Ackermann) → `IsaacArticulationController`×2 | `/cmd_vel` 구독 |
 | 팔 | `ROS2SubscribeJointState` → `IsaacArticulationController` | `/arm/joint_command` 구독 |
+| GT pose (dev cheat) | `ScriptNode`(`ReadGtPose`, stage traverse 로 GT 추출) → `ROS2PublishOdometry` | `/ground_truth/odom` 발행 — T5 졸업 시 두 노드 제거 |
 
 그래프 정의의 단일 소스 = `build_vehicle_v3.py` (코드). USD 는 그 산출물(bake).
 

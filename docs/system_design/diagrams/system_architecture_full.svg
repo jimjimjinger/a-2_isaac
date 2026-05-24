@@ -453,7 +453,7 @@
     <g transform="translate(30, 200)">
       <rect width="1260" height="100" fill="#FAFAFA" stroke="#6A1B9A" stroke-width="1" rx="6"/>
       <text x="20" y="22" font-size="12" font-weight="bold" fill="#4A148C">📡 T4 Subscribes (모든 트랙의 출력):</text>
-      <text x="20" y="42" font-size="10" fill="#555">  <tspan fill="#C62828" font-weight="bold">I2</tspan> /perception/detections        <tspan fill="#C62828" font-weight="bold">I5</tspan> /rover/estimated_pose      /robot/camera/image_raw</text>
+      <text x="20" y="42" font-size="10" fill="#555">  <tspan fill="#C62828" font-weight="bold">I2</tspan> /perception/detections        <tspan fill="#C62828" font-weight="bold">I5</tspan> /rover/estimated_pose      /camera/rover/image_raw</text>
       <text x="20" y="58" font-size="10" fill="#555">  (T3 deferred) /mission/status      /mission/minimap       /mission/path        /mission/cargo_event</text>
       <text x="20" y="80" font-size="10" font-style="italic" fill="#666">→ I6~I10 (T3↔T4 UI 메시지)는 deferred_interfaces.md에서 Day 4+ 확정</text>
     </g>
