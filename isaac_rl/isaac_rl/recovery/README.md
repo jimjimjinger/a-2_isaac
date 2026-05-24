@@ -1,6 +1,7 @@
 # Rover Recovery RL
 
-넘어진 Rover를 **M0609 팔 + 바퀴**를 동시에 사용해 스스로 일으켜 세우는 강화학습 환경.
+넘어진 Rover를 **M0609 팔 + 바퀴**를 동시에 사용해 스스로 일어나는 강화학습 환경.  
+Isaac Lab (ManagerBasedRLEnv) + RSL-RL PPO 기반으로 구현.
 
 ---
 
@@ -11,6 +12,7 @@
 | `recovery_env_cfg.py` | Isaac Lab 환경 설정 (씬, 관측, 행동, 보상, 종료) |
 | `recovery_mdp.py` | 관측/보상/이벤트 함수 구현 |
 | `train_recovery.py` | PPO 학습 진입점 |
+| `play_recovery.py` | 학습된 정책으로 Isaac Sim 시각화 실행 |
 | `recovery_node.py` | 학습된 정책을 ROS2로 실행하는 노드 |
 
 ---
@@ -73,7 +75,7 @@
 |---|---|---|
 | `upright_cosine` | **+10.0** | cos(roll) × cos(pitch) — upright=1.0, 90°옆=0.0 |
 | `height_reward` | **+5.0** | clamp((z − 0.30) / 0.30, 0, 1) — 몸체가 올라올수록 |
-| `success_bonus` | **+500.0** | |roll|<15° AND |pitch|<15° 달성 시 1.0 (sparse) |
+| `success_bonus` | **+500.0** | \|roll\|<15° AND \|pitch\|<15° 달성 시 1.0 (sparse) |
 | `fallen_penalty` | **−3.0** | tilt > 75° 상태 지속 시 1.0 — 정체 방지 |
 | `time_penalty` | **−0.2** | 매 스텝 1.0 — 빠른 기립 압박 |
 | `wheel_drive_bonus` | **+2.0** | tilt>45° 상태에서 바퀴 회전속도 clamp(rms/10, 0, 1) |
@@ -92,7 +94,7 @@
 
 | 조건 | 설명 |
 |---|---|
-| `rover_upright` | |roll|<15° AND |pitch|<15° → **성공 종료** |
+| `rover_upright` | \|roll\|<15° AND \|pitch\|<15° → **성공 종료** |
 | `time_out` | 15초 초과 → 실패 종료 |
 
 ---
@@ -125,6 +127,27 @@ tensorboard --logdir ~/dev_ws/rover_ws/src/a2_isaac/logs/recovery --port 6006
 
 ---
 
+## 정책 시각화 (play)
+
+학습된 체크포인트로 Isaac Sim에서 직접 시각화할 수 있다.
+
+```bash
+cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
+
+/mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p play_recovery.py \
+    --checkpoint <path/to/model_XXXX.pt> \
+    --num_envs 4 \
+    --num_steps 1000
+```
+
+| 옵션 | 기본값 | 설명 |
+|---|---|---|
+| `--checkpoint` | (필수) | 로드할 `.pt` 체크포인트 경로 |
+| `--num_envs` | 4 | 동시 시각화 환경 수 |
+| `--num_steps` | 1000 | 실행 스텝 수 |
+
+---
+
 ## PPO 하이퍼파라미터
 
 | 항목 | 값 |
@@ -141,6 +164,42 @@ tensorboard --logdir ~/dev_ws/rover_ws/src/a2_isaac/logs/recovery --port 6006
 
 ---
 
+## ROS2 통합 (recovery_node)
+
+학습된 정책을 실제 로버에 배포하는 ROS2 노드.
+
+```bash
+source /opt/ros/humble/setup.bash
+source ~/dev_ws/rover_ws/install/setup.bash
+ros2 run isaac_rl recovery_node
+```
+
+### 토픽 / 서비스
+
+| 구분 | 이름 | 타입 | 설명 |
+|---|---|---|---|
+| 구독 | `/imu/data` | `sensor_msgs/Imu` | 자세 추정 (넘어짐 감지) |
+| 구독 | `/joint_states_raw` | `sensor_msgs/JointState` | M0609 관절 상태 |
+| 발행 | `/m0609/joint_command` | `sensor_msgs/JointState` | M0609 관절 명령 |
+| 발행 | `/recovery/status` | `std_msgs/String` | 복구 상태 (IDLE / FALLEN / RECOVERING / SUCCESS / TIMEOUT) |
+| 서비스 | `/recovery/start` | `std_srvs/Trigger` | 수동 복구 시작 |
+| 서비스 | `/recovery/stop` | `std_srvs/Trigger` | 복구 중지 |
+
+### 동작 흐름
+
+```
+IMU 수신 → 넘어짐 감지 (|roll| or |pitch| > 45°, 2초 지속)
+    → 자동 복구 시작 OR /recovery/start 서비스 호출
+    → 정책 inference (20 Hz)
+    → /m0609/joint_command 발행
+    → 성공: |roll|<15° AND |pitch|<15° → 종료
+    → 타임아웃: 15초 초과 → 종료
+```
+
+> `policies/recovery_policy.pt` 가 없으면 홈 자세(fallback)로만 동작.
+
+---
+
 ## 출력 파일
 
 ```
@@ -151,6 +210,14 @@ logs/recovery/<YYYYMMDD_HHMMSS>/
 policies/
     └── recovery_policy.pt               # 학습 완료 후 최종 정책
 ```
+
+### 학습 세션 기록
+
+| 세션 | 시작 시각 |
+|---|---|
+| 세션 1 | 2026-05-24 15:54:58 |
+| 세션 2 | 2026-05-24 16:01:32 |
+| 세션 3 | 2026-05-24 16:28:45 |
 
 ---
 
