@@ -171,6 +171,147 @@ def compute(db):
 '''
 
 
+# Grasp simulator — supervisor 가 /grasp/command (geometry_msgs/Twist) 으로
+# pickup/release 요청 → ScriptNode 가 target 좌표 근처 mineral 찾아 FixedJoint
+# attach (arm 따라 mineral 이동). release 시 detach + MakeInvisible.
+# 메시지 인코딩 (Twist hijack — OmniGraph 에 String subscriber 없어 우회):
+#   pickup x y z   → linear=(x,y,z), angular.x = +1.0
+#   release         → linear=(0,0,0), angular.x = -1.0
+GRASP_SCRIPT = '''
+from pxr import UsdPhysics, UsdGeom, Gf, Sdf, Usd
+import omni.usd
+import omni.graph.core as og
+import math
+
+_state = {"attached_joint_path": None, "attached_obj_path": None}
+
+GRASP_JOINT_PATH = "/World/grip_fixed_joint"
+GRIPPER_LINK = "/Root/Vehicle/onrobot_rg2ft/right_inner_finger"
+SEARCH_RADIUS = 1.5  # m  (supervisor 의 lock_target 좌표 정확도 흡수)
+
+
+def _component(v, i):
+    try:
+        return float(v[i])
+    except Exception:
+        return 0.0
+
+
+def _find_nearest_mineral(stage, tx, ty):
+    minerals_root = stage.GetPrimAtPath("/World/Minerals")
+    if not minerals_root or not minerals_root.IsValid():
+        return None, float("inf")
+    cache = UsdGeom.XformCache()
+    best_path = None
+    best_d2 = SEARCH_RADIUS * SEARCH_RADIUS
+    for prim in minerals_root.GetChildren():
+        if not prim.IsValid():
+            continue
+        imageable = UsdGeom.Imageable(prim)
+        try:
+            vis = imageable.ComputeVisibility()
+            if vis == UsdGeom.Tokens.invisible:
+                continue
+        except Exception:
+            pass
+        M = cache.GetLocalToWorldTransform(prim)
+        p = M.ExtractTranslation()
+        dx = p[0] - tx
+        dy = p[1] - ty
+        d2 = dx * dx + dy * dy
+        if d2 < best_d2:
+            best_d2 = d2
+            best_path = str(prim.GetPath())
+    return best_path, math.sqrt(best_d2) if best_path else float("inf")
+
+
+def _attach(stage, link_path, obj_path):
+    if stage.GetPrimAtPath(GRASP_JOINT_PATH).IsValid():
+        stage.RemovePrim(GRASP_JOINT_PATH)
+    link_prim = stage.GetPrimAtPath(link_path)
+    obj_prim = stage.GetPrimAtPath(obj_path)
+    if not link_prim.IsValid() or not obj_prim.IsValid():
+        return False
+    link_xf = UsdGeom.Xformable(link_prim).ComputeLocalToWorldTransform(
+        Usd.TimeCode.Default())
+    obj_xf = UsdGeom.Xformable(obj_prim).ComputeLocalToWorldTransform(
+        Usd.TimeCode.Default())
+    rel = obj_xf * link_xf.GetInverse()
+    rel_pos = rel.ExtractTranslation()
+    rel_rot = rel.ExtractRotationQuat()
+    rot_imag = rel_rot.GetImaginary()
+    joint = UsdPhysics.FixedJoint.Define(stage, GRASP_JOINT_PATH)
+    joint.CreateBody0Rel().SetTargets([Sdf.Path(link_path)])
+    joint.CreateBody1Rel().SetTargets([Sdf.Path(obj_path)])
+    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(rel_pos))
+    joint.CreateLocalRot0Attr().Set(Gf.Quatf(
+        rel_rot.GetReal(),
+        float(rot_imag[0]), float(rot_imag[1]), float(rot_imag[2])))
+    joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+    joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
+    return True
+
+
+def _detach(stage):
+    if stage.GetPrimAtPath(GRASP_JOINT_PATH).IsValid():
+        stage.RemovePrim(GRASP_JOINT_PATH)
+    return True
+
+
+def _hide(stage, obj_path):
+    if not obj_path:
+        return False
+    prim = stage.GetPrimAtPath(obj_path)
+    if not prim or not prim.IsValid():
+        return False
+    try:
+        UsdGeom.Imageable(prim).MakeInvisible()
+        return True
+    except Exception:
+        return False
+
+
+def setup(db):
+    global _state
+    _state = {"attached_joint_path": None, "attached_obj_path": None}
+
+
+def compute(db):
+    global _state
+    stage = omni.usd.get_context().get_stage()
+    mode = _component(db.inputs.angularVelocity, 0)  # angular.x as sign marker
+
+    if mode > 0.5:    # pickup
+        tx = _component(db.inputs.linearVelocity, 0)
+        ty = _component(db.inputs.linearVelocity, 1)
+        obj_path, dist = _find_nearest_mineral(stage, tx, ty)
+        if obj_path is None:
+            print(f"[grasp] pickup ignored — no mineral near "
+                  f"({tx:.2f},{ty:.2f}) within {SEARCH_RADIUS}m")
+        else:
+            ok = _attach(stage, GRIPPER_LINK, obj_path)
+            if ok:
+                _state["attached_joint_path"] = GRASP_JOINT_PATH
+                _state["attached_obj_path"] = obj_path
+                print(f"[grasp] pickup OK — attached {obj_path} "
+                      f"(target dist {dist:.2f}m)")
+            else:
+                print(f"[grasp] pickup FAILED — attach error on {obj_path}")
+    elif mode < -0.5:  # release
+        _detach(stage)
+        obj = _state.get("attached_obj_path")
+        if obj:
+            _hide(stage, obj)
+            print(f"[grasp] release + hide {obj}")
+        _state["attached_joint_path"] = None
+        _state["attached_obj_path"] = None
+    # mode ≈ 0 → no-op
+
+    db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+    return True
+'''
+
+
 # Dev cheat — 로버 articulation 의 절대 world pose 를 in-graph 로 읽어
 # /ground_truth/odom 으로 발행. ScriptNode 가 stage traverse 로 articulation
 # root 를 찾아 LocalToWorldTransform 계산. terrain 무관(자기 path 의존 X).
@@ -359,6 +500,9 @@ def main() -> None:
                 # ── GT pose 발행 (dev cheat, 졸업 시 이 두 노드만 제거) ──
                 ("ReadGtPose", "omni.graph.scriptnode.ScriptNode"),
                 ("PubGtOdom", "isaacsim.ros2.bridge.ROS2PublishOdometry"),
+                # ── Grasp 시뮬레이터 (T2 standalone 의 FixedJoint + invisible 패턴) ──
+                ("SubGrasp", "isaacsim.ros2.bridge.ROS2SubscribeTwist"),
+                ("GraspScript", "omni.graph.scriptnode.ScriptNode"),
             ],
             keys.CREATE_ATTRIBUTES: [
                 # ScriptNode 커스텀 포트 — Ackermann 입출력
@@ -371,6 +515,9 @@ def main() -> None:
                 # ScriptNode 커스텀 포트 — GT pose 출력
                 ("ReadGtPose.outputs:position", "vectord[3]"),
                 ("ReadGtPose.outputs:orientation", "double[4]"),
+                # ScriptNode 커스텀 포트 — Grasp 입력 (SubGrasp Twist 와 연결)
+                ("GraspScript.inputs:linearVelocity", "vectord[3]"),
+                ("GraspScript.inputs:angularVelocity", "vectord[3]"),
             ],
             keys.SET_VALUES: [
                 # 센서
@@ -421,6 +568,9 @@ def main() -> None:
                 ("PubGtOdom.inputs:topicName", "/ground_truth/odom"),
                 ("PubGtOdom.inputs:odomFrameId", "world"),
                 ("PubGtOdom.inputs:chassisFrameId", "base_link"),
+                # Grasp 시뮬레이터 — /grasp/command (Twist hijack)
+                ("SubGrasp.inputs:topicName", "/grasp/command"),
+                ("GraspScript.inputs:script", GRASP_SCRIPT),
             ],
             keys.CONNECT: [
                 # 센서 — IMU
@@ -495,6 +645,13 @@ def main() -> None:
                  "PubGtOdom.inputs:orientation"),
                 ("ReadSimTime.outputs:simulationTime",
                  "PubGtOdom.inputs:timeStamp"),
+                # Grasp — 메시지 도착 시 ScriptNode 호출 (OnTick 불연결: 메시지 받을 때만 act)
+                ("OnTick.outputs:tick", "SubGrasp.inputs:execIn"),
+                ("SubGrasp.outputs:execOut", "GraspScript.inputs:execIn"),
+                ("SubGrasp.outputs:linearVelocity",
+                 "GraspScript.inputs:linearVelocity"),
+                ("SubGrasp.outputs:angularVelocity",
+                 "GraspScript.inputs:angularVelocity"),
             ],
         },
     )

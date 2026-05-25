@@ -26,6 +26,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 import rclpy
+from geometry_msgs.msg import Twist
 from isaac_interfaces.action import ExecuteArmTask
 from isaac_interfaces.msg import Detection, DetectionArray
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -120,8 +121,14 @@ class ArmExecutorNode(Node):
 
         self.joint_pub = self.create_publisher(
             JointState, str(self.get_parameter("joint_command_topic").value), 10)
+        # /grasp/command — published as geometry_msgs/Twist (OmniGraph
+        # constraint: no generic-string subscriber in isaacsim.ros2.bridge).
+        # Encoding:
+        #   pickup x y z target_id   → linear=(x,y,z) angular.x=+1.0
+        #   release                  → linear=(0,0,0) angular.x=-1.0
+        # vehicle_v3 ScriptNode decodes the sign of angular.x.
         self.grasp_pub = self.create_publisher(
-            String, str(self.get_parameter("grasp_command_topic").value), 10)
+            Twist, str(self.get_parameter("grasp_command_topic").value), 10)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("wrist_detections_topic").value),
@@ -232,21 +239,26 @@ class ArmExecutorNode(Node):
 
     def _publish_grasp(self, cmd: str, x: float = 0.0, y: float = 0.0,
                        z: float = 0.0, target_id: str = "") -> None:
-        """Publish a single-line grasp command for vehicle_v3 to act on.
-
-        Format: 'pickup x y z target_id' or 'release'. Simple space-separated
-        text so the OmniGraph ScriptNode can parse without a custom msg.
-        """
-        msg = String()
+        """Publish grasp command as Twist (hijacked for OmniGraph compatibility)."""
+        msg = Twist()
         if cmd == "pickup":
-            msg.data = f"pickup {x:.4f} {y:.4f} {z:.4f} {target_id}"
+            msg.linear.x = float(x)
+            msg.linear.y = float(y)
+            msg.linear.z = float(z)
+            msg.angular.x = 1.0    # pickup mode marker
         else:
-            msg.data = "release"
-        self.grasp_pub.publish(msg)
+            msg.angular.x = -1.0   # release mode marker
+        # Publish a few times so OmniGraph subscriber is sure to capture it
+        # (single-shot can be missed if next tick coincides with msg arrival).
+        for _ in range(3):
+            self.grasp_pub.publish(msg)
+            time.sleep(0.05)
         delay = float(self.get_parameter("grasp_publish_delay_sec").value)
         if delay > 0.0:
             time.sleep(delay)
-        self.get_logger().info(f"grasp/command -> {msg.data}")
+        self.get_logger().info(
+            f"grasp/command -> {cmd} xyz=({x:.3f},{y:.3f},{z:.3f}) "
+            f"target_id={target_id}")
 
     def _execute_pick_scripted(self, goal_handle):
         """Simple-ver pick — single forward dip + single cargo swing:
