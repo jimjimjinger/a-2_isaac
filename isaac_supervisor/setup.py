@@ -19,6 +19,7 @@ setup(
     entry_points={
         "console_scripts": [
             "battery_monitor_node = isaac_supervisor.battery_monitor_node:main",
+            "mission_manager_node = isaac_supervisor.mission_manager_node:main",
         ],
     },
 )
