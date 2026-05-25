@@ -138,6 +138,13 @@ class CoverageNode(Node):
         self.create_subscription(
             PoseWithCovarianceStamped, pose_topic, self._on_pose, 10)
 
+        # External replan trigger — supervisor 가 EXPLORE 재진입 시 publish.
+        # 받으면 현재 DRIVE path 무시하고 즉시 PLAN_PATH 로 강제 전환해
+        # 로버의 새 위치 기준으로 다음 anchor 까지 path 재계산.
+        from std_msgs.msg import Empty as _Empty
+        self.create_subscription(
+            _Empty, "/coverage/replan_request", self._on_replan_request, 10)
+
         # ── 출력 publisher ──
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
         self.action_pub = self.create_publisher(
@@ -203,6 +210,13 @@ class CoverageNode(Node):
         q = msg.pose.pose.orientation
         yaw = quat_to_yaw(q.x, q.y, q.z, q.w)
         self.pose.update(p.x, p.y, yaw, tuple(msg.pose.covariance))
+
+    def _on_replan_request(self, _msg) -> None:
+        # Force a path replan from the rover's current pose. Used after
+        # APPROACH/PICK exits so the stale DRIVE path (still pointing at the
+        # pre-detour anchor) is discarded.
+        self.mission.state = "PLAN_PATH"
+        self.get_logger().info("coverage replan requested (force PLAN_PATH)")
 
     # ── tick: coverage 한 스텝 ──
     def _tick(self) -> None:

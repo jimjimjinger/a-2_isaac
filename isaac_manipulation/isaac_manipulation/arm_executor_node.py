@@ -33,6 +33,7 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 
 from .kinematics import M0609_DH, dls_ik, fk
 
@@ -48,20 +49,17 @@ SENSOR_QOS = QoSProfile(
 JOINT_NAMES = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
 HOME_DEG = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 
-# Scripted PICK fallback (Phase 3a) — used when wrist detection unavailable.
+# Pick down — joint_1=0 (forward toward mineral), shoulder dip + wrist tilt.
+# Mineral is in front of rover (supervisor APPROACH P-control aligns it).
+PICK_DOWN_DEG = [0.0, 25.0, 90.0, 0.0, 65.0, 0.0]
+
+# Cargo (back of rover) — single swing for release.
+CARGO_DEG = [180.0, 25.0, 90.0, 0.0, 55.0, 0.0]
+
+# Legacy fallback when IK is enabled and wrist detection missing.
 PICK_TRAJ_DEG: List[List[float]] = [
     [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],
-    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],
-    [180.0, 25.0, 90.0, 0.0, 55.0, 0.0],
-    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],
-    [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],
-]
-
-# PLACE_BASKET scripted (after grasp) — back-of-rover joint trajectory.
-PLACE_BASKET_TRAJ_DEG: List[List[float]] = [
-    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],
-    [180.0, 25.0, 90.0, 0.0, 55.0, 0.0],
-    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],
+    [  0.0, 25.0, 90.0, 0.0, 65.0, 0.0],
     [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],
 ]
 
@@ -94,10 +92,11 @@ class ArmExecutorNode(Node):
     def __init__(self) -> None:
         super().__init__("arm_executor_node")
         self.declare_parameter("publish_hz", 30.0)
-        self.declare_parameter("step_duration_sec", 1.8)
+        self.declare_parameter("step_duration_sec", 3.0)
         self.declare_parameter("joint_command_topic", "/arm/joint_command")
+        self.declare_parameter("joint_state_topic", "/joint_states_raw")
         self.declare_parameter("wrist_detections_topic", "/perception/wrist_detections")
-        self.declare_parameter("wrist_detection_wait_sec", 3.0)
+        self.declare_parameter("wrist_detection_wait_sec", 6.0)
         self.declare_parameter("hover_above_mineral_m", 0.05)
         self.declare_parameter("min_confidence", 0.5)
         # Best-effort wrist-cam -> link_6 mount calibration. Tune after USD dump.
@@ -110,17 +109,35 @@ class ArmExecutorNode(Node):
             0.0, -1.0, 0.0,
         ])
         self.declare_parameter("ik_use_orientation", False)
+        # Phase 3b-4 simple-ver: IK off by default; rely on scripted PICK_TRAJ.
+        # When False, pick_mineral skips wrist-cam wait + IK and runs the
+        # scripted DOWN -> GRASP -> UP -> BASKET trajectory directly.
+        self.declare_parameter("enable_ik", False)
+        self.declare_parameter("grasp_command_topic", "/grasp/command")
+        # Step delay between grasp publish and arm continuing — gives
+        # vehicle_v3 ScriptNode time to attach the FixedJoint.
+        self.declare_parameter("grasp_publish_delay_sec", 0.3)
 
         self.joint_pub = self.create_publisher(
             JointState, str(self.get_parameter("joint_command_topic").value), 10)
+        self.grasp_pub = self.create_publisher(
+            String, str(self.get_parameter("grasp_command_topic").value), 10)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("wrist_detections_topic").value),
             self._on_wrist_detections, SENSOR_QOS)
 
+        self.create_subscription(
+            JointState, str(self.get_parameter("joint_state_topic").value),
+            self._on_joint_states, SENSOR_QOS)
+
         self._wrist_lock = threading.Lock()
         self._wrist_dets: List[Detection] = []
         self._wrist_stamp_ns: int = 0
+        # Current arm joint positions (rad) from /joint_states_raw. None until
+        # first message arrives — we fall back to HOME_DEG for IK base then.
+        self._current_arm_q_rad: Optional[np.ndarray] = None
+        self._joint_state_logged_once = False
 
         self.action_server = ActionServer(
             self,
@@ -150,6 +167,25 @@ class ArmExecutorNode(Node):
         with self._wrist_lock:
             self._wrist_dets = list(msg.detections)
             self._wrist_stamp_ns = self.get_clock().now().nanoseconds
+
+    def _on_joint_states(self, msg: JointState) -> None:
+        """Extract M0609 6 arm joints from rover's full joint state."""
+        name_to_pos = dict(zip(msg.name, msg.position))
+        try:
+            q = np.array([name_to_pos[n] for n in JOINT_NAMES], dtype=np.float64)
+        except KeyError as e:
+            if not self._joint_state_logged_once:
+                self.get_logger().warn(
+                    f"joint_states_raw missing arm joint {e} — IK will use HOME as base. "
+                    f"Available joints: {list(msg.name)}")
+                self._joint_state_logged_once = True
+            return
+        self._current_arm_q_rad = q
+        if not self._joint_state_logged_once:
+            self.get_logger().info(
+                f"joint_states_raw arm joints OK: "
+                f"q_deg = [{','.join(f'{math.degrees(v):.1f}' for v in q)}]")
+            self._joint_state_logged_once = True
 
     def _best_wrist_detection(self,
                               wait_sec: float,
@@ -187,17 +223,95 @@ class ArmExecutorNode(Node):
         self.get_logger().info(f"Executing arm command: {command}")
 
         if command == "pick_mineral":
-            return self._execute_pick(goal_handle)
+            if bool(self.get_parameter("enable_ik").value):
+                return self._execute_pick_ik(goal_handle)
+            return self._execute_pick_scripted(goal_handle)
         # Other commands (place_to_cargo, unload_to_base, deploy_solar_panel)
         # — fall back to scripted PLACE_BASKET sequence as visual demo.
         return self._execute_scripted(goal_handle, PLACE_BASKET_TRAJ_DEG, command)
 
-    def _execute_pick(self, goal_handle):
-        """pick_mineral: wrist cam wait -> IK -> descend -> grasp -> lift -> place -> HOME."""
-        cur = list(HOME_DEG)
-        # 1) Ensure HOME
-        self._goto(cur, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 1.0)
-        cur = list(HOME_DEG)
+    def _publish_grasp(self, cmd: str, x: float = 0.0, y: float = 0.0,
+                       z: float = 0.0, target_id: str = "") -> None:
+        """Publish a single-line grasp command for vehicle_v3 to act on.
+
+        Format: 'pickup x y z target_id' or 'release'. Simple space-separated
+        text so the OmniGraph ScriptNode can parse without a custom msg.
+        """
+        msg = String()
+        if cmd == "pickup":
+            msg.data = f"pickup {x:.4f} {y:.4f} {z:.4f} {target_id}"
+        else:
+            msg.data = "release"
+        self.grasp_pub.publish(msg)
+        delay = float(self.get_parameter("grasp_publish_delay_sec").value)
+        if delay > 0.0:
+            time.sleep(delay)
+        self.get_logger().info(f"grasp/command -> {msg.data}")
+
+    def _execute_pick_scripted(self, goal_handle):
+        """Simple-ver pick — single forward dip + single cargo swing:
+            HOME -> PICK_DOWN (forward, joint_1=0) -> GRASP publish -> HOME
+                 -> CARGO (joint_1=180) -> RELEASE publish -> HOME
+        """
+        req = goal_handle.request
+        tx, ty, tz = float(req.target_x), float(req.target_y), float(req.target_z)
+
+        cur_q_rad = (self._current_arm_q_rad
+                     if self._current_arm_q_rad is not None
+                     else np.radians(HOME_DEG))
+        cur_deg = list(np.degrees(cur_q_rad))
+
+        # 1) HOME
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 0.1)
+        cur_deg = list(HOME_DEG)
+
+        # 2) PICK_DOWN — forward dip (joint_1=0, mineral in front of rover)
+        self._goto(cur_deg, PICK_DOWN_DEG, goal_handle, "PICK_DOWN", 0.1, 0.3)
+        cur_deg = list(PICK_DOWN_DEG)
+
+        # 3) GRASP — vehicle_v3 attaches nearest mineral to gripper
+        self._publish_grasp("pickup", x=tx, y=ty, z=tz, target_id=req.target_id)
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "GRASP_CLOSE"
+        fb.progress = 0.35
+        fb.message = "pickup published"
+        goal_handle.publish_feedback(fb)
+
+        # 4) LIFT — back to HOME (mineral comes along via FixedJoint)
+        self._goto(cur_deg, HOME_DEG, goal_handle, "LIFT", 0.35, 0.55)
+        cur_deg = list(HOME_DEG)
+
+        # 5) CARGO — single swing to back of rover
+        self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.55, 0.8)
+        cur_deg = list(CARGO_DEG)
+
+        # 6) RELEASE — vehicle_v3 detaches + hides the mineral (cargo stowed)
+        self._publish_grasp("release")
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "RELEASE"
+        fb.progress = 0.85
+        fb.message = "release published"
+        goal_handle.publish_feedback(fb)
+
+        # 7) HOME guarantee
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_POST", 0.85, 1.0)
+        self._publish_joint_state(HOME_DEG)
+        goal_handle.succeed()
+        self.get_logger().info("pick_mineral (scripted) done")
+        return ExecuteArmTask.Result(success=True, message="pick_mineral completed")
+
+    def _execute_pick_ik(self, goal_handle):
+        """pick_mineral with IK + wrist-cam servo (Phase 3b-3, off by default).
+
+        Tune wrist_mount_xyz_link6 / wrist_R_optical_to_link6 before enabling.
+        """
+        # 1) Ensure HOME first (uses current joint state if available)
+        cur_q_rad = (self._current_arm_q_rad
+                     if self._current_arm_q_rad is not None
+                     else np.radians(HOME_DEG))
+        cur_deg = list(np.degrees(cur_q_rad))
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 0.1)
+        cur_deg = list(HOME_DEG)
 
         # 2) Wait for wrist detection
         wait_s = float(self.get_parameter("wrist_detection_wait_sec").value)
@@ -215,13 +329,16 @@ class ArmExecutorNode(Node):
         R_flat = list(self.get_parameter("wrist_R_optical_to_link6").value)
         R_oc = np.array(R_flat, dtype=np.float64).reshape(3, 3)
         p_link6 = _wrist_optical_to_link6(xyz_optical, mount_xyz, R_oc)
-        q_cur_rad = np.radians(np.asarray(cur, dtype=np.float64))
+        # Use actual current arm joints (post-HOME) for FK transform base.
+        q_cur_rad = (self._current_arm_q_rad
+                     if self._current_arm_q_rad is not None
+                     else np.radians(HOME_DEG))
         p_base_mineral = _link6_to_base(p_link6, q_cur_rad)
 
         hover = float(self.get_parameter("hover_above_mineral_m").value)
         target_pos = p_base_mineral + np.array([0.0, 0.0, hover])
         self.get_logger().info(
-            f"wrist det class={det.cls_name} optical=({xyz_optical[0]:.3f},"
+            f"wrist det class={det.class_name} optical=({xyz_optical[0]:.3f},"
             f"{xyz_optical[1]:.3f},{xyz_optical[2]:.3f}) -> base_mineral="
             f"({p_base_mineral[0]:.3f},{p_base_mineral[1]:.3f},{p_base_mineral[2]:.3f}) "
             f"-> target_hover=({target_pos[0]:.3f},{target_pos[1]:.3f},{target_pos[2]:.3f})")
@@ -242,8 +359,8 @@ class ArmExecutorNode(Node):
             f"[{','.join(f'{v:.1f}' for v in target_deg)}]")
 
         # 5) Interpolate to IK target (APPROACH_DESCEND)
-        self._goto(cur, target_deg, goal_handle, "APPROACH_DESCEND", 0.1, 0.5)
-        cur = target_deg
+        self._goto(cur_deg, target_deg, goal_handle, "APPROACH_DESCEND", 0.1, 0.5)
+        cur_deg = target_deg
 
         # 6) GRASP (no real gripper yet — placeholder)
         fb = ExecuteArmTask.Feedback()
@@ -254,15 +371,15 @@ class ArmExecutorNode(Node):
         time.sleep(0.5)
 
         # 7) LIFT (return to HOME briefly)
-        self._goto(cur, HOME_DEG, goal_handle, "LIFT", 0.6, 0.75)
-        cur = list(HOME_DEG)
+        self._goto(cur_deg, HOME_DEG, goal_handle, "LIFT", 0.6, 0.75)
+        cur_deg = list(HOME_DEG)
 
         # 8) PLACE_BASKET scripted
         for i in range(len(PLACE_BASKET_TRAJ_DEG) - 1):
-            self._goto(cur, PLACE_BASKET_TRAJ_DEG[i + 1], goal_handle,
+            self._goto(cur_deg, PLACE_BASKET_TRAJ_DEG[i + 1], goal_handle,
                        f"PLACE_BASKET_{i + 1}",
                        0.75 + i * 0.05, 0.75 + (i + 1) * 0.05)
-            cur = list(PLACE_BASKET_TRAJ_DEG[i + 1])
+            cur_deg = list(PLACE_BASKET_TRAJ_DEG[i + 1])
 
         # 9) HOME guarantee
         self._publish_joint_state(HOME_DEG)

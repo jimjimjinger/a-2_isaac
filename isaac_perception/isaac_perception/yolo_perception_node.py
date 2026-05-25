@@ -121,7 +121,16 @@ class CamChannel:
             self.pub_ann = node.create_publisher(Image, ann_topic, SENSOR_QOS)
 
     def _log(self, msg: str, level: str = "info") -> None:
-        getattr(self.node.get_logger(), level)(f"[{self.name}] {msg}")
+        # rclpy logger caches severity per source line, so call distinct
+        # methods from distinct lines.
+        full = f"[{self.name}] {msg}"
+        logger = self.node.get_logger()
+        if level == "warn":
+            logger.warn(full)
+        elif level == "error":
+            logger.error(full)
+        else:
+            logger.info(full)
 
     def _on_rgb(self, msg: Image) -> None:
         self.last_rgb = msg

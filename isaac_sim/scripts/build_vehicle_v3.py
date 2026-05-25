@@ -276,6 +276,34 @@ def _adjust_camera(stage) -> None:
     print("[build_v3] ⚠ 카메라 translate op 없음 — 위치 조정 스킵")
 
 
+def _scale_arm_mass(stage, scale: float = 0.5) -> None:
+    """m0609 + onrobot_rg2ft link 들의 physics:mass attr 를 scale 배 적용.
+
+    flatten 전에 호출하므로 변경이 v3 USD 에 그대로 baked 된다. 무게중심을
+    내려서 rover 안정화 목적. mass=0 인 visual-only prim 은 자동 skip.
+    """
+    n = 0
+    total_before = 0.0
+    total_after = 0.0
+    for prim in stage.Traverse():
+        path = str(prim.GetPath())
+        if "m0609" not in path and "onrobot" not in path:
+            continue
+        ma = prim.GetAttribute("physics:mass")
+        if not ma.IsValid() or not ma.HasAuthoredValue():
+            continue
+        m = float(ma.Get())
+        if m <= 0.0:
+            continue
+        new_m = m * scale
+        ma.Set(new_m)
+        total_before += m
+        total_after += new_m
+        n += 1
+    print(f"[build_v3] arm mass scaled x{scale}: {n} links, "
+          f"{total_before:.2f}kg -> {total_after:.2f}kg")
+
+
 def main() -> None:
     if not os.path.isfile(V2):
         print(f"[build_v3] ✗ vehicle_v2.usd 없음: {V2}")
@@ -487,6 +515,10 @@ def main() -> None:
     # 카메라 위치 조정
     _adjust_camera(stage)
     _create_sun_camera(stage)   # ← 새 sun 추적 카메라 (T5 sun_yaw 노드 입력)
+
+    # m0609 + onrobot_rg2ft mass scaling — 사용자 요청으로 무게중심 안정화.
+    # 원래 ~28.5kg → scale=0.5 적용 시 ~14.25kg. arm 토크는 자체 제어라 영향 X.
+    _scale_arm_mass(stage, scale=0.5)
 
     # flatten — v2 reference 를 inline 해 자립(standalone) v3 생성
     if os.path.exists(V3):

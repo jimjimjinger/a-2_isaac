@@ -27,7 +27,7 @@ from nav_msgs.msg import Odometry
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-from std_msgs.msg import String
+from std_msgs.msg import Empty, String
 
 from isaac_interfaces.action import ExecuteArmTask
 from isaac_interfaces.msg import Detection, DetectionArray
@@ -60,11 +60,13 @@ SENSOR_QOS = QoSProfile(
 
 VALUE_PRIORITY = {"yellow_mineral": 50.0, "green_gas": 25.0, "blue_mineral": 10.0}
 
-# Per-class stop distance — arm reach + safety margin (T2 standalone tuning).
+# Per-class stop distance — balanced for wrist cam visibility (max depth ~1.1m)
+# and rover P-control overshoot. T2 standalone uses tighter values (0.25 blue,
+# 0.75 yellow/green) but assumes precise rover positioning; we widen here.
 CLASS_STOP_DIST_M = {
-    "blue_mineral":   0.25,
-    "yellow_mineral": 0.75,
-    "green_gas":      0.75,
+    "blue_mineral":   0.55,
+    "yellow_mineral": 0.70,
+    "green_gas":      0.70,
 }
 
 
@@ -83,6 +85,7 @@ class MissionManagerNode(Node):
         self.declare_parameter("approach_engage_dist_m", 8.0)
         self.declare_parameter("approach_stop_dist_m", 0.75)   # default fallback
         self.declare_parameter("approach_resume_buffer_m", 0.3)
+        self.declare_parameter("coverage_cmd_stale_sec", 1.0)
         self.declare_parameter("post_pick_cooldown_sec", 8.0)
         self.declare_parameter("post_pick_skip_radius_m", 1.0)
         self.declare_parameter("arm_action_name", "/execute_arm_task")
@@ -91,6 +94,8 @@ class MissionManagerNode(Node):
         self.declare_parameter("approach_creep_speed", 0.25)
         self.declare_parameter("steer_gain", 1.5)
         self.declare_parameter("detection_stale_sec", 1.5)
+        self.declare_parameter("approach_lock_timeout_sec", 8.0)
+        self.declare_parameter("explore_resume_delay_sec", 2.0)
         self.declare_parameter("phase_log_period_sec", 1.0)
         self.declare_parameter("coverage_cmd_topic", "/coverage/cmd_vel_raw")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
@@ -108,6 +113,7 @@ class MissionManagerNode(Node):
         self.target: Optional[Detection] = None
         self.last_det_stamp_ns: int = 0
         self.last_coverage_cmd: Optional[Twist] = None
+        self.last_coverage_cmd_ns: int = 0
         self.last_odom: Optional[Odometry] = None
         # A* planning state
         self.ogrid = None
@@ -120,6 +126,12 @@ class MissionManagerNode(Node):
         # Post-pick cooldown
         self.last_pick_world: Optional[Tuple[float, float]] = None
         self.last_pick_done_ns: int = 0
+        # Target lock-on (kept while APPROACH, even if detection briefly lost)
+        self.lock_target: Optional[Detection] = None
+        self.lock_started_ns: int = 0
+        # EXPLORE resume cooldown — force stop briefly after any APPROACH/PICK
+        # exit so coverage_node can replan from the rover's new position.
+        self.explore_entry_ns: int = 0
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         try:
@@ -143,6 +155,10 @@ class MissionManagerNode(Node):
             Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
         self.phase_pub = self.create_publisher(
             String, str(self.get_parameter("phase_topic").value), 10)
+        # Tell coverage_node to drop its stale DRIVE path and replan from
+        # the rover's new post-APPROACH/PICK position.
+        self.replan_pub = self.create_publisher(
+            Empty, "/coverage/replan_request", 10)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("detections_topic").value),
@@ -189,12 +205,45 @@ class MissionManagerNode(Node):
         ]
         if not candidates:
             return
+
+        if self.lock_target is not None:
+            # Lock 중 — 같은 mineral 의 detection 만 받아 좌표 + lock timer 갱신.
+            # 다른 mineral 은 무시 (lock 핵심). 같은 mineral 판정 =
+            # class_name 일치 + 좌표 2m 이내.
+            lx = self.lock_target.world_position.x
+            ly = self.lock_target.world_position.y
+            match_r2 = 2.0 * 2.0
+            same = [
+                d for d in candidates
+                if d.class_name == self.lock_target.class_name
+                and (d.world_position.x - lx) ** 2
+                    + (d.world_position.y - ly) ** 2 < match_r2
+            ]
+            if same:
+                # Pick the candidate closest to the locked coordinate, not the
+                # most confident one — prevents lock swap when a different
+                # mineral of the same class happens to land within the match
+                # radius with higher confidence.
+                best = min(
+                    same,
+                    key=lambda d: (d.world_position.x - lx) ** 2
+                                  + (d.world_position.y - ly) ** 2,
+                )
+                self.target = best
+                self.last_det_stamp_ns = now_ns
+                self.lock_target = best
+                self.lock_started_ns = now_ns  # 갱신: 시야 안 들어오면 timeout reset
+            # 같은 mineral 없으면 lock 유지 (timeout 자연 흐름)
+            return
+
+        # Lock 없음 — best target 자유 선택
         best = max(candidates, key=_score)
         self.target = best
         self.last_det_stamp_ns = now_ns
 
     def _on_coverage_cmd(self, msg: Twist) -> None:
         self.last_coverage_cmd = msg
+        self.last_coverage_cmd_ns = self.get_clock().now().nanoseconds
 
     def _on_odom(self, msg: Odometry) -> None:
         self.last_odom = msg
@@ -208,6 +257,18 @@ class MissionManagerNode(Node):
         now_ns = self.get_clock().now().nanoseconds
         stale_ns = int(float(self.get_parameter("detection_stale_sec").value) * 1e9)
         det_fresh = (self.target is not None) and (now_ns - self.last_det_stamp_ns < stale_ns)
+
+        # Target lock-on: keep approaching cached target if detection briefly
+        # lost, until approach_lock_timeout_sec elapses.
+        lock_timeout_ns = int(float(self.get_parameter("approach_lock_timeout_sec").value) * 1e9)
+        if not det_fresh and self.lock_target is not None:
+            if now_ns - self.lock_started_ns < lock_timeout_ns:
+                # use lock as virtual target
+                self.target = self.lock_target
+                det_fresh = True
+            else:
+                self.lock_target = None
+                self.lock_started_ns = 0
 
         engage_d = float(self.get_parameter("approach_engage_dist_m").value)
         default_stop_d = float(self.get_parameter("approach_stop_dist_m").value)
@@ -243,12 +304,41 @@ class MissionManagerNode(Node):
                 self.waypoints = []
                 self.wp_idx = 0
                 self.last_plan_target = None
+            if self.phase == "APPROACH" and prev_phase != "APPROACH":
+                # Lock onto this target's coordinates for the duration of APPROACH
+                self.lock_target = self.target
+                self.lock_started_ns = now_ns
+            if self.phase != "APPROACH" and self.phase != "PICK_READY":
+                self.lock_target = None
+                self.lock_started_ns = 0
             if self.phase == "PICK_READY" and prev_phase != "PICK_READY":
                 self._send_arm_goal()
+            if self.phase == "EXPLORE" and prev_phase != "EXPLORE":
+                # Drop stale coverage cmd, ask coverage to replan from the new
+                # rover position, and start a brief cooldown so the replan can
+                # complete before we start passing through its cmd_vel.
+                self.last_coverage_cmd = None
+                self.last_coverage_cmd_ns = 0
+                self.explore_entry_ns = now_ns
+                self.replan_pub.publish(Empty())
 
         if self.phase == "EXPLORE":
-            if self.last_coverage_cmd is not None:
+            # Hold zero twist briefly so coverage can publish a fresh path
+            # for the post-APPROACH/PICK rover position.
+            resume_delay_ns = int(
+                float(self.get_parameter("explore_resume_delay_sec").value) * 1e9)
+            in_resume_cooldown = (
+                self.explore_entry_ns > 0
+                and (now_ns - self.explore_entry_ns) < resume_delay_ns)
+            stale_sec = float(self.get_parameter("coverage_cmd_stale_sec").value)
+            cmd_age = (now_ns - self.last_coverage_cmd_ns) / 1e9 \
+                if self.last_coverage_cmd_ns else float("inf")
+            if in_resume_cooldown:
+                self.cmd_pub.publish(Twist())
+            elif self.last_coverage_cmd is not None and cmd_age < stale_sec:
                 self.cmd_pub.publish(self.last_coverage_cmd)
+            else:
+                self.cmd_pub.publish(Twist())
         elif self.phase == "APPROACH":
             self.cmd_pub.publish(self._approach_twist(dist))
         else:  # PICK_READY
