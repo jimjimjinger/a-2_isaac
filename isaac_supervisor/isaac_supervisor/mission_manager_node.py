@@ -2,7 +2,9 @@
 
 Pattern: cmd_vel mux that never touches coverage_node source.
 - EXPLORE: pass-through from /coverage/cmd_vel_raw to /cmd_vel
-- APPROACH: own P-control twist toward best target (mineral or gas)
+- APPROACH: A* way-point pursuit toward best target (mineral or gas).
+  Uses isaac_drive's ObstacleGrid + astar (no source modification — just
+  imports the same algorithm coverage_node uses).
 - PICK_READY: stop within stop_distance (Phase 3 hooks arm trigger here)
   hysteresis: APPROACH->PICK_READY at stop_dist, PICK_READY->APPROACH at
   stop_dist + resume_buffer to prevent flapping.
@@ -16,7 +18,8 @@ not keep the last angular velocity.
 from __future__ import annotations
 
 import math
-from typing import Optional
+import os
+from typing import List, Optional, Tuple
 
 import rclpy
 from geometry_msgs.msg import Twist
@@ -26,6 +29,23 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPo
 from std_msgs.msg import String
 
 from isaac_interfaces.msg import Detection, DetectionArray
+from isaac_drive.navigation.path_planner import astar, simplify_path
+from isaac_drive.navigation.terrain_loader import load_terrain
+
+
+def _default_terrain_dir() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.normpath(os.path.join(here, "..", "..", "..", "..", "src",
+                                      "a2_isaac", "isaac_sim", "assets",
+                                      "generated_terrains", "terrain_00004")),
+        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/"
+                           "generated_terrains/terrain_00004"),
+    ]
+    for p in candidates:
+        if os.path.isdir(p):
+            return p
+    return candidates[-1]
 
 
 SENSOR_QOS = QoSProfile(
@@ -61,12 +81,36 @@ class MissionManagerNode(Node):
         self.declare_parameter("odom_topic", "/ground_truth/odom")
         self.declare_parameter("phase_topic", "/mission/phase")
         self.declare_parameter("min_confidence", 0.6)
+        self.declare_parameter("terrain_dir", _default_terrain_dir())
+        self.declare_parameter("path_cell_size", 0.2)
+        self.declare_parameter("path_robot_radius", 0.7)
+        self.declare_parameter("path_replan_target_delta_m", 0.4)
+        self.declare_parameter("waypoint_reach_dist_m", 0.4)
 
         self.phase = "EXPLORE"
         self.target: Optional[Detection] = None
         self.last_det_stamp_ns: int = 0
         self.last_coverage_cmd: Optional[Twist] = None
         self.last_odom: Optional[Odometry] = None
+        # A* planning state
+        self.ogrid = None
+        self.waypoints: List[Tuple[float, float]] = []
+        self.wp_idx: int = 0
+        self.last_plan_target: Optional[Tuple[float, float]] = None
+
+        terrain_dir = str(self.get_parameter("terrain_dir").value)
+        try:
+            _meta, self.ogrid, _fog = load_terrain(
+                terrain_dir,
+                cell_size=float(self.get_parameter("path_cell_size").value),
+                robot_radius=float(self.get_parameter("path_robot_radius").value),
+            )
+            self.get_logger().info(
+                f"obstacle_grid loaded from {terrain_dir} "
+                f"({self.ogrid.rows}x{self.ogrid.cols} @ {self.ogrid.cell_size:.2f}m)")
+        except Exception as e:
+            self.get_logger().error(
+                f"terrain load FAILED ({e}) — APPROACH will fall back to straight-line P-control")
 
         self.cmd_pub = self.create_publisher(
             Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
@@ -91,7 +135,13 @@ class MissionManagerNode(Node):
 
     def _on_detections(self, msg: DetectionArray) -> None:
         min_conf = float(self.get_parameter("min_confidence").value)
-        candidates = [d for d in msg.detections if d.confidence >= min_conf]
+        candidates = [
+            d for d in msg.detections
+            if d.confidence >= min_conf
+            and not (d.world_position.x == 0.0
+                     and d.world_position.y == 0.0
+                     and d.world_position.z == 0.0)
+        ]
         if not candidates:
             return
         best = max(candidates, key=_score)
@@ -136,6 +186,10 @@ class MissionManagerNode(Node):
                    f"{self.target.world_position.x:.2f},"
                    f"{self.target.world_position.y:.2f}), dist={dist:.2f}m)"
                    if det_fresh else ""))
+            if self.phase != "APPROACH":
+                self.waypoints = []
+                self.wp_idx = 0
+                self.last_plan_target = None
 
         if self.phase == "EXPLORE":
             if self.last_coverage_cmd is not None:
@@ -158,15 +212,31 @@ class MissionManagerNode(Node):
         t = Twist()
         if self.target is None or self.last_odom is None:
             return t
+
         rx = self.last_odom.pose.pose.position.x
         ry = self.last_odom.pose.pose.position.y
+        tx = self.target.world_position.x
+        ty = self.target.world_position.y
+
+        self._maybe_replan(rx, ry, tx, ty)
+
+        if self.waypoints:
+            wp_reach = float(self.get_parameter("waypoint_reach_dist_m").value)
+            while self.wp_idx < len(self.waypoints) - 1:
+                wx, wy = self.waypoints[self.wp_idx]
+                if math.hypot(wx - rx, wy - ry) < wp_reach:
+                    self.wp_idx += 1
+                else:
+                    break
+            goal_x, goal_y = self.waypoints[self.wp_idx]
+        else:
+            goal_x, goal_y = tx, ty
+
         q = self.last_odom.pose.pose.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
         cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
         yaw = math.atan2(siny_cosp, cosy_cosp)
-        tx = self.target.world_position.x
-        ty = self.target.world_position.y
-        bearing = math.atan2(ty - ry, tx - rx)
+        bearing = math.atan2(goal_y - ry, goal_x - rx)
         heading_err = math.atan2(math.sin(bearing - yaw), math.cos(bearing - yaw))
 
         creep_d = float(self.get_parameter("approach_stop_dist_m").value) * 2.0
@@ -184,6 +254,59 @@ class MissionManagerNode(Node):
         elif t.angular.z < -max_ang:
             t.angular.z = -max_ang
         return t
+
+    def _maybe_replan(self, rx: float, ry: float, tx: float, ty: float) -> None:
+        if self.ogrid is None:
+            return
+        need_replan = (
+            not self.waypoints
+            or self.last_plan_target is None
+            or math.hypot(tx - self.last_plan_target[0],
+                          ty - self.last_plan_target[1])
+                > float(self.get_parameter("path_replan_target_delta_m").value)
+        )
+        if not need_replan:
+            return
+
+        start = self.ogrid.world_to_cell(rx, ry, clip=True)
+        goal = self.ogrid.world_to_cell(tx, ty, clip=True)
+        # If the start or goal cell itself is blocked (mineral sitting on
+        # an inflated obstacle, or rover anchored on edge), nudge to the
+        # nearest free cell for a best-effort plan.
+        if self.ogrid.grid[start] == 1:
+            start = self._nearest_free(start)
+        if goal is not None and self.ogrid.grid[goal] == 1:
+            goal = self._nearest_free(goal)
+
+        path = astar(self.ogrid.grid, start, goal) if start and goal else None
+        if not path:
+            self.get_logger().warn(
+                f"A* no path: start={start} goal={goal} target=({tx:.2f},{ty:.2f}) "
+                f"— falling back to straight-line",
+                throttle_duration_sec=2.0)
+            self.waypoints = []
+            self.last_plan_target = (tx, ty)
+            return
+
+        path = simplify_path(self.ogrid.grid, path)
+        self.waypoints = [self.ogrid.cell_to_world(i, j) for (i, j) in path]
+        self.wp_idx = 1 if len(self.waypoints) > 1 else 0
+        self.last_plan_target = (tx, ty)
+        self.get_logger().info(
+            f"A* replanned: {len(self.waypoints)} waypoints "
+            f"to ({tx:.2f},{ty:.2f})")
+
+    def _nearest_free(self, cell: Tuple[int, int]) -> Tuple[int, int]:
+        i0, j0 = cell
+        for r in range(1, 12):
+            for di in range(-r, r + 1):
+                for dj in range(-r, r + 1):
+                    if max(abs(di), abs(dj)) != r:
+                        continue
+                    ni, nj = i0 + di, j0 + dj
+                    if self.ogrid.in_bounds(ni, nj) and self.ogrid.grid[ni, nj] == 0:
+                        return (ni, nj)
+        return cell
 
     def _log_phase(self) -> None:
         s = String()
