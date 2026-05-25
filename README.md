@@ -4,6 +4,69 @@
 
 본 ROS2 workspace는 절차생성된 화성 지형에서 6륜 로버가 광물을 인식·접근·수집·복귀하는 미션을 자동 시뮬레이션합니다.
 
+---
+
+## 🚀 팀원이 main pull 후 해야 할 것 (Quick Start)
+
+### 1. 환경 셋업 (1회만)
+
+**Isaac Sim 5.1 PyPI binary** — [docs/SETUP_ISAAC_PYPI.md](docs/SETUP_ISAAC_PYPI.md) 참조:
+- 권장 venv 경로: `~/dev_ws/isaac_sim_pypi/venv`
+- ROS2 humble 워크스페이스: `~/dev_ws/isaac_sim/IsaacSim-ros_workspaces/humble_ws`
+- 다른 경로 사용 시 env var override: `ISAAC_PYPI_VENV`, `ISAAC_ROS2_WS`
+
+**.bashrc** — [docs/SETUP_BASHRC.md](docs/SETUP_BASHRC.md) 참조 (ROS humble + 워크스페이스 source + ROS_DOMAIN_ID).
+
+**ROS_DOMAIN_ID** (팀 합의 — 같은 LAN 충돌 방지):
+
+| 트랙 | 담당자 | ID |
+|:---:|:---:|:---:|
+| T1 | 김현중 | **111** |
+| T2 | 최진우 | **114** |
+| T3 | 이찬휘 | **112** |
+| T4 | 성선규 | **113** |
+| T5 | 이지민 | **115** |
+
+```bash
+export ROS_DOMAIN_ID=<본인 값>   # ~/.bashrc 에 추가
+```
+
+### 2. 빌드 (main pull 후 또는 코드 변경 시)
+
+```bash
+cd ~/dev_ws/rover_ws
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### 3. 시연 실행 (3 터미널)
+
+```bash
+# T1 — Isaac Sim (source 없이! tools/isaac-pypi wrapper 가 자체 처리)
+cd ~/dev_ws/rover_ws/src/a2_isaac
+tools/isaac-pypi isaac_sim/scripts/run_vehicle_v3.py --terrain terrain_00004
+
+# T2 — ROS2 노드 묶음 (perception + coverage + supervisor + arm + GT cheat)
+source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
+ros2 launch isaac_bringup mvp.launch.py
+
+# T3 — 카메라 view 2개 (body + wrist)
+source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
+ros2 launch isaac_bringup rqt_views.launch.py
+```
+
+→ rover 가 자율적으로 EXPLORE → mineral 발견 → APPROACH → PICK → CARGO RELEASE 반복.
+
+### 4. T5 정공법 졸업 (선택, 정확도 검증 완료 시점에)
+
+`mvp.launch.py` 의 `odom_to_estimated_pose` 노드를 빼고 별도 터미널에서:
+```bash
+ros2 launch isaac_bringup localization.launch.py
+```
++ `arm_executor` / `mission_manager_node` 의 `odom_topic` 파라미터를 `/rover/estimated_odom` 으로 swap.
+
+---
+
 > ℹ️ 명칭 명료성·책임 분리를 위한 **9개 패키지 구조**가 `main`에 정착 완료 (6개 → 9개 재편성). 설계 의도: [docs/STUDY_AND_PLAN.md](docs/STUDY_AND_PLAN.md) Part XI.
 
 ## 트랙 ↔ 담당자

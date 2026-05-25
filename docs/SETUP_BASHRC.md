@@ -39,8 +39,8 @@ source /opt/ros/humble/setup.bash                                    # ROS2 dist
 
 # ─── ROS_DOMAIN_ID 충돌 방지 (같은 LAN에 팀원 있으면 필수) ────
 # 같은 LAN에서 같은 ID면 서로 노드 발견함 → 각자 다른 값
-# 합의: 김현중=11, 최진우=22, 이찬휘=33, 성선규=44, 이지민=55
-export ROS_DOMAIN_ID=44                                              # ← 본인 값으로 수정
+# 합의 (2026-05-26 갱신): 김현중=111, 이찬휘=112, 성선규=113, 최진우=114, 이지민=115
+export ROS_DOMAIN_ID=113                                             # ← 본인 값으로 수정
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp                         # (또는 rmw_fastrtps_cpp)
 ```
 
