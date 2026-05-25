@@ -65,8 +65,10 @@ HOME_DEG = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 # Mineral is in front of rover (supervisor APPROACH P-control aligns it).
 PICK_DOWN_DEG = [0.0, 25.0, 90.0, 0.0, 65.0, 0.0]
 
-# Cargo (back of rover) — single swing for release.
-CARGO_DEG = [180.0, 25.0, 90.0, 0.0, 55.0, 0.0]
+# Cargo (back of rover) — HOME 의 joint_1 만 180° 회전. LIFT → HOME 경유 후
+# 단순 yaw swing 으로 무게중심 안정성 ↑ (이전 [180,25,90,0,55,0] 큰 반경 dip 시
+# rover 뒤로 기울어짐 우려).
+CARGO_DEG = [180.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 
 # Legacy fallback when IK is enabled and wrist detection missing.
 PICK_TRAJ_DEG: List[List[float]] = [
@@ -132,7 +134,6 @@ class ArmExecutorNode(Node):
         # IK phase 높이 (arm base local z offset, mineral world 좌표 기준 상대)
         self.declare_parameter("ik_approach_dz", 0.30)
         self.declare_parameter("ik_descend_dz", 0.05)
-        self.declare_parameter("ik_lift_dz", 0.45)
         self.declare_parameter("grasp_command_topic", "/grasp/command")
         # Step delay between grasp publish and arm continuing — gives
         # vehicle_v3 ScriptNode time to attach the FixedJoint.
@@ -394,39 +395,34 @@ class ArmExecutorNode(Node):
             f"→ target_local=({target_local[0]:.3f},{target_local[1]:.3f},"
             f"{target_local[2]:.3f})")
 
-        # 3) IK target — APPROACH (위), DESCEND (mineral 옆), LIFT (위로)
+        # 3) IK target — APPROACH (위), DESCEND (mineral 옆)
         dz_a = float(self.get_parameter("ik_approach_dz").value)
         dz_d = float(self.get_parameter("ik_descend_dz").value)
-        dz_l = float(self.get_parameter("ik_lift_dz").value)
         t_approach = target_local + np.array([0.0, 0.0, dz_a])
         t_descend = target_local + np.array([0.0, 0.0, dz_d])
-        t_lift = target_local + np.array([0.0, 0.0, dz_l])
 
         q_home = np.array([math.radians(v) for v in HOME_DEG])
         q_approach, ok_a, err_a = dls_ik(t_approach, None, q_home,
                                           position_only=True)
         q_descend, ok_d, err_d = dls_ik(t_descend, None, q_approach,
                                          position_only=True)
-        q_lift, ok_l, err_l = dls_ik(t_lift, None, q_descend,
-                                      position_only=True)
-        if not (ok_a and ok_d and ok_l):
+        if not (ok_a and ok_d):
             self.get_logger().error(
                 f"IK 미수렴: APPROACH={ok_a}(err={err_a:.4f}) "
-                f"DESCEND={ok_d}(err={err_d:.4f}) LIFT={ok_l}(err={err_l:.4f})")
+                f"DESCEND={ok_d}(err={err_d:.4f})")
             goal_handle.abort()
             return ExecuteArmTask.Result(
                 success=False,
-                message=f"IK fail: a={ok_a} d={ok_d} l={ok_l}")
+                message=f"IK fail: a={ok_a} d={ok_d}")
 
         deg_approach = list(np.degrees(q_approach))
         deg_descend = list(np.degrees(q_descend))
-        deg_lift = list(np.degrees(q_lift))
         self.get_logger().info(
             f"IK solved: APPROACH q_deg={[round(v,1) for v in deg_approach]} "
-            f"DESCEND q_deg={[round(v,1) for v in deg_descend]} "
-            f"LIFT q_deg={[round(v,1) for v in deg_lift]}")
+            f"DESCEND q_deg={[round(v,1) for v in deg_descend]}")
 
-        # 4) State machine
+        # 4) State machine — LIFT 제거 (DESCEND → HOME_MID 직접 보간으로 통합):
+        #   HOME → APPROACH → DESCEND → pickup → HOME_MID → CARGO → release → HOME
         cur_deg = list(HOME_DEG)
         self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 0.05)
         cur_deg = list(HOME_DEG)
@@ -449,12 +445,13 @@ class ArmExecutorNode(Node):
         fb.message = "pickup published"
         goal_handle.publish_feedback(fb)
 
-        # 6) LIFT
-        self._goto(cur_deg, deg_lift, goal_handle, "LIFT", 0.5, 0.70)
-        cur_deg = list(deg_lift)
+        # 6) DESCEND → HOME 직접 보간 (LIFT 통합). mineral 은 collision off 라
+        # rover body 통과해도 충돌 영향 X. arm 자세 dip → 직립 자연 펴짐.
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_MID", 0.5, 0.7)
+        cur_deg = list(HOME_DEG)
 
-        # 7) CARGO swing (scripted, joint_1=180)
-        self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.70, 0.85)
+        # 7) CARGO yaw swing (HOME 의 joint_1 만 180°)
+        self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.7, 0.85)
         cur_deg = list(CARGO_DEG)
 
         # 8) Release — detach + MakeInvisible

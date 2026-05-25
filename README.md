@@ -18,26 +18,32 @@
 
 각 트랙의 onboarding: [docs/tracks/T*_BRIEF.md](docs/tracks/)
 
-## 현재 상태
+## 현재 상태 (2026-05-26 발표 직전)
 
-9개 패키지 재구성이 `main`에 병합 완료. 코어 노드 대부분이 1차 구현되었고, 세부 모듈·일부 트랙은 아직 stub.
+🎉 **MVP 시연 모델 완성** — 화성 rover 자율 mineral 수집 mission 의 end-to-end loop:
+`EXPLORE → 발견 → APPROACH → PICK (FixedJoint snap) → CARGO swing → RELEASE → EXPLORE` 반복 동작 검증 완료.
 
-✅ **구현 완료 (1차 동작)**:
-- **I1 지형 자산** — v2 생성기로 `terrain_00001`~`terrain_00003` 생성. 각 5파일 + master scene + heightmap/preview PNG, 정적 collider baked
-- **isaac_sim** — `sim_bridge_node` (Isaac Sim ↔ ROS2 브리지)
-- **isaac_drive** ⭐ — `drive_manager_node`·`mobile_base_executor_node` + navigation 일습 (`mission_fsm`, `bcd_planner`, `coverage_planner`, `path_planner`, `fog_map`, `terrain_loader`, `obstacle_grid`, `navigator`)
-- **isaac_supervisor** — `mission_manager_node` (미션 FSM), `battery_monitor_node`
-- **isaac_perception** — `perception_node` (인지 결과 publish 골격)
-- **isaac_manipulation** — `arm_executor_node` + 로버+M0609+RG2 단일 articulation 씬 빌더 (`scripts/build_rover_m0609_scene.py`)
-- **isaac_rl** — `driving_policy_node` (PPO inference 골격)
-- **isaac_interfaces** — msg 4 / srv 3 / action 3 정의 + 5개 인터페이스 계약
+✅ **구현 완료 (시연 PASS)**:
+- **I1 지형 자산** — v2 생성기로 `terrain_00001`~`terrain_00022` 생성 (장애물·22 mineral·basecamp baked)
+- **vehicle_v3.usd** — 액션그래프 내장 자립 로버 (T1+T2+T3+T5 통합): ROS2 sensor 발행 + `/cmd_vel→Ackermann→휠` 구동 + `/arm/joint_command→m0609+finger` 제어 + `/grasp/command` FixedJoint snap + GT odom (dev cheat)
+- **isaac_drive** — `coverage_node` (BCD anchor sweep + A* obstacle 회피 + replan), `odom_to_estimated_pose` (GT cheat 어댑터), `minimap_publisher`
+- **isaac_perception** — `yolo_perception_node` (nav + wrist YOLO + depth backproject → mineral world XYZ)
+- **isaac_supervisor** — `mission_manager_node` (EXPLORE/APPROACH/PICK phase + cmd_vel mux + arm action client + lock-on)
+- **isaac_manipulation** — `arm_executor_node` (T2 DLS-IK 상태머신: HOME→APPROACH→DESCEND→pickup→HOME_MID→CARGO→release→HOME)
+- **isaac_localization (T5 이지민)** — `ekf_fusion` (wheel+imu+sun+TRN EKF), 8개 sensor/fusion 노드 구현. **정확도 추가 튠 필요** (졸업 작업)
+- **isaac_bringup** — `mvp.launch.py` (시연용 GT cheat 모드), `rqt_views.launch.py` (카메라 view 2개), `localization.launch.py` (T5 stack + EDL pose prior)
+- **isaac_interfaces** — msg + action 계약 정착
 
-⏳ **stub — 트랙 owner 작업 중/예정**:
-- **isaac_localization (T5 이지민)** — `localization_node`·`ekf_fusion`·`trn`·sensors 전부 빈 파일, 미착수
-- **isaac_rl 내부** — `ppo_wrapper`, `rl_trainer`, `rl_environment`, `reward_function`, `policy_loader`
-- **isaac_perception 세부** — `vision/`(mineral·obstacle·terrain·value), `depth/` 서브모듈
-- **primitives** — manipulation(pick/place/unload/solar), drive(drive_to_target/avoid_obstacle/stop)
-- **isaac_sim 스크립트** — `mars_physics_config.py`, `basecamp_visual_builder.py` (빈 파일)
+⚠️ **시연용 cheat (졸업 시 청산)**:
+- `/ground_truth/odom` — `odom_to_estimated_pose` 가 `/rover/estimated_pose` 로 forwarding. T5 EKF stack 정확도 검증 완료되면 `localization.launch.py` 가 대체.
+- `ik_descend_dz=-0.40` — perception z bias (+47cm 평균) 보정. T2 depth 정확도 올리면 default 복귀.
+- FixedJoint snap grip — 30cm 광물 vs 4cm finger gap 비대칭 (hardware 한계). 시연용 hack 박제.
+
+⏳ **추가 작업 (시연 후)**:
+- T5 EKF: sun_yaw + TRN 정확도 튠
+- T2 perception: depth z bias 해결
+- T3 RL inference: PPO 정책 통합 (`driving_policy_node`)
+- 정리 대기 목록: [list_to_fix.md](list_to_fix.md)
 
 ## 빠른 시작 (Day 1 셋업, ~5분)
 
@@ -104,21 +110,48 @@ python3 isaac_sim/scripts/mars_terrain_generator_v2.py --seed 777 --terrain-id t
 
 → I1 풀 가이드: [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md)
 
-### 6. ROS2 실행 (트랙 노드 채워진 후)
+### 6. 시연 실행 (3 터미널, MVP 통합)
+
+> 📌 **사전 셋업 필수** — Isaac Sim 5.1 PyPI binary 환경: [docs/SETUP_ISAAC_PYPI.md](docs/SETUP_ISAAC_PYPI.md)
+> .bashrc / ROS_DOMAIN_ID: [docs/SETUP_BASHRC.md](docs/SETUP_BASHRC.md)
 
 ```bash
-# 전체 통합 (Day 5+)
-ros2 launch isaac_bringup full_system.launch.py
+# ───── T1: Isaac Sim vehicle_v3 (source 없이, tools/isaac-pypi wrapper) ─────
+cd ~/dev_ws/rover_ws/src/a2_isaac
+tools/isaac-pypi isaac_sim/scripts/run_vehicle_v3.py --terrain terrain_00004
 
-# 트랙별 부분 실행 (Day 1-4 개발용)
-ros2 launch isaac_bringup sim.launch.py            # 김현중 환경 검증
-ros2 launch isaac_bringup perception.launch.py     # 최진우 vision
-ros2 launch isaac_bringup drive.launch.py          # 이찬휘 주행
-ros2 launch isaac_bringup localization.launch.py   # 이지민 TRN
-ros2 launch isaac_bringup manipulation.launch.py   # 최진우 M0609
-ros2 launch isaac_bringup supervisor.launch.py     # 성선규 mission
-ros2 launch isaac_bringup rl.launch.py             # 이찬휘 RL inference
+# ───── T2: ROS2 노드 묶음 (perception + coverage + supervisor + arm + GT cheat) ─────
+# 새 터미널, source 필요
+source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
+ros2 launch isaac_bringup mvp.launch.py
+
+# ───── T3: 카메라 view 2개 (body + wrist) ─────
+# 새 터미널, source 필요
+source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
+ros2 launch isaac_bringup rqt_views.launch.py
 ```
+
+→ rover 가 자율적으로 EXPLORE → mineral 발견 → APPROACH → PICK → CARGO RELEASE 반복.
+
+### 트랙별 부분 launch (개발용)
+
+```bash
+ros2 launch isaac_bringup sim.launch.py            # 환경 검증 (T1)
+ros2 launch isaac_bringup perception.launch.py     # vision (T2)
+ros2 launch isaac_bringup drive.launch.py          # 주행 (T3)
+ros2 launch isaac_bringup localization.launch.py   # T5 EKF stack (정공법, 졸업 대기)
+ros2 launch isaac_bringup manipulation.launch.py   # M0609 (T2)
+ros2 launch isaac_bringup supervisor.launch.py     # mission (T4)
+ros2 launch isaac_bringup full_system.launch.py    # 전체 (모든 트랙 통합)
+```
+
+### 시연용 → 정공법 졸업 경로
+
+| Cheat | mvp.launch.py | 졸업 launch |
+|---|---|---|
+| GT odom (`odom_to_estimated_pose`) | ✓ default | `localization.launch.py` 실행 (T5 EKF) |
+| `ik_descend_dz=-0.40` (perception z bias 보정) | ✓ default | T2 depth 정확도 향상 시 launch param 제거 |
+| FixedJoint snap grip | ✓ default | (hardware 한계 — 영구) |
 
 ## Workspace 구조
 

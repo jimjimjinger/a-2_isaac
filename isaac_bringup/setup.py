@@ -17,6 +17,8 @@ setup(
             "launch/supervisor.launch.py",
             "launch/manipulation.launch.py",
             "launch/localization.launch.py",
+            "launch/mvp.launch.py",
+            "launch/rqt_views.launch.py",
         ]),
         (f"share/{package_name}/rviz", [
             "rviz/localization_map.rviz",

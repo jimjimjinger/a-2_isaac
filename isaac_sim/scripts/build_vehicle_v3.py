@@ -83,7 +83,11 @@ REAR_FRONT_WHEEL_DISTANCE = 0.77
 WHEEL_RADIUS = 0.1
 OFFSET = -0.0135
 STEERING_GAIN = 1.1
-WHEEL_VELOCITY_GAIN = 1.5
+# 2.0 절충값 (2026-05-26):
+#   1.5 (T5 검증) — 안정적이지만 언덕 등반 부족
+#   2.5 — 등반 OK 하지만 통통 튐 + rover 뒤로 기울어짐 (급가속 + slip)
+#   2.0 — 등반 도움 + 급가속 완화. GT cheat 모드 사용 (localization 무관).
+WHEEL_VELOCITY_GAIN = 2.0
 
 
 def _component(value, index):
