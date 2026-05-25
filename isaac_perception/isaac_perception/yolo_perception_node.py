@@ -1,17 +1,19 @@
-"""ROS2 node: subscribe to Isaac Sim camera topics, run YOLO mineral
-detection, publish DetectionArray on /perception/detections.
+"""ROS2 perception node: YOLO mineral detection on rover (nav) camera and
+optionally wrist camera. Publishes DetectionArray + annotated Image per
+channel.
 
-Phase 1 (this file): RGB + YOLO + DetectionArray publish. If depth /
-camera_info / odom are present they are used for naive world-XYZ
-estimation; otherwise world_position is zero. Refined 3D pose, mineral_id
-matching against T1 meta, and bbox_size_m come in later phases.
+Two channels:
+- nav (rover body cam): world-frame mineral coordinates (depth + odom +
+  camera_offset). Used by mission_manager for APPROACH planning.
+- wrist (gripper cam): camera optical frame mineral coordinates only.
+  Used by arm_executor for precision visual servoing + IK target.
 
-Contract: docs/interfaces/INTERFACE_CONTRACTS.md I2 (T2 -> T3, T4).
+Contract: docs/interfaces/INTERFACE_CONTRACTS.md I2.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 import rclpy
@@ -51,8 +53,6 @@ class CamIntrinsics:
 
 
 def _image_to_bgr(msg: Image) -> np.ndarray:
-    """Decode sensor_msgs/Image (rgb8 or bgr8) to BGR uint8 numpy array
-    without depending on cv_bridge."""
     if msg.encoding not in ("rgb8", "bgr8"):
         raise ValueError(f"unsupported image encoding: {msg.encoding}")
     buf = np.frombuffer(bytes(msg.data), dtype=np.uint8)
@@ -63,7 +63,6 @@ def _image_to_bgr(msg: Image) -> np.ndarray:
 
 
 def _depth_to_meters(msg: Image) -> Optional[np.ndarray]:
-    """Decode Isaac Sim depth (32FC1 meters, or 16UC1 mm) to float32 meters."""
     if msg.encoding == "32FC1":
         arr = np.frombuffer(bytes(msg.data), dtype=np.float32)
         return arr.reshape(msg.height, msg.width).copy()
@@ -73,73 +72,56 @@ def _depth_to_meters(msg: Image) -> Optional[np.ndarray]:
     return None
 
 
-class YoloPerceptionNode(Node):
-    def __init__(self) -> None:
-        super().__init__("yolo_perception_node")
+class CamChannel:
+    """Per-camera processing: subscribes to RGB/Depth/Info(/Odom), runs YOLO
+    on the latest RGB frame at the channel's tick, and publishes
+    DetectionArray + (optional) annotated Image.
 
-        self.declare_parameter("model_path", "")
-        self.declare_parameter("conf_threshold", 0.5)
-        self.declare_parameter("iou_threshold", 0.45)
-        self.declare_parameter("publish_rate_hz", 10.0)
-        self.declare_parameter("rgb_topic",   "/camera/rover/image_raw")
-        self.declare_parameter("depth_topic", "/camera/rover/depth")
-        self.declare_parameter("info_topic",  "/camera/rover/camera_info")
-        self.declare_parameter("odom_topic",  "/ground_truth/odom")
-        self.declare_parameter("out_topic",   "/perception/detections")
-        self.declare_parameter("annotated_topic", "/perception/image_annotated")
-        self.declare_parameter("publish_annotated", True)
-        self.declare_parameter("frame_id",    "world")
-        self.declare_parameter("camera_offset_xyz", [0.37, 0.0, 0.27])
-        self.declare_parameter("log_period_sec", 2.0)
+    mode="world":   compute world-frame XYZ for each detection using
+                    depth + intrinsics + camera_offset + odom (yaw only).
+                    Needs odom_topic.
+    mode="optical": compute camera optical frame XYZ only (z forward,
+                    x right, y down). Downstream node (e.g. arm IK) does
+                    its own frame transform.
+    """
 
-        model_path = str(self.get_parameter("model_path").value).strip()
-        if not model_path:
-            from pathlib import Path
-            here = Path(__file__).resolve().parent.parent
-            model_path = str(here / "models" / "mineral_yolo_best.pt")
-
-        from .yolo_mineral_detector import YoloMineralDetector
-        self.det = YoloMineralDetector(
-            model_path,
-            conf=float(self.get_parameter("conf_threshold").value),
-            iou=float(self.get_parameter("iou_threshold").value),
-        )
-        self.get_logger().info(f"YOLO loaded: {model_path}")
+    def __init__(self, *, node: Node, name: str, detector,
+                 rgb_topic: str, depth_topic: str, info_topic: str,
+                 det_topic: str, ann_topic: str, frame_id: str,
+                 mode: str, publish_annotated: bool,
+                 odom_topic: Optional[str] = None,
+                 camera_offset_xyz: Optional[Tuple[float, float, float]] = None):
+        assert mode in ("world", "optical")
+        self.node = node
+        self.name = name
+        self.detector = detector
+        self.frame_id = frame_id
+        self.mode = mode
+        self.publish_annotated_flag = publish_annotated
+        self.camera_offset_xyz = camera_offset_xyz or (0.0, 0.0, 0.0)
 
         self.intr: Optional[CamIntrinsics] = None
         self.last_rgb: Optional[Image] = None
         self.last_depth_m: Optional[np.ndarray] = None
         self.last_odom: Optional[Odometry] = None
+
         self.frames_seen = 0
         self.frames_published = 0
         self.detections_total = 0
 
-        self.create_subscription(
-            Image, str(self.get_parameter("rgb_topic").value),
-            self._on_rgb, SENSOR_QOS)
-        self.create_subscription(
-            Image, str(self.get_parameter("depth_topic").value),
-            self._on_depth, SENSOR_QOS)
-        self.create_subscription(
-            CameraInfo, str(self.get_parameter("info_topic").value),
-            self._on_info, SENSOR_QOS)
-        self.create_subscription(
-            Odometry, str(self.get_parameter("odom_topic").value),
-            self._on_odom, SENSOR_QOS)
+        node.create_subscription(Image, rgb_topic, self._on_rgb, SENSOR_QOS)
+        node.create_subscription(Image, depth_topic, self._on_depth, SENSOR_QOS)
+        node.create_subscription(CameraInfo, info_topic, self._on_info, SENSOR_QOS)
+        if mode == "world" and odom_topic:
+            node.create_subscription(Odometry, odom_topic, self._on_odom, SENSOR_QOS)
 
-        self.pub = self.create_publisher(
-            DetectionArray, str(self.get_parameter("out_topic").value), 10)
-        self.pub_annotated = None
-        if bool(self.get_parameter("publish_annotated").value):
-            self.pub_annotated = self.create_publisher(
-                Image, str(self.get_parameter("annotated_topic").value), SENSOR_QOS)
+        self.pub_det = node.create_publisher(DetectionArray, det_topic, 10)
+        self.pub_ann = None
+        if publish_annotated:
+            self.pub_ann = node.create_publisher(Image, ann_topic, SENSOR_QOS)
 
-        rate_hz = max(0.5, float(self.get_parameter("publish_rate_hz").value))
-        self.create_timer(1.0 / rate_hz, self._tick)
-        log_period = max(0.5, float(self.get_parameter("log_period_sec").value))
-        self.create_timer(log_period, self._log_status)
-        self.get_logger().info(
-            f"yolo_perception_node ready, publishing /perception/detections @ {rate_hz:.1f} Hz")
+    def _log(self, msg: str, level: str = "info") -> None:
+        getattr(self.node.get_logger(), level)(f"[{self.name}] {msg}")
 
     def _on_rgb(self, msg: Image) -> None:
         self.last_rgb = msg
@@ -148,23 +130,24 @@ class YoloPerceptionNode(Node):
     def _on_depth(self, msg: Image) -> None:
         first = self.last_depth_m is None
         if first:
-            self.get_logger().info(
-                f"DIAG depth msg: encoding={msg.encoding} {msg.width}x{msg.height} step={msg.step}")
+            self._log(f"depth msg: encoding={msg.encoding} {msg.width}x{msg.height}")
         d = _depth_to_meters(msg)
         if d is None:
             if first:
-                self.get_logger().warn(f"DIAG depth decode FAILED for encoding={msg.encoding}")
+                self._log(f"depth decode FAILED for encoding={msg.encoding}", "warn")
             return
         if first:
             finite = np.isfinite(d)
             n_finite = int(finite.sum())
             if n_finite > 0:
-                mn, mx, med = float(d[finite].min()), float(d[finite].max()), float(np.median(d[finite]))
+                mn = float(d[finite].min())
+                mx = float(d[finite].max())
+                med = float(np.median(d[finite]))
             else:
                 mn = mx = med = float('nan')
-            self.get_logger().info(
-                f"DIAG depth array: dtype={d.dtype} shape={d.shape} "
-                f"finite={n_finite}/{d.size} min={mn:.4f} max={mx:.4f} median={med:.4f}")
+            self._log(
+                f"depth array: shape={d.shape} finite={n_finite}/{d.size} "
+                f"min={mn:.3f} max={mx:.3f} med={med:.3f}")
         self.last_depth_m = d
 
     def _on_info(self, msg: CameraInfo) -> None:
@@ -176,8 +159,8 @@ class YoloPerceptionNode(Node):
             width=int(msg.width), height=int(msg.height),
         )
         if first:
-            self.get_logger().info(
-                f"DIAG camera_info: {msg.width}x{msg.height} fx={self.intr.fx:.1f} fy={self.intr.fy:.1f} "
+            self._log(
+                f"camera_info: {msg.width}x{msg.height} fx={self.intr.fx:.1f} "
                 f"cx={self.intr.cx:.1f} cy={self.intr.cy:.1f}")
 
     def _on_odom(self, msg: Odometry) -> None:
@@ -185,33 +168,32 @@ class YoloPerceptionNode(Node):
         self.last_odom = msg
         if first:
             p = msg.pose.pose.position
-            self.get_logger().info(
-                f"DIAG odom first: pos=({p.x:.2f},{p.y:.2f},{p.z:.2f}) frame={msg.header.frame_id}")
+            self._log(f"odom first: pos=({p.x:.2f},{p.y:.2f},{p.z:.2f})")
 
-    def _tick(self) -> None:
+    def tick(self) -> None:
         msg = self.last_rgb
         if msg is None:
             return
         try:
             bgr = _image_to_bgr(msg)
         except Exception as e:
-            self.get_logger().warn(f"RGB decode failed: {e}", throttle_duration_sec=5.0)
+            self._log(f"RGB decode failed: {e}", "warn")
             return
 
-        dets = self.det.detect(bgr)
+        dets = self.detector.detect(bgr)
         out = DetectionArray()
         out.header = Header()
         out.header.stamp = msg.header.stamp
-        out.header.frame_id = str(self.get_parameter("frame_id").value)
+        out.header.frame_id = self.frame_id
 
         for d in dets:
             vscore = VALUE_SCORE_BY_NAME.get(d.cls_name, 0.0)
-            world_xyz = self._estimate_world_xyz(d.cx, d.cy)
+            xyz = self._estimate_xyz(d.cx, d.cy)
             x1, y1, x2, y2 = [int(round(v)) for v in d.bbox]
             det_msg = Detection()
             det_msg.class_name = d.cls_name
             det_msg.world_position = Point(
-                x=float(world_xyz[0]), y=float(world_xyz[1]), z=float(world_xyz[2]))
+                x=float(xyz[0]), y=float(xyz[1]), z=float(xyz[2]))
             det_msg.confidence = float(d.conf)
             det_msg.value_score = float(vscore)
             det_msg.mineral_id = -1
@@ -223,12 +205,12 @@ class YoloPerceptionNode(Node):
             out.detections.append(det_msg)
 
         out.detections.sort(key=lambda d_: d_.confidence, reverse=True)
-        self.pub.publish(out)
+        self.pub_det.publish(out)
         self.frames_published += 1
         self.detections_total += len(out.detections)
 
-        if self.pub_annotated is not None:
-            annotated = self.det.draw_overlay(bgr, dets)
+        if self.pub_ann is not None:
+            annotated = self.detector.draw_overlay(bgr, dets)
             img_msg = Image()
             img_msg.header.stamp = msg.header.stamp
             img_msg.header.frame_id = msg.header.frame_id
@@ -238,38 +220,40 @@ class YoloPerceptionNode(Node):
             img_msg.is_bigendian = 0
             img_msg.step = annotated.shape[1] * 3
             img_msg.data = annotated.tobytes()
-            self.pub_annotated.publish(img_msg)
+            self.pub_ann.publish(img_msg)
 
-    def _estimate_world_xyz(self, px: float, py: float) -> tuple[float, float, float]:
-        if self.intr is None or self.last_depth_m is None or self.last_odom is None:
+    def _estimate_xyz(self, px: float, py: float) -> Tuple[float, float, float]:
+        if self.intr is None or self.last_depth_m is None:
             return (0.0, 0.0, 0.0)
+        if self.mode == "world" and self.last_odom is None:
+            return (0.0, 0.0, 0.0)
+
         h, w = self.last_depth_m.shape
         ix = int(np.clip(round(px), 0, w - 1))
         iy = int(np.clip(round(py), 0, h - 1))
         z = float(self.last_depth_m[iy, ix])
         if not np.isfinite(z) or z <= 0.05 or z > 50.0:
-            self.get_logger().warn(
-                f"DIAG depth invalid at px=({ix},{iy}) value={z:.4f} (img {w}x{h})",
-                throttle_duration_sec=2.0)
+            self._log(
+                f"depth invalid at px=({ix},{iy}) value={z:.4f}",
+                "warn")
             return (0.0, 0.0, 0.0)
 
-        # Camera optical frame XYZ (z forward, x right, y down)
+        # Camera optical frame (z forward, x right, y down)
         x_c = (px - self.intr.cx) * z / self.intr.fx
         y_c = (py - self.intr.cy) * z / self.intr.fy
         z_c = z
 
+        if self.mode == "optical":
+            return (x_c, y_c, z_c)
+
         # Optical -> ROS camera body (x forward, y left, z up)
-        x_cam = z_c
-        y_cam = -x_c
-        z_cam = -y_c
+        x_cam, y_cam, z_cam = z_c, -x_c, -y_c
 
-        # Camera body -> rover body (static offset; orientation = identity placeholder)
-        ox, oy, oz = [float(v) for v in self.get_parameter("camera_offset_xyz").value]
-        x_r = x_cam + ox
-        y_r = y_cam + oy
-        z_r = z_cam + oz
+        # Camera body -> rover body (static offset)
+        ox, oy, oz = self.camera_offset_xyz
+        x_r, y_r, z_r = x_cam + ox, y_cam + oy, z_cam + oz
 
-        # Rover -> world (yaw only from odom quaternion)
+        # Rover -> world (yaw from odom)
         p = self.last_odom.pose.pose.position
         q = self.last_odom.pose.pose.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
@@ -281,15 +265,113 @@ class YoloPerceptionNode(Node):
         z_w = p.z + z_r
         return (x_w, y_w, z_w)
 
-    def _log_status(self) -> None:
-        have = []
-        if self.last_rgb is not None: have.append("rgb")
-        if self.last_depth_m is not None: have.append("depth")
-        if self.intr is not None: have.append("info")
-        if self.last_odom is not None: have.append("odom")
+    def have_str(self) -> str:
+        flags: List[str] = []
+        if self.last_rgb is not None: flags.append("rgb")
+        if self.last_depth_m is not None: flags.append("depth")
+        if self.intr is not None: flags.append("info")
+        if self.mode == "world" and self.last_odom is not None: flags.append("odom")
+        return ",".join(flags) or "-"
+
+
+class YoloPerceptionNode(Node):
+    def __init__(self) -> None:
+        super().__init__("yolo_perception_node")
+
+        # Shared YOLO config
+        self.declare_parameter("model_path", "")
+        self.declare_parameter("conf_threshold", 0.5)
+        self.declare_parameter("iou_threshold", 0.45)
+        self.declare_parameter("publish_rate_hz", 10.0)
+        self.declare_parameter("log_period_sec", 2.0)
+
+        # Nav (rover body) cam — world frame output for mission_manager
+        self.declare_parameter("nav_rgb_topic",   "/camera/rover/image_raw")
+        self.declare_parameter("nav_depth_topic", "/camera/rover/depth")
+        self.declare_parameter("nav_info_topic",  "/camera/rover/camera_info")
+        self.declare_parameter("odom_topic",      "/ground_truth/odom")
+        self.declare_parameter("nav_det_topic",   "/perception/detections")
+        self.declare_parameter("nav_ann_topic",   "/perception/image_annotated")
+        self.declare_parameter("nav_frame_id",    "world")
+        self.declare_parameter("nav_camera_offset_xyz", [0.37, 0.0, 0.27])
+        self.declare_parameter("nav_publish_annotated", True)
+
+        # Wrist (gripper) cam — optical frame output for arm_executor
+        self.declare_parameter("enable_wrist", True)
+        self.declare_parameter("wrist_rgb_topic",   "/camera/wrist/image_raw")
+        self.declare_parameter("wrist_depth_topic", "/camera/wrist/depth")
+        self.declare_parameter("wrist_info_topic",  "/camera/wrist/camera_info")
+        self.declare_parameter("wrist_det_topic",   "/perception/wrist_detections")
+        self.declare_parameter("wrist_ann_topic",   "/perception/wrist_image_annotated")
+        self.declare_parameter("wrist_frame_id",    "wrist_camera_optical")
+        self.declare_parameter("wrist_publish_annotated", True)
+
+        model_path = str(self.get_parameter("model_path").value).strip()
+        if not model_path:
+            from pathlib import Path
+            here = Path(__file__).resolve().parent.parent
+            model_path = str(here / "models" / "mineral_yolo_best.pt")
+
+        from .yolo_mineral_detector import YoloMineralDetector
+        self.detector = YoloMineralDetector(
+            model_path,
+            conf=float(self.get_parameter("conf_threshold").value),
+            iou=float(self.get_parameter("iou_threshold").value),
+        )
+        self.get_logger().info(f"YOLO loaded: {model_path}")
+
+        self.nav = CamChannel(
+            node=self, name="nav", detector=self.detector,
+            rgb_topic=str(self.get_parameter("nav_rgb_topic").value),
+            depth_topic=str(self.get_parameter("nav_depth_topic").value),
+            info_topic=str(self.get_parameter("nav_info_topic").value),
+            odom_topic=str(self.get_parameter("odom_topic").value),
+            det_topic=str(self.get_parameter("nav_det_topic").value),
+            ann_topic=str(self.get_parameter("nav_ann_topic").value),
+            frame_id=str(self.get_parameter("nav_frame_id").value),
+            mode="world",
+            publish_annotated=bool(self.get_parameter("nav_publish_annotated").value),
+            camera_offset_xyz=tuple(
+                float(v) for v in self.get_parameter("nav_camera_offset_xyz").value),
+        )
+
+        self.wrist: Optional[CamChannel] = None
+        if bool(self.get_parameter("enable_wrist").value):
+            self.wrist = CamChannel(
+                node=self, name="wrist", detector=self.detector,
+                rgb_topic=str(self.get_parameter("wrist_rgb_topic").value),
+                depth_topic=str(self.get_parameter("wrist_depth_topic").value),
+                info_topic=str(self.get_parameter("wrist_info_topic").value),
+                odom_topic=None,
+                det_topic=str(self.get_parameter("wrist_det_topic").value),
+                ann_topic=str(self.get_parameter("wrist_ann_topic").value),
+                frame_id=str(self.get_parameter("wrist_frame_id").value),
+                mode="optical",
+                publish_annotated=bool(self.get_parameter("wrist_publish_annotated").value),
+            )
+
+        rate_hz = max(0.5, float(self.get_parameter("publish_rate_hz").value))
+        self.create_timer(1.0 / rate_hz, self._tick)
+        log_period = max(0.5, float(self.get_parameter("log_period_sec").value))
+        self.create_timer(log_period, self._log_status)
         self.get_logger().info(
-            f"frames_seen={self.frames_seen} pub={self.frames_published} "
-            f"dets_total={self.detections_total} have=[{','.join(have) or '-'}]")
+            f"yolo_perception_node ready @ {rate_hz:.1f} Hz "
+            f"(nav: world, wrist: {'optical' if self.wrist else 'disabled'})")
+
+    def _tick(self) -> None:
+        self.nav.tick()
+        if self.wrist is not None:
+            self.wrist.tick()
+
+    def _log_status(self) -> None:
+        line = (f"nav: seen={self.nav.frames_seen} pub={self.nav.frames_published} "
+                f"dets={self.nav.detections_total} have=[{self.nav.have_str()}]")
+        if self.wrist is not None:
+            line += (f" | wrist: seen={self.wrist.frames_seen} "
+                     f"pub={self.wrist.frames_published} "
+                     f"dets={self.wrist.detections_total} "
+                     f"have=[{self.wrist.have_str()}]")
+        self.get_logger().info(line)
 
 
 def main(args: list[str] | None = None) -> None:
