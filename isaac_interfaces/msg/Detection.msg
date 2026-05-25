@@ -1,0 +1,10 @@
+string class_name
+geometry_msgs/Point world_position
+float32 confidence
+float32 value_score
+int32 mineral_id
+geometry_msgs/Vector3 bbox_size_m
+int32 bbox_xmin
+int32 bbox_ymin
+int32 bbox_xmax
+int32 bbox_ymax

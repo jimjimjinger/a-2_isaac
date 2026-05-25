@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""베스핀 가스 보주 USD 생성 — mineral_red.usd 대체."""
+"""베스핀 가스 보주 USD 생성 — green_gas.usd."""
 from pathlib import Path
 from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade
 
-OUT = Path(__file__).parent / "mineral_red.usd"
+OUT = Path(__file__).parent / "green_gas.usd"
 
 
 def make_material(stage, path, base_color, emissive_color, emissive_intensity=0.0):

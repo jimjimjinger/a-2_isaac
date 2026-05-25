@@ -10,6 +10,12 @@ manipulator 자산(rover+M0609+RG2)을 spawn.
 사용:
     isaac-python scripts/build_rover_m0609_scene.py
     isaac-python scripts/build_rover_m0609_scene.py --auto-play
+    # 결합 stage 를 단일 USD 로 저장 (reference 유지, 가벼움):
+    isaac-python scripts/build_rover_m0609_scene.py \
+        --export ../isaac_sim/assets/rover_m0609_assembled.usd
+    # 자가포함 (flatten, 다른 PC 배포용, 큰 파일):
+    isaac-python scripts/build_rover_m0609_scene.py \
+        --export ../isaac_sim/assets/rover_m0609_assembled.usd --export-flatten
 """
 from __future__ import annotations
 
@@ -23,12 +29,6 @@ try:
     sys.stdout.reconfigure(line_buffering=True)
 except Exception:
     pass
-
-# 스크립트 절대경로를 chdir 보다 먼저 고정한다.
-# ⚠️ 아래 os.chdir 가 cwd 를 임시 폴더로 바꾸므로, 그 후에 Path(__file__) 를
-# resolve 하면 상대 __file__ 이 temp dir 기준으로 깨진다 → A2_ROOT 가 망가짐.
-# 반드시 chdir 전에 abspath 로 캡처해 둘 것.
-_SCRIPT_PATH = os.path.abspath(__file__)
 
 # URDF importer 가 임시 mesh USD 를 cwd 에 쓰려고 함 → cwd 가 read-only 면 실패
 # (예: /opt/ove/base_stack 같은 곳에서 실행 시 권한 에러). 임시 쓰기 가능
@@ -73,22 +73,19 @@ omni.kit.app.get_app().get_extension_manager().set_extension_enabled_immediate(
 
 from isaacsim.asset.importer.urdf import _urdf
 from isaacsim.core.api import World
-from isaacsim.core.prims import SingleArticulation
-from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
 
 # ─── 경로 ──────────────────────────────────────────────────────────────────
-# A2_ROOT = a2_isaac 워크스페이스 루트. 이 스크립트는
-#   <A2_ROOT>/isaac_manipulation/scripts/build_rover_m0609_scene.py
-# 위치이므로 부모 3단계 위가 루트다. 절대경로 하드코딩 대신 스크립트 위치에서
-# 유도 → 워크스페이스를 어디에 두든·어느 cwd 에서 실행하든 동작한다.
-A2_ROOT = Path(_SCRIPT_PATH).parents[2]
+A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
+# T1 김현중이 main 에 추가한 in-repo rover 자산 (2026-05-20).
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
+
+# M0609 + RG2 도 in-repo 로 이전 (2026-05-20). m0609 URDF 의 mesh absolute path
+# 는 sed 로 상대경로(meshes/...) 패치됨. 자가포함 → 다른 PC 에서도 그대로 작동.
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"
 RG2_URDF = A2_ROOT / "isaac_sim/assets/onrobot_rg2/urdf/onrobot_rg2.urdf"
-print(f"[init] A2_ROOT → {A2_ROOT}  (스크립트 위치 기준 유도)", flush=True)
 
 # URDF 안의 link 이름 (dual_cam_pick_place config 와 동일)
 M0609_EE_LINK = "link_6"
@@ -100,12 +97,9 @@ RG2_BASE_LINK = "angle_bracket"
 # 아래 SPAWN_X / SPAWN_Y 만 바꿔서 빠르게 iterate.
 SPAWN_X = 5.0    # 동쪽 5m
 SPAWN_Y = 0.0
-SPAWN_Z = 0.5    # terrain 위 시작 높이
+SPAWN_Z = 1.0    # 자유낙하 거리 확보용
 ROVER_SPAWN_POS = (SPAWN_X, SPAWN_Y, SPAWN_Z)
 ROVER_SPAWN_QUAT_WXYZ = (1.0, 0.0, 0.0, 0.0)
-
-# 로버 단독 주행 테스트용. Script Editor 없이 이 파일 실행만으로 전진시킨다.
-AUTO_DRIVE_SPEED = 5.0
 
 # M0609 mount offsets from rover origin (사용자가 GUI 에서 시각 확인 후 정한 값,
 # 2026-05-20). rover 위에 딱 붙는 자세: world Z=1.21232 → offset Z=0.21232.
@@ -117,16 +111,6 @@ M0609_BASE_POS = (
     SPAWN_Y + M0609_MOUNT_OFFSET_Y,
     SPAWN_Z + M0609_MOUNT_OFFSET_Z,
 )
-
-# Rear basket visual. Robot arm side is front, so basket is placed at -X of Body.
-BASKET_LOCAL_X = -0.38
-BASKET_LOCAL_Y = 0.0
-BASKET_LOCAL_Z = 0.02
-BASKET_LENGTH = 0.22
-BASKET_WIDTH = 0.46
-BASKET_HEIGHT = 0.18
-BASKET_WALL = 0.035
-BASKET_BOTTOM = 0.035
 
 
 # ─── URDF / Assembler 헬퍼 ───────────────────────────────────────────────────
@@ -275,113 +259,6 @@ def _paint_subtree_dark(root_path: str, rgb=(0.08, 0.08, 0.08),
     return modified + bound
 
 
-def _make_preview_material(stage, mat_path: str, rgb,
-                           roughness: float = 0.55,
-                           metallic: float = 0.35):
-    material = UsdShade.Material.Define(stage, mat_path)
-    shader = UsdShade.Shader.Define(stage, f"{mat_path}/Shader")
-    shader.CreateIdAttr("UsdPreviewSurface")
-    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
-        Gf.Vec3f(*rgb)
-    )
-    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(roughness)
-    shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metallic)
-    material.CreateSurfaceOutput().ConnectToSource(
-        shader.ConnectableAPI(), "surface"
-    )
-    return material
-
-
-def _define_local_box(stage, path: str, translation, scale, material=None):
-    cube = UsdGeom.Cube.Define(stage, path)
-    cube.CreateSizeAttr(1.0)
-    xf = UsdGeom.Xformable(cube.GetPrim())
-    xf.ClearXformOpOrder()
-    xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
-        Gf.Vec3d(*translation)
-    )
-    xf.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*scale))
-    if material is not None:
-        UsdShade.MaterialBindingAPI.Apply(cube.GetPrim())
-        UsdShade.MaterialBindingAPI(cube.GetPrim()).Bind(material)
-    return cube.GetPrim()
-
-
-def _attach_rear_basket(rover_body: str) -> str:
-    """로버 Body 뒤쪽에 visual basket 을 부착한다.
-
-    Body 의 child 로 만들기 때문에 로버와 딱 붙어서 같이 움직인다.
-    """
-    stage = omni.usd.get_context().get_stage()
-    body_prim = stage.GetPrimAtPath(rover_body)
-    if not body_prim.IsValid():
-        raise RuntimeError(f"rover Body prim not found: {rover_body}")
-
-    basket_path = f"{rover_body}/RearBasket"
-    basket = stage.DefinePrim(basket_path, "Xform")
-    xf = UsdGeom.Xformable(basket)
-    xf.ClearXformOpOrder()
-    xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(
-        Gf.Vec3d(BASKET_LOCAL_X, BASKET_LOCAL_Y, BASKET_LOCAL_Z)
-    )
-
-    mat = _make_preview_material(
-        stage,
-        f"{basket_path}/Looks/BasketDarkMetal",
-        rgb=(0.09, 0.075, 0.06),
-        roughness=0.5,
-        metallic=0.45,
-    )
-    rim_mat = _make_preview_material(
-        stage,
-        f"{basket_path}/Looks/BasketRimMetal",
-        rgb=(0.45, 0.42, 0.36),
-        roughness=0.35,
-        metallic=0.75,
-    )
-
-    lx = BASKET_LENGTH
-    wy = BASKET_WIDTH
-    hz = BASKET_HEIGHT
-    t = BASKET_WALL
-    b = BASKET_BOTTOM
-
-    # Bottom and low panels. Top is open, rear wall is slightly lower like a tray.
-    _define_local_box(stage, f"{basket_path}/Bottom",
-                      (0.0, 0.0, b * 0.5),
-                      (lx, wy, b), mat)
-    _define_local_box(stage, f"{basket_path}/LeftWall",
-                      (0.0, wy * 0.5 - t * 0.5, hz * 0.5),
-                      (lx, t, hz), mat)
-    _define_local_box(stage, f"{basket_path}/RightWall",
-                      (0.0, -wy * 0.5 + t * 0.5, hz * 0.5),
-                      (lx, t, hz), mat)
-    _define_local_box(stage, f"{basket_path}/BackWall",
-                      (-lx * 0.5 + t * 0.5, 0.0, hz * 0.45),
-                      (t, wy, hz * 0.9), mat)
-    _define_local_box(stage, f"{basket_path}/FrontLip",
-                      (lx * 0.5 - t * 0.5, 0.0, hz * 0.28),
-                      (t, wy, hz * 0.56), mat)
-
-    # Thin bright rims make it read more like a basket than a plain box.
-    rim_z = hz + t * 0.5
-    _define_local_box(stage, f"{basket_path}/LeftTopRim",
-                      (0.0, wy * 0.5, rim_z),
-                      (lx + t, t, t), rim_mat)
-    _define_local_box(stage, f"{basket_path}/RightTopRim",
-                      (0.0, -wy * 0.5, rim_z),
-                      (lx + t, t, t), rim_mat)
-    _define_local_box(stage, f"{basket_path}/BackTopRim",
-                      (-lx * 0.5, 0.0, rim_z),
-                      (t, wy + t, t), rim_mat)
-    _define_local_box(stage, f"{basket_path}/FrontTopRim",
-                      (lx * 0.5, 0.0, hz * 0.58),
-                      (t, wy + t, t), rim_mat)
-
-    print(f"  [Scene] rear basket attached: {basket_path}")
-    return basket_path
-
-
 def _freeze_rover_drives(rover_prim) -> int:
     """rover 의 모든 drive 를 freeze: target=0, stiffness/damping 매우 큼.
     휠/조향이 멋대로 돌지 않게."""
@@ -399,94 +276,30 @@ def _freeze_rover_drives(rover_prim) -> int:
     return n
 
 
-def _remove_mars_rocks(stage) -> int:
-    """Referenced Mars world 에서 rocks subtree 를 전부 숨기고 비활성화."""
-    removed = 0
-    known_paths = (
-        "/World/Mars/Rocks",
-        "/World/Mars/World/Rocks",
-        "/World/Rocks",
-    )
+def _export_stage(out_path: str, flatten: bool) -> None:
+    """현재 in-memory stage 를 USD 로 저장.
 
-    for path in known_paths:
-        prim = stage.GetPrimAtPath(path)
-        if not prim.IsValid():
-            continue
-        prim.SetActive(False)
-        print(f"  [Scene] rocks disabled: {path}")
-        removed += 1
+    flatten=False : root layer 만 export → mars_world/Mars_Rover.usd 등 외부
+                    reference 는 그대로 link 됨 (가볍지만 의존성 필요).
+    flatten=True  : 모든 reference 를 합성해서 단일 파일로 직렬화 (자가포함,
+                    파일 크기 큼). 다른 PC/엔진으로 배포할 때 사용.
 
-    for prim in list(stage.Traverse()):
-        path = str(prim.GetPath())
-        name = prim.GetName()
-        text = f"{path}/{name}".lower()
-        if "rock" not in text:
-            continue
-        prim.SetActive(False)
-        print(f"  [Scene] rock prim disabled: {path}")
-        removed += 1
-
-    if removed == 0:
-        print("  [Scene] rocks prim not found; skip removing rocks")
-    return removed
-
-
-def _is_drive_joint_name(name: str) -> bool:
-    upper = name.upper()
-    return (
-        "DRIVE" in upper
-        and "STEER" not in upper
-        and any(pos in upper for pos in ("FL", "FR", "CL", "CR", "ML", "MR", "RL", "RR"))
-    )
-
-
-def _is_steer_joint_name(name: str) -> bool:
-    upper = name.upper()
-    return (
-        "STEER" in upper
-        and any(pos in upper for pos in ("FL", "FR", "RL", "RR"))
-    )
-
-
-def _command_rover_forward(rover_prim, speed: float = AUTO_DRIVE_SPEED) -> int:
-    """Drive wheel target velocity 설정.
-
-    새 모델은 Stage 에 FL_Drive, FR_Drive ... 형태로 보이고, 예전 모델은
-    FL_Drive_Continuous ... 형태로 보일 수 있다. 이름에 DRIVE 가 들어간
-    wheel joint 를 찾아 angular DriveAPI targetVelocity 를 준다.
+    ⚠️ Flatten 은 RobotAssembler 가 만든 FixedJoint 와 URDF importer 가 author
+    한 ArticulationRoot 등 physics schema 를 유지하므로 Isaac Sim 에 다시
+    로드 시 articulation 이 그대로 재구성됨.
     """
-    n = 0
-    for prim in Usd.PrimRange(rover_prim):
-        name = prim.GetName()
-        drv = UsdPhysics.DriveAPI.Get(prim, "angular")
-        if not drv:
-            continue
-
-        if _is_drive_joint_name(name):
-            drv.GetTargetPositionAttr().Set(0.0)
-            drv.GetTargetVelocityAttr().Set(float(speed))
-            drv.GetStiffnessAttr().Set(0.0)
-            drv.GetDampingAttr().Set(1e5)
-            drv.GetMaxForceAttr().Set(1e7)
-            print(f"  [Drive] {prim.GetPath()} targetVelocity={speed}")
-            n += 1
-        elif _is_steer_joint_name(name):
-            drv.GetTargetPositionAttr().Set(0.0)
-            drv.GetTargetVelocityAttr().Set(0.0)
-            drv.GetStiffnessAttr().Set(1e8)
-            drv.GetDampingAttr().Set(1e6)
-            drv.GetMaxForceAttr().Set(1e7)
-
-    print(f"  [Drive] forward command applied to {n} wheel drives")
-    return n
-
-
-def _find_drive_dof_indices(dof_names):
-    indices = []
-    for idx, name in enumerate(dof_names):
-        if _is_drive_joint_name(name):
-            indices.append(idx)
-    return np.array(indices, dtype=np.int32)
+    stage = omni.usd.get_context().get_stage()
+    out_path = os.path.abspath(out_path)
+    out_dir = os.path.dirname(out_path)
+    if out_dir and not os.path.isdir(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+    if flatten:
+        flat_layer = stage.Flatten()
+        flat_layer.Export(out_path)
+        print(f"\n[Export] flattened USD (자가포함) → {out_path}")
+    else:
+        stage.GetRootLayer().Export(out_path)
+        print(f"\n[Export] root layer (reference 유지) → {out_path}")
 
 
 # ─── Scene 구축 ─────────────────────────────────────────────────────────────
@@ -501,7 +314,6 @@ def build_scene():
     mars_prim.GetReferences().AddReference(str(MARS_WORLD_USD))
     for _ in range(10):
         simulation_app.update()
-    _remove_mars_rocks(stage)
 
     # PhysicsScene 추가 (mars world 에 없음). Mars gravity 3.72.
     physics_scene_path = "/World/PhysicsScene"
@@ -674,8 +486,6 @@ def build_scene():
     # rover drive re-freeze (assemble 중에 풀릴 수 있음)
     _freeze_rover_drives(rover_prim)
 
-    _attach_rear_basket(rover_body)
-
     # 시각: m0609 (+ RG2) 를 rover 처럼 어두운 색으로 paint
     _paint_subtree_dark(robot_root, rgb=(0.08, 0.08, 0.08))
 
@@ -698,10 +508,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--auto-play", action="store_true",
                         help="씬 빌드 후 자동으로 Play")
-    parser.add_argument("--no-drive", action="store_true",
-                        help="씬만 띄우고 로버 전진 명령은 주지 않음")
-    parser.add_argument("--drive-speed", type=float, default=AUTO_DRIVE_SPEED,
-                        help="로버 전진 wheel target velocity")
+    parser.add_argument("--export", type=str, default=None, metavar="PATH",
+                        help="씬 빌드 후 결합된 USD 를 PATH 로 저장")
+    parser.add_argument("--export-flatten", action="store_true",
+                        help="--export 시 모든 reference 를 flatten (자가포함, 큰 파일)")
     args = parser.parse_args()
 
     world = World(stage_units_in_meters=1.0)
@@ -728,37 +538,16 @@ def main():
                 Usd.TimeCode.Default()).ExtractTranslation()
             carb.log_warn(f"[T2-DEBUG] {label}: ({t[0]:+.3f}, {t[1]:+.3f}, {t[2]:+.3f})")
 
-    drive_articulation = None
-    drive_indices = np.array([], dtype=np.int32)
+    # 결합된 stage 를 USD 로 저장 (요청 시). world.reset 후라 physics state 안정.
+    if args.export:
+        _export_stage(args.export, args.export_flatten)
 
-    if not args.no_drive:
-        print(f"\n[Drive] rover forward speed = {args.drive_speed}")
-        _command_rover_forward(rover_prim, args.drive_speed)
-        drive_articulation = SingleArticulation(
-            prim_path=robot_root,
-            name="rover_m0609_drive_articulation",
-        )
-        drive_articulation.initialize()
-        drive_indices = _find_drive_dof_indices(drive_articulation.dof_names)
-        print("[Drive] articulation root:", robot_root)
-        print("[Drive] DOF names:")
-        for i, name in enumerate(drive_articulation.dof_names):
-            mark = "  <-- drive" if i in set(drive_indices.tolist()) else ""
-            print(f"  {i}: {name}{mark}")
-        print(f"[Drive] drive DOF count = {len(drive_indices)}")
-
-    if args.auto_play or not args.no_drive:
+    if args.auto_play:
         world.play()
         print("\n[Play] auto-play ON")
 
-    print("\n=== 씬 준비 완료. 정지하려면 터미널에서 Ctrl+C ===")
+    print("\n=== 씬 준비 완료. Isaac Sim GUI 에서 Spacebar 로 Play ===")
     while simulation_app.is_running():
-        if drive_articulation is not None and len(drive_indices) > 0:
-            joint_velocities = np.zeros(drive_articulation.num_dof)
-            joint_velocities[drive_indices] = args.drive_speed
-            drive_articulation.apply_action(
-                ArticulationAction(joint_velocities=joint_velocities)
-            )
         world.step(render=True)
 
     simulation_app.close()

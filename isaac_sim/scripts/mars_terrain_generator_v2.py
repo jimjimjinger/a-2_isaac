@@ -336,11 +336,11 @@ def place_minerals(rng, hm, slope_deg, rocks):
             continue
         roll = float(rng.random())
         if roll < 0.5:
-            mtype, value = "blue", 10
+            mtype, value = "blue_mineral", 10
         elif roll < 0.8:
-            mtype, value = "red", 25
+            mtype, value = "green_gas", 25
         else:
-            mtype, value = "yellow", 50
+            mtype, value = "yellow_mineral", 50
         z = sample(hm, x, y) + 0.10
         minerals.append({
             "id": next_id,
@@ -464,9 +464,9 @@ def build_meta(terrain_id, seed, minerals, spawns, difficulty):
                 "min_spacing_m": CFG["mineral_spacing_m"],
                 "exclude_basecamp_radius_m": CFG["basecamp_radius"],
                 "value_distribution": {
-                    "blue": {"prob": 0.5, "score": 10},
-                    "red": {"prob": 0.3, "score": 25},
-                    "yellow": {"prob": 0.2, "score": 50},
+                    "blue_mineral":   {"prob": 0.5, "score": 10},
+                    "green_gas":      {"prob": 0.3, "score": 25},
+                    "yellow_mineral": {"prob": 0.2, "score": 50},
                 },
             },
         },
@@ -897,7 +897,7 @@ def compose_world(world_path, terrain_usd, rocks_usd, marker_dir, minerals,
     UsdGeom.Xform.Define(stage, "/World/Minerals")
     for mineral in minerals:
         mtype = str(mineral["type"])
-        marker_path = marker_dir / "tier2_mineral" / f"mineral_{mtype}.usd"
+        marker_path = marker_dir / "tier2_mineral" / f"{mtype}.usd"
         if not marker_path.exists():
             continue
         pos = mineral["position"]
@@ -994,7 +994,7 @@ def maybe_export_preview(terrain_dir) -> bool:
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="height (m)")
     ax.imshow(np.ma.masked_where(og == 0, og), cmap="Reds", origin="lower",
               extent=extent, alpha=0.5, vmin=0, vmax=1)
-    colors = {"blue": "#3a6ff0", "red": "#e63c3c", "yellow": "#f0d022"}
+    colors = {"blue_mineral": "#3a6ff0", "green_gas": "#3cc35e", "yellow_mineral": "#f0d022"}
     for m in meta.get("minerals", []):
         p = m["position"]
         ax.scatter(p["x"], p["y"], c=colors.get(m["type"], "white"), s=80,

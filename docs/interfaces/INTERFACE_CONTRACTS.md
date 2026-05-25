@@ -195,12 +195,16 @@ std_msgs/Header header           # frame_id = "world", stamp = publish 시각
 Detection[] detections           # 빈 배열 OK
 
 # Detection.msg (단일 광물)
-string class_name                # "mineral_blue" | "mineral_red" | "mineral_yellow"
+string class_name                # "blue_mineral" | "yellow_mineral" | "green_gas"
 geometry_msgs/Point world_position  # x, y, z (m)
 float32 confidence               # 0.0 ~ 1.0
-float32 value_score              # blue=10, red=25, yellow=50
+float32 value_score              # blue_mineral=10, green_gas=25, yellow_mineral=50
 int32 mineral_id                 # T1 (김현중) meta.minerals[].id 매칭 (-1=매칭실패)
-geometry_msgs/Vector3 bbox_size_m  # 월드 단위 bounding box
+geometry_msgs/Vector3 bbox_size_m  # 월드 단위 bounding box (현재 0,0,0 — Phase 2+ 채움)
+int32 bbox_xmin                  # 이미지 픽셀 bbox (UI overlay 합성용)
+int32 bbox_ymin
+int32 bbox_xmax
+int32 bbox_ymax
 ```
 
 원본 파일: [`msg/Detection.msg`](msg/Detection.msg), [`msg/DetectionArray.msg`](msg/DetectionArray.msg)
@@ -213,18 +217,26 @@ header:
   stamp: {sec: 12, nanosec: 340000000}
   frame_id: "world"
 detections:
-  - class_name: "mineral_blue"
+  - class_name: "blue_mineral"
     world_position: {x: 8.05, y: 4.12, z: 0.10}
     confidence: 0.87
     value_score: 10.0
     mineral_id: 1
-    bbox_size_m: {x: 0.30, y: 0.30, z: 0.20}
-  - class_name: "mineral_yellow"
+    bbox_size_m: {x: 0.0, y: 0.0, z: 0.0}
+    bbox_xmin: 312
+    bbox_ymin: 228
+    bbox_xmax: 345
+    bbox_ymax: 261
+  - class_name: "yellow_mineral"
     world_position: {x: -11.05, y: 11.42, z: 0.10}
     confidence: 0.92
     value_score: 50.0
     mineral_id: 4
-    bbox_size_m: {x: 0.25, y: 0.25, z: 0.18}
+    bbox_size_m: {x: 0.0, y: 0.0, z: 0.0}
+    bbox_xmin: 95
+    bbox_ymin: 240
+    bbox_xmax: 130
+    bbox_ymax: 282
 ```
 
 **케이스 B: 아무것도 검출 안 됨 (빈 배열도 publish)**
@@ -241,12 +253,16 @@ header:
   stamp: {sec: 14, nanosec: 540000000}
   frame_id: "world"
 detections:
-  - class_name: "mineral_red"
+  - class_name: "green_gas"
     world_position: {x: 20.5, y: -8.3, z: 0.10}   # meta에 없는 위치
     confidence: 0.61
     value_score: 25.0
     mineral_id: -1                                  # 매칭 실패
-    bbox_size_m: {x: 0.20, y: 0.20, z: 0.15}
+    bbox_size_m: {x: 0.0, y: 0.0, z: 0.0}
+    bbox_xmin: 540
+    bbox_ymin: 198
+    bbox_xmax: 568
+    bbox_ymax: 224
 ```
 
 ### T2 (최진우) 내부 구현 — HSV 색기반 detection
@@ -279,11 +295,13 @@ T1 (김현중) meta의 mineral_id와 매칭
 
 ### 광물 시각 디자인 (T1 (김현중)과 합의 필요)
 
-| 광물 타입 | RGB | HSV hue | value_score |
-|---------|-----|:------:|:-----:|
-| `mineral_blue` | (50, 100, 240) | 105~120° | 10 |
-| `mineral_red` | (230, 60, 60) | 0~10° (or 350~360°) | 25 |
-| `mineral_yellow` | (240, 220, 50) | 25~35° | 50 |
+| 광물 타입 | 실제 시각 색 | mesh 형태 | value_score |
+|---|---|---|:-:|
+| `blue_mineral` | cyan/teal 결정 클러스터 | 비정형 polytope | 10 |
+| `yellow_mineral` | 밝은 노랑 spike 결정 클러스터 | spike polytope | 50 |
+| `green_gas` | 진녹색 가스 박스 | 정육면체 | 25 |
+
+> ⚠️ `green_gas` 의 USD prim prefix 는 legacy 로 `red_*` 였음 — terrain 재생성 후 `green_gas_*` 로 통일됨.
 
 ### Mock 단계 (Day 1-2)
 - T2 (최진우) stub은 GT 광물 좌표 + 노이즈를 detection으로 발행
