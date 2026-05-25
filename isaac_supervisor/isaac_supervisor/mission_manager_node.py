@@ -24,10 +24,12 @@ from typing import List, Optional, Tuple
 import rclpy
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import String
 
+from isaac_interfaces.action import ExecuteArmTask
 from isaac_interfaces.msg import Detection, DetectionArray
 from isaac_drive.navigation.path_planner import astar, simplify_path
 from isaac_drive.navigation.terrain_loader import load_terrain
@@ -58,9 +60,20 @@ SENSOR_QOS = QoSProfile(
 
 VALUE_PRIORITY = {"yellow_mineral": 50.0, "green_gas": 25.0, "blue_mineral": 10.0}
 
+# Per-class stop distance — arm reach + safety margin (T2 standalone tuning).
+CLASS_STOP_DIST_M = {
+    "blue_mineral":   0.25,
+    "yellow_mineral": 0.75,
+    "green_gas":      0.75,
+}
+
 
 def _score(det: Detection) -> float:
     return float(det.value_score) + 0.1 * float(det.confidence)
+
+
+def _stop_dist_for(class_name: str, default_m: float) -> float:
+    return float(CLASS_STOP_DIST_M.get(class_name, default_m))
 
 
 class MissionManagerNode(Node):
@@ -68,8 +81,12 @@ class MissionManagerNode(Node):
         super().__init__("mission_manager_node")
 
         self.declare_parameter("approach_engage_dist_m", 8.0)
-        self.declare_parameter("approach_stop_dist_m", 1.5)
+        self.declare_parameter("approach_stop_dist_m", 0.75)   # default fallback
         self.declare_parameter("approach_resume_buffer_m", 0.3)
+        self.declare_parameter("post_pick_cooldown_sec", 8.0)
+        self.declare_parameter("post_pick_skip_radius_m", 1.0)
+        self.declare_parameter("arm_action_name", "/execute_arm_task")
+        self.declare_parameter("enable_arm_action", True)
         self.declare_parameter("approach_lin_speed", 0.6)
         self.declare_parameter("approach_creep_speed", 0.25)
         self.declare_parameter("steer_gain", 1.5)
@@ -97,6 +114,12 @@ class MissionManagerNode(Node):
         self.waypoints: List[Tuple[float, float]] = []
         self.wp_idx: int = 0
         self.last_plan_target: Optional[Tuple[float, float]] = None
+        # Arm action state
+        self.arm_in_flight: bool = False
+        self.arm_client: Optional[ActionClient] = None
+        # Post-pick cooldown
+        self.last_pick_world: Optional[Tuple[float, float]] = None
+        self.last_pick_done_ns: int = 0
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         try:
@@ -111,6 +134,10 @@ class MissionManagerNode(Node):
         except Exception as e:
             self.get_logger().error(
                 f"terrain load FAILED ({e}) — APPROACH will fall back to straight-line P-control")
+
+        if bool(self.get_parameter("enable_arm_action").value):
+            self.arm_client = ActionClient(
+                self, ExecuteArmTask, str(self.get_parameter("arm_action_name").value))
 
         self.cmd_pub = self.create_publisher(
             Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
@@ -134,19 +161,37 @@ class MissionManagerNode(Node):
             "mission_manager_node ready. EXPLORE pass-through active.")
 
     def _on_detections(self, msg: DetectionArray) -> None:
+        # While the arm is executing a pick, ignore new detections so the
+        # current target/phase does not get swapped mid-action.
+        if self.arm_in_flight:
+            return
         min_conf = float(self.get_parameter("min_confidence").value)
+        cooldown_ns = int(float(self.get_parameter("post_pick_cooldown_sec").value) * 1e9)
+        skip_r = float(self.get_parameter("post_pick_skip_radius_m").value)
+        now_ns = self.get_clock().now().nanoseconds
+
+        def in_cooldown(d: Detection) -> bool:
+            if self.last_pick_world is None:
+                return False
+            if now_ns - self.last_pick_done_ns >= cooldown_ns:
+                return False
+            dx = d.world_position.x - self.last_pick_world[0]
+            dy = d.world_position.y - self.last_pick_world[1]
+            return (dx * dx + dy * dy) <= (skip_r * skip_r)
+
         candidates = [
             d for d in msg.detections
             if d.confidence >= min_conf
             and not (d.world_position.x == 0.0
                      and d.world_position.y == 0.0
                      and d.world_position.z == 0.0)
+            and not in_cooldown(d)
         ]
         if not candidates:
             return
         best = max(candidates, key=_score)
         self.target = best
-        self.last_det_stamp_ns = self.get_clock().now().nanoseconds
+        self.last_det_stamp_ns = now_ns
 
     def _on_coverage_cmd(self, msg: Twist) -> None:
         self.last_coverage_cmd = msg
@@ -155,12 +200,19 @@ class MissionManagerNode(Node):
         self.last_odom = msg
 
     def _tick(self) -> None:
+        # During arm action, hold rover stopped and freeze FSM transitions.
+        if self.arm_in_flight:
+            self.cmd_pub.publish(Twist())
+            return
+
         now_ns = self.get_clock().now().nanoseconds
         stale_ns = int(float(self.get_parameter("detection_stale_sec").value) * 1e9)
         det_fresh = (self.target is not None) and (now_ns - self.last_det_stamp_ns < stale_ns)
 
         engage_d = float(self.get_parameter("approach_engage_dist_m").value)
-        stop_d = float(self.get_parameter("approach_stop_dist_m").value)
+        default_stop_d = float(self.get_parameter("approach_stop_dist_m").value)
+        target_cls = self.target.class_name if self.target is not None else ""
+        stop_d = _stop_dist_for(target_cls, default_stop_d)
         resume_d = stop_d + float(self.get_parameter("approach_resume_buffer_m").value)
 
         dist = self._distance_to_target() if det_fresh else float("inf")
@@ -184,12 +236,15 @@ class MissionManagerNode(Node):
                 f"phase: {prev_phase} -> {self.phase}"
                 + (f" (target {self.target.class_name} world=("
                    f"{self.target.world_position.x:.2f},"
-                   f"{self.target.world_position.y:.2f}), dist={dist:.2f}m)"
+                   f"{self.target.world_position.y:.2f}), dist={dist:.2f}m, "
+                   f"stop_d={stop_d:.2f}m)"
                    if det_fresh else ""))
             if self.phase != "APPROACH":
                 self.waypoints = []
                 self.wp_idx = 0
                 self.last_plan_target = None
+            if self.phase == "PICK_READY" and prev_phase != "PICK_READY":
+                self._send_arm_goal()
 
         if self.phase == "EXPLORE":
             if self.last_coverage_cmd is not None:
@@ -295,6 +350,59 @@ class MissionManagerNode(Node):
         self.get_logger().info(
             f"A* replanned: {len(self.waypoints)} waypoints "
             f"to ({tx:.2f},{ty:.2f})")
+
+    def _send_arm_goal(self) -> None:
+        if self.arm_client is None or self.target is None or self.arm_in_flight:
+            return
+        if not self.arm_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().warn(
+                "arm action server not available — skipping pick. Will retry on next PICK_READY.",
+                throttle_duration_sec=5.0)
+            return
+        goal = ExecuteArmTask.Goal()
+        goal.command = "pick_mineral"
+        goal.target_id = str(self.target.mineral_id)
+        goal.target_x = float(self.target.world_position.x)
+        goal.target_y = float(self.target.world_position.y)
+        goal.target_z = float(self.target.world_position.z)
+        goal.metadata = self.target.class_name
+        self.arm_in_flight = True
+        self._pending_pick_world = (goal.target_x, goal.target_y)
+        future = self.arm_client.send_goal_async(goal)
+        future.add_done_callback(self._on_arm_goal_accepted)
+        self.get_logger().info(
+            f"arm action sent: pick_mineral target_id={goal.target_id} "
+            f"class={goal.metadata} xyz=({goal.target_x:.2f},{goal.target_y:.2f},"
+            f"{goal.target_z:.2f})")
+
+    def _on_arm_goal_accepted(self, future) -> None:
+        try:
+            handle = future.result()
+        except Exception as e:
+            self.get_logger().error(f"arm goal future failed: {e}")
+            self.arm_in_flight = False
+            return
+        if not handle.accepted:
+            self.get_logger().warn("arm goal rejected by server")
+            self.arm_in_flight = False
+            return
+        handle.get_result_async().add_done_callback(self._on_arm_result)
+
+    def _on_arm_result(self, future) -> None:
+        try:
+            result = future.result().result
+            ok = bool(result.success)
+            msg_text = result.message
+        except Exception as e:
+            ok, msg_text = False, f"exception: {e}"
+        self.arm_in_flight = False
+        self.last_pick_done_ns = self.get_clock().now().nanoseconds
+        self.last_pick_world = getattr(self, "_pending_pick_world", None)
+        # Drop the current target so PICK_READY exits and EXPLORE resumes.
+        self.target = None
+        self.last_det_stamp_ns = 0
+        self.get_logger().info(
+            f"arm action done success={ok} message={msg_text!r} — cooldown engaged")
 
     def _nearest_free(self, cell: Tuple[int, int]) -> Tuple[int, int]:
         i0, j0 = cell
