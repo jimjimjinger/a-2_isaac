@@ -183,10 +183,12 @@ import omni.usd
 import omni.graph.core as og
 import math
 
-_state = {"attached_joint_path": None, "attached_obj_path": None}
+_state = {"attached_joint_path": None, "attached_obj_path": None,
+          "gripper_link_path": None}
 
 GRASP_JOINT_PATH = "/World/grip_fixed_joint"
-GRIPPER_LINK = "/Root/Vehicle/onrobot_rg2ft/right_inner_finger"
+# vehicle_v3 reference 시 prefix remap (/Root → /World/Rover) 되므로 이름으로 검색.
+GRIPPER_LINK_NAME = "right_inner_finger"
 SEARCH_RADIUS = 1.5  # m  (supervisor 의 lock_target 좌표 정확도 흡수)
 
 
@@ -197,20 +199,32 @@ def _component(v, i):
         return 0.0
 
 
+def _find_gripper_link(stage):
+    """onrobot 그리퍼의 right_inner_finger prim path 를 traverse 로 검색.
+    reference prefix 가 바뀌어도 (/Root → /World/Rover) 정상 동작."""
+    for prim in stage.Traverse():
+        if prim.GetName() == GRIPPER_LINK_NAME and "onrobot" in str(prim.GetPath()):
+            return str(prim.GetPath())
+    return None
+
+
 def _find_nearest_mineral(stage, tx, ty):
-    minerals_root = stage.GetPrimAtPath("/World/Minerals")
-    if not minerals_root or not minerals_root.IsValid():
-        return None, float("inf")
+    """이름이 'Minerals' 인 어떤 scope (e.g. /World/Minerals,
+    /World/MarsScene/Minerals) 의 직속 children 중 (tx,ty) 수평거리 최소 prim.
+    hardcode 경로 대신 traverse 로 찾아 terrain reference prefix remap 에 robust.
+    """
     cache = UsdGeom.XformCache()
     best_path = None
     best_d2 = SEARCH_RADIUS * SEARCH_RADIUS
-    for prim in minerals_root.GetChildren():
+    for prim in stage.Traverse():
+        parent = prim.GetParent()
+        if not parent or parent.GetName() != "Minerals":
+            continue
         if not prim.IsValid():
             continue
         imageable = UsdGeom.Imageable(prim)
         try:
-            vis = imageable.ComputeVisibility()
-            if vis == UsdGeom.Tokens.invisible:
+            if imageable.ComputeVisibility() == UsdGeom.Tokens.invisible:
                 continue
         except Exception:
             pass
@@ -226,27 +240,24 @@ def _find_nearest_mineral(stage, tx, ty):
 
 
 def _attach(stage, link_path, obj_path):
+    """gripper link 와 mineral 사이 FixedJoint snap.
+
+    LocalPos0/1 모두 (0,0,0) 강제 → mineral 의 origin 이 gripper link 의 origin
+    위치로 즉시 부착. 이전엔 obj_xf * link_xf.Inverse() 로 *현재 거리* 를 그대로
+    LocalPos0 에 저장 → mineral 이 finger 위 26cm 떠있어도 그 거리 유지하며
+    공중에서 따라옴 (헛손질 원인). 거리 무관 깔끔한 snap 으로 교체.
+    """
     if stage.GetPrimAtPath(GRASP_JOINT_PATH).IsValid():
         stage.RemovePrim(GRASP_JOINT_PATH)
     link_prim = stage.GetPrimAtPath(link_path)
     obj_prim = stage.GetPrimAtPath(obj_path)
     if not link_prim.IsValid() or not obj_prim.IsValid():
         return False
-    link_xf = UsdGeom.Xformable(link_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default())
-    obj_xf = UsdGeom.Xformable(obj_prim).ComputeLocalToWorldTransform(
-        Usd.TimeCode.Default())
-    rel = obj_xf * link_xf.GetInverse()
-    rel_pos = rel.ExtractTranslation()
-    rel_rot = rel.ExtractRotationQuat()
-    rot_imag = rel_rot.GetImaginary()
     joint = UsdPhysics.FixedJoint.Define(stage, GRASP_JOINT_PATH)
     joint.CreateBody0Rel().SetTargets([Sdf.Path(link_path)])
     joint.CreateBody1Rel().SetTargets([Sdf.Path(obj_path)])
-    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(rel_pos))
-    joint.CreateLocalRot0Attr().Set(Gf.Quatf(
-        rel_rot.GetReal(),
-        float(rot_imag[0]), float(rot_imag[1]), float(rot_imag[2])))
+    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+    joint.CreateLocalRot0Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
     joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
     return True
@@ -256,6 +267,20 @@ def _detach(stage):
     if stage.GetPrimAtPath(GRASP_JOINT_PATH).IsValid():
         stage.RemovePrim(GRASP_JOINT_PATH)
     return True
+
+
+def _set_mineral_collision(stage, obj_path, enabled):
+    """attach 직후 mineral collision 일시 off 로 PhysX disjointed body lock 충격
+    rover 에 전파 차단. release 시 다시 on 으로 복귀해 다음 사용에 영향 X."""
+    if not obj_path:
+        return
+    prim = stage.GetPrimAtPath(obj_path)
+    if not prim or not prim.IsValid():
+        return
+    if prim.HasAPI(UsdPhysics.CollisionAPI):
+        attr = UsdPhysics.CollisionAPI(prim).GetCollisionEnabledAttr()
+        if attr:
+            attr.Set(bool(enabled))
 
 
 def _hide(stage, obj_path):
@@ -282,25 +307,36 @@ def compute(db):
     mode = _component(db.inputs.angularVelocity, 0)  # angular.x as sign marker
 
     if mode > 0.5:    # pickup
-        tx = _component(db.inputs.linearVelocity, 0)
-        ty = _component(db.inputs.linearVelocity, 1)
-        obj_path, dist = _find_nearest_mineral(stage, tx, ty)
-        if obj_path is None:
-            print(f"[grasp] pickup ignored — no mineral near "
-                  f"({tx:.2f},{ty:.2f}) within {SEARCH_RADIUS}m")
+        # gripper link path — terrain reference prefix 따라 바뀌므로 traverse 검색.
+        link_path = _state.get("gripper_link_path") or _find_gripper_link(stage)
+        if link_path is None:
+            print(f"[grasp] pickup FAILED — '{GRIPPER_LINK_NAME}' prim 없음")
         else:
-            ok = _attach(stage, GRIPPER_LINK, obj_path)
-            if ok:
-                _state["attached_joint_path"] = GRASP_JOINT_PATH
-                _state["attached_obj_path"] = obj_path
-                print(f"[grasp] pickup OK — attached {obj_path} "
-                      f"(target dist {dist:.2f}m)")
+            _state["gripper_link_path"] = link_path
+            tx = _component(db.inputs.linearVelocity, 0)
+            ty = _component(db.inputs.linearVelocity, 1)
+            obj_path, dist = _find_nearest_mineral(stage, tx, ty)
+            if obj_path is None:
+                print(f"[grasp] pickup ignored — no mineral near "
+                      f"({tx:.2f},{ty:.2f}) within {SEARCH_RADIUS}m")
             else:
-                print(f"[grasp] pickup FAILED — attach error on {obj_path}")
+                ok = _attach(stage, link_path, obj_path)
+                if ok:
+                    # snap 충격이 rover 에 전파 안 되도록 mineral collision off.
+                    _set_mineral_collision(stage, obj_path, False)
+                    _state["attached_joint_path"] = GRASP_JOINT_PATH
+                    _state["attached_obj_path"] = obj_path
+                    print(f"[grasp] pickup OK — attached {obj_path} to "
+                          f"{link_path} (target dist {dist:.2f}m, snapped, "
+                          f"collision off)")
+                else:
+                    print(f"[grasp] pickup FAILED — attach error on {obj_path}")
     elif mode < -0.5:  # release
-        _detach(stage)
         obj = _state.get("attached_obj_path")
+        _detach(stage)
         if obj:
+            # invisible 처리 전 collision 복귀 (다음 grasp 또는 다른 노드 영향 X).
+            _set_mineral_collision(stage, obj, True)
             _hide(stage, obj)
             print(f"[grasp] release + hide {obj}")
         _state["attached_joint_path"] = None

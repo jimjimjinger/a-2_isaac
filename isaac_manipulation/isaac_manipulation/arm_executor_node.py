@@ -1,21 +1,20 @@
-"""Robot arm action server — M0609 wrist-cam visual servo + DLS-IK (Phase 3b-3).
+"""Robot arm action server — M0609 manipulation.
 
-Pipeline for pick_mineral:
-  HOME -> wait for wrist DetectionArray (mineral pixel + optical XYZ)
-       -> WRIST_T_LINK6 transform to arm base frame
-       -> DLS-IK to (mineral - hover_offset) target
-       -> interpolate joint_command -> APPROACH_DESCEND
-       -> GRASP_CLOSE (gripper finger joint)
-       -> LIFT (TCP up)
-       -> PLACE_BASKET (back-of-rover scripted joints)
-       -> HOME
+pick_mineral 3-mode:
+  enable_ik=True + use_world_target_ik=True (default, T2 정공법)
+     → mineral world XYZ (action goal) + /ground_truth/odom 으로 arm base local
+       변환 → DLS-IK 로 APPROACH/DESCEND/LIFT 자세 풀음 → /grasp/command snap.
+       arm 이 mineral 까지 동적으로 접근.
 
-Phase 3a fallback: if wrist detection unavailable, falls back to PICK_TRAJ_DEG
-script for visual demo only (no real grasp).
+  enable_ik=True + use_world_target_ik=False
+     → 기존 wrist-cam servo IK (Phase 3b-3). YOLO detection 대기 + IK.
+       wrist 마운트 calibration 필요. cheat 졸업 시 활성.
 
-⚠️ WRIST_T_LINK6 is best-effort (vehicle_v3 USD geometry not dumped yet).
-   Cross-validate by reading /joint_states_raw + USD prim transforms and tune
-   the constants below. All four are exposed as parameters for runtime tune.
+  enable_ik=False
+     → simple-ver scripted PICK_DOWN dip + /grasp/command FixedJoint snap.
+       mineral 좌표 무시. supervisor APPROACH align 의존. legacy fallback.
+
+place_to_cargo / unload_to_base / deploy_solar_panel — scripted PLACE_BASKET.
 """
 from __future__ import annotations
 
@@ -29,6 +28,7 @@ import rclpy
 from geometry_msgs.msg import Twist
 from isaac_interfaces.action import ExecuteArmTask
 from isaac_interfaces.msg import Detection, DetectionArray
+from nav_msgs.msg import Odometry
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
@@ -37,6 +37,17 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import String
 
 from .kinematics import M0609_DH, dls_ik, fk
+
+
+def _quat_to_yaw(qx: float, qy: float, qz: float, qw: float) -> float:
+    siny = 2.0 * (qw * qz + qx * qy)
+    cosy = 1.0 - 2.0 * (qy * qy + qz * qz)
+    return math.atan2(siny, cosy)
+
+
+def _yaw_rot_z(yaw: float) -> np.ndarray:
+    c, s = math.cos(yaw), math.sin(yaw)
+    return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=np.float64)
 
 
 SENSOR_QOS = QoSProfile(
@@ -110,10 +121,18 @@ class ArmExecutorNode(Node):
             0.0, -1.0, 0.0,
         ])
         self.declare_parameter("ik_use_orientation", False)
-        # Phase 3b-4 simple-ver: IK off by default; rely on scripted PICK_TRAJ.
-        # When False, pick_mineral skips wrist-cam wait + IK and runs the
-        # scripted DOWN -> GRASP -> UP -> BASKET trajectory directly.
-        self.declare_parameter("enable_ik", False)
+        # 3-mode pick_mineral:
+        #   enable_ik=True (default) + world_target=True → T2 DLS-IK world target
+        #     (mineral world XYZ → arm base local → IK → APPROACH/DESCEND/LIFT)
+        #   enable_ik=True + world_target=False → wrist-cam servo IK (Phase 3b-3)
+        #   enable_ik=False → simple-ver scripted PICK_DOWN (legacy fallback)
+        self.declare_parameter("enable_ik", True)
+        self.declare_parameter("use_world_target_ik", True)
+        self.declare_parameter("odom_topic", "/ground_truth/odom")
+        # IK phase 높이 (arm base local z offset, mineral world 좌표 기준 상대)
+        self.declare_parameter("ik_approach_dz", 0.30)
+        self.declare_parameter("ik_descend_dz", 0.05)
+        self.declare_parameter("ik_lift_dz", 0.45)
         self.declare_parameter("grasp_command_topic", "/grasp/command")
         # Step delay between grasp publish and arm continuing — gives
         # vehicle_v3 ScriptNode time to attach the FixedJoint.
@@ -138,6 +157,12 @@ class ArmExecutorNode(Node):
             JointState, str(self.get_parameter("joint_state_topic").value),
             self._on_joint_states, SENSOR_QOS)
 
+        # rover (= arm base via /ground_truth/odom chassisFrameId="base_link")
+        # world pose — world target IK 에서 mineral world → arm base local 변환에 필요.
+        self.create_subscription(
+            Odometry, str(self.get_parameter("odom_topic").value),
+            self._on_odom, SENSOR_QOS)
+
         self._wrist_lock = threading.Lock()
         self._wrist_dets: List[Detection] = []
         self._wrist_stamp_ns: int = 0
@@ -145,6 +170,10 @@ class ArmExecutorNode(Node):
         # first message arrives — we fall back to HOME_DEG for IK base then.
         self._current_arm_q_rad: Optional[np.ndarray] = None
         self._joint_state_logged_once = False
+
+        self._odom_lock = threading.Lock()
+        self._rover_xyz: Optional[np.ndarray] = None
+        self._rover_yaw: Optional[float] = None
 
         self.action_server = ActionServer(
             self,
@@ -194,6 +223,16 @@ class ArmExecutorNode(Node):
                 f"q_deg = [{','.join(f'{math.degrees(v):.1f}' for v in q)}]")
             self._joint_state_logged_once = True
 
+    def _on_odom(self, msg: Odometry) -> None:
+        """Rover (articulation root = arm base) world pose 추출.
+        chassisFrameId='base_link' = vehicle_v3 의 m0609/base_link → arm base.
+        """
+        p = msg.pose.pose.position
+        o = msg.pose.pose.orientation
+        with self._odom_lock:
+            self._rover_xyz = np.array([p.x, p.y, p.z], dtype=np.float64)
+            self._rover_yaw = _quat_to_yaw(o.x, o.y, o.z, o.w)
+
     def _best_wrist_detection(self,
                               wait_sec: float,
                               min_conf: float) -> Optional[Detection]:
@@ -231,6 +270,8 @@ class ArmExecutorNode(Node):
 
         if command == "pick_mineral":
             if bool(self.get_parameter("enable_ik").value):
+                if bool(self.get_parameter("use_world_target_ik").value):
+                    return self._execute_pick_world_target(goal_handle)
                 return self._execute_pick_ik(goal_handle)
             return self._execute_pick_scripted(goal_handle)
         # Other commands (place_to_cargo, unload_to_base, deploy_solar_panel)
@@ -311,6 +352,126 @@ class ArmExecutorNode(Node):
         goal_handle.succeed()
         self.get_logger().info("pick_mineral (scripted) done")
         return ExecuteArmTask.Result(success=True, message="pick_mineral completed")
+
+    def _execute_pick_world_target(self, goal_handle):
+        """T2 DLS-IK + /grasp/command FixedJoint snap (정공법 + grip cheat).
+
+        Action goal 의 target_xyz 를 mineral world XYZ 로 받아:
+          1. /ground_truth/odom 도착 대기 (arm base world pose)
+          2. mineral world → arm base local 변환 (yaw 보정)
+          3. APPROACH / DESCEND / LIFT 의 target 을 mineral 기준 z offset 으로 IK
+          4. State machine: HOME → APPROACH → DESCEND → grasp pickup → LIFT
+             → CARGO → grasp release → HOME
+        """
+        req = goal_handle.request
+        mineral_world = np.array(
+            [req.target_x, req.target_y, req.target_z], dtype=np.float64)
+
+        # 1) /ground_truth/odom 도착 대기 (최대 2초)
+        deadline_ns = self.get_clock().now().nanoseconds + int(2e9)
+        while self.get_clock().now().nanoseconds < deadline_ns:
+            with self._odom_lock:
+                if self._rover_xyz is not None:
+                    break
+            time.sleep(0.05)
+        with self._odom_lock:
+            arm_base_xyz = (None if self._rover_xyz is None
+                            else self._rover_xyz.copy())
+            yaw = self._rover_yaw
+        if arm_base_xyz is None or yaw is None:
+            self.get_logger().error(
+                "world_target_ik: no /ground_truth/odom — abort")
+            goal_handle.abort()
+            return ExecuteArmTask.Result(success=False, message="no odom")
+
+        # 2) mineral world → arm base local (yaw 보정)
+        R = _yaw_rot_z(yaw)
+        target_local = R.T @ (mineral_world - arm_base_xyz)
+        self.get_logger().info(
+            f"mineral world=({mineral_world[0]:.2f},{mineral_world[1]:.2f},"
+            f"{mineral_world[2]:.2f}) arm_base world=({arm_base_xyz[0]:.2f},"
+            f"{arm_base_xyz[1]:.2f},{arm_base_xyz[2]:.2f}) yaw={math.degrees(yaw):.1f}° "
+            f"→ target_local=({target_local[0]:.3f},{target_local[1]:.3f},"
+            f"{target_local[2]:.3f})")
+
+        # 3) IK target — APPROACH (위), DESCEND (mineral 옆), LIFT (위로)
+        dz_a = float(self.get_parameter("ik_approach_dz").value)
+        dz_d = float(self.get_parameter("ik_descend_dz").value)
+        dz_l = float(self.get_parameter("ik_lift_dz").value)
+        t_approach = target_local + np.array([0.0, 0.0, dz_a])
+        t_descend = target_local + np.array([0.0, 0.0, dz_d])
+        t_lift = target_local + np.array([0.0, 0.0, dz_l])
+
+        q_home = np.array([math.radians(v) for v in HOME_DEG])
+        q_approach, ok_a, err_a = dls_ik(t_approach, None, q_home,
+                                          position_only=True)
+        q_descend, ok_d, err_d = dls_ik(t_descend, None, q_approach,
+                                         position_only=True)
+        q_lift, ok_l, err_l = dls_ik(t_lift, None, q_descend,
+                                      position_only=True)
+        if not (ok_a and ok_d and ok_l):
+            self.get_logger().error(
+                f"IK 미수렴: APPROACH={ok_a}(err={err_a:.4f}) "
+                f"DESCEND={ok_d}(err={err_d:.4f}) LIFT={ok_l}(err={err_l:.4f})")
+            goal_handle.abort()
+            return ExecuteArmTask.Result(
+                success=False,
+                message=f"IK fail: a={ok_a} d={ok_d} l={ok_l}")
+
+        deg_approach = list(np.degrees(q_approach))
+        deg_descend = list(np.degrees(q_descend))
+        deg_lift = list(np.degrees(q_lift))
+        self.get_logger().info(
+            f"IK solved: APPROACH q_deg={[round(v,1) for v in deg_approach]} "
+            f"DESCEND q_deg={[round(v,1) for v in deg_descend]} "
+            f"LIFT q_deg={[round(v,1) for v in deg_lift]}")
+
+        # 4) State machine
+        cur_deg = list(HOME_DEG)
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 0.05)
+        cur_deg = list(HOME_DEG)
+
+        self._goto(cur_deg, deg_approach, goal_handle, "APPROACH", 0.05, 0.25)
+        cur_deg = list(deg_approach)
+
+        self._goto(cur_deg, deg_descend, goal_handle, "DESCEND", 0.25, 0.45)
+        cur_deg = list(deg_descend)
+
+        # 5) Grasp pickup — FixedJoint snap (mineral → gripper link origin)
+        self._publish_grasp("pickup",
+                            x=float(mineral_world[0]),
+                            y=float(mineral_world[1]),
+                            z=float(mineral_world[2]),
+                            target_id=req.target_id)
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "GRASP_PICKUP"
+        fb.progress = 0.5
+        fb.message = "pickup published"
+        goal_handle.publish_feedback(fb)
+
+        # 6) LIFT
+        self._goto(cur_deg, deg_lift, goal_handle, "LIFT", 0.5, 0.70)
+        cur_deg = list(deg_lift)
+
+        # 7) CARGO swing (scripted, joint_1=180)
+        self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.70, 0.85)
+        cur_deg = list(CARGO_DEG)
+
+        # 8) Release — detach + MakeInvisible
+        self._publish_grasp("release")
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "RELEASE"
+        fb.progress = 0.9
+        fb.message = "release published"
+        goal_handle.publish_feedback(fb)
+
+        # 9) HOME
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_POST", 0.9, 1.0)
+        self._publish_joint_state(HOME_DEG)
+        goal_handle.succeed()
+        self.get_logger().info("pick_mineral (T2 DLS-IK world target) done")
+        return ExecuteArmTask.Result(
+            success=True, message="pick_mineral completed (IK)")
 
     def _execute_pick_ik(self, goal_handle):
         """pick_mineral with IK + wrist-cam servo (Phase 3b-3, off by default).
