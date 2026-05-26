@@ -485,10 +485,12 @@ class MissionManagerNode(Node):
                 self.cmd_pub.publish(self.last_coverage_cmd)
             else:
                 self.cmd_pub.publish(Twist())
-            # EXPLORE: supervisor path/target 비움 — UI 가 coverage 의 path/
-            # marker 만 보이게.
+            # EXPLORE: supervisor 는 매 tick 발행 안 함 — coverage 의 /mission/
+            # path · /mission/markers 가 dashboard 의 path/target source.
+            # 빈 path 를 20Hz 로 쏘면 coverage 의 3Hz 발행을 덮어쓰는 race
+            # condition 발생. EXPLORE 진입 시점에 _enter_phase 가 한 번만
+            # 청소용 빈 path 발행 → 그 후엔 coverage 가 takeover.
             self.waypoints = []
-            self._publish_supervisor_viz(target_xy=None)
         elif self.phase == "APPROACH":
             self.cmd_pub.publish(self._approach_twist(dist))
             # _maybe_replan 후 waypoints + target 발행.
@@ -708,6 +710,15 @@ class MissionManagerNode(Node):
             self.waypoints = []
             self.wp_idx = 0
             self.last_plan_target = None
+        # EXPLORE / MISSION_COMPLETE 진입 시 supervisor source 의 path/target
+        # 을 한 번만 청소 — 직전 APPROACH/RTB 의 분홍 별·하늘색 점선이
+        # dashboard 에 남아있지 않게. 그 후엔 supervisor 가 발행 안 하므로
+        # coverage_node 의 /mission/path · /mission/markers 가 그대로 표시됨.
+        if new_phase in ("EXPLORE", "MISSION_COMPLETE"):
+            try:
+                self._publish_supervisor_viz(target_xy=None)
+            except Exception:
+                pass
         suffix = f" ({reason})" if reason else ""
         self.get_logger().info(f"phase: {prev} -> {new_phase}{suffix}")
 
