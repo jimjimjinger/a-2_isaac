@@ -49,7 +49,7 @@ RSL_RL_VERSION = metadata.version("rsl-rl-lib")
 @configclass
 class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
     seed              = 42
-    num_steps_per_env = 128  # obs dim=37, action dim=16
+    num_steps_per_env = 128  # obs dim=40, action dim=16
     max_iterations    = 3000
     save_interval     = 200
     experiment_name   = "rover_recovery"
@@ -99,7 +99,7 @@ policy = runner.get_inference_policy(device="cuda:0")
 obs = env.get_observations()
 for step in range(args.num_steps):
     with torch.no_grad():
-        actions = policy(obs)
+        actions = policy.act_inference(obs)
     obs, rewards, dones, infos = env.step(actions)
     if (step + 1) % 100 == 0:
         print(f"  step {step+1:4d} | mean_reward={rewards.mean().item():.3f}")
