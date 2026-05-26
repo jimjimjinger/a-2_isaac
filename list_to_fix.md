@@ -11,7 +11,7 @@
 **현재 상태** — MVP 는 `odom_to_estimated_pose` 어댑터로 `/ground_truth/odom`을 `/rover/estimated_pose`로 forwarding (GT cheat). T5 EKF stack (`localization.launch.py`)은 구현됐으나 정확도 부족으로 시연용 미채택.
 
 **문제**:
-- `sun_yaw` measurement 가 EKF 에 **100% reject** — terrain_00023 시연(2026-05-26) 콘솔에서 `Sun yaw rejected: innovation=±3.0 rad` 가 계속. innovation ≈ ±π = **yaw 정의 180° flip**. sun_yaw_node 가 rover heading 의 반대 (또는 sun direction 자체) 를 발행하는 듯. 임계 (`max_sun_yaw_innovation=0.90`) 만 늘리면 잘못된 측정 적분 → reject 이 안전한 선택. **수정**: `camera_yaw_offset` 을 `2.889 - π = -0.253` 으로 ±π 보정 또는 sun_yaw_node 의 yaw 정의를 부호 반전.
+- `sun_yaw` measurement 가 EKF 에 **100% reject** — terrain_00023 시연(2026-05-26) 콘솔에서 `Sun yaw rejected: innovation=±3.0 rad` 가 계속. innovation ≈ ±π = **yaw 정의 180° flip**. sun_yaw_node 가 rover heading 의 반대 (또는 sun direction 자체) 를 발행하는 듯. 임계 (`max_sun_yaw_innovation=0.90`) 만 늘리면 잘못된 측정 적분 → reject 이 안전한 선택. **시도한 patch**: `camera_yaw_offset` 을 `-0.253` (=2.889−π), `0.253` (부호 반전) 두 후보 모두 innovation 변화 없음 → launch param 으로는 못 고치는 frame 정의 문제. 원본 `2.889` 로 원복. **졸업 경로**: sun_yaw_node 내부 yaw 계산 검증 — quaternion measurement (terrain_00023 spawn 시점) qz=-0.6633 qw=0.7484 → yaw=-83°, EKF prior=+90°, 차이 정확히 -π. sun_yaw_node 가 발행하는 yaw 의 frame 정의 (rover heading vs sun bearing) 와 EKF 가 기대하는 frame 사이 ±π 어긋남을 코드에서 보정. T5 (이지민) 와 함께 검토 필요.
 - `trn_node` 가 launch 됐는데 **노드 리스트에 안 나타남** (terrain_00023 시연에서 process list 에 없음). init 시 silent exit 의심. localization.launch.py 의 `executable="trn_node"` 가 실제 entry_point `trn_node = isaac_localization.trn:main` 호출 시 어떤 import/init 에러로 죽는지 진단 필요.
 - wheel slip → wheel_odom drift (특히 등반 시). 현재 시연 (2026-05-26 terrain_00023) GT vs EKF = 약 0.7m 차이가 wheel+IMU dead-reckoning 누적 오차의 시작.
 
