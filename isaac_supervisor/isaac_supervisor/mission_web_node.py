@@ -284,7 +284,9 @@ def main(args: list[str] | None = None) -> None:
                     f"&type=mjpeg&quality=70")
         return render_template(
             "index.html",
-            cam_wrist=mjpeg(topics["wrist"]),
+            # 시연 단계: wrist 슬롯의 stream 을 body(nav) YOLO 로 변경
+            # (cam_wrist 변수명은 viewport-wrist class/css 호환 위해 유지).
+            cam_wrist=mjpeg(topics["body"]),
             cam_chase=mjpeg(topics["chase"]),
             terrain_preview="/terrain/preview",
         )

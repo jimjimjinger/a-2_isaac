@@ -106,6 +106,20 @@
 
 ---
 
+### [완료] terrain 1~22 v3 재생성 (epic obstacle 통일)
+
+**완료** — 2026-05-26, 발표 robustness 요구로 진행. mars_terrain_generator_v3 로 기존 seed (12345 ~ 27182, 22개) 그대로 batch 재생성. 모든 terrain 에 동일한 epic obstacle 4종 (north_battlecruiser/south_barracks/east_goliath/west_scv) 이 (0,±16), (±16,0) 위치에 박힘. 이 4 landmark 가 어느 terrain 에서든 sun_yaw / TRN 의 절대 특징점.
+
+**효과**:
+- passable_ratio: v2 ~91% → v3 84~85% (epic 점유 9%)
+- difficulty score: ~0.46 → 0.47~0.50 (살짝 challenging)
+- longest_corridor: 모든 terrain 약 45m (epic 회피 공간)
+- T5 localization 검증을 임의 terrain 에서 가능 — 발표 robustness 증명
+
+**검증 미완** (시연 전 추가 검증 필요): coverage A* 가 epic obstacle 근접 영역에서 path 못 찾는 case 있는지. terrain_00007/00012/00018 같은 다양한 difficulty 셋에서 mvp/integrated 미션 완주 확인.
+
+---
+
 ### [ ] terrain_00023 (epic obstacle) 에서 미니맵 깜박임 / phase 토글 의심
 
 **증상** — 2026-05-26 시연, mvp.launch.py + terrain_id:=terrain_00023 + `--terrain terrain_00023` 조합에서 matplotlib viewer 의 `Fog of War` 화면이 두 가지 형태로 깜박임. 진동성 표현.

@@ -2,7 +2,7 @@
   "terrain_id": "terrain_00018",
   "version": "1.0",
   "seed": 82647,
-  "generated_at": "2026-05-25T08:47:48+00:00",
+  "generated_at": "2026-05-26T09:30:09+00:00",
   "size_m": [
     50.0,
     50.0
@@ -31,6 +31,16 @@
         "rock_default"
       ]
     },
+    "epic_obstacles": {
+      "count": 4,
+      "placement": "cardinal_landmarks",
+      "asset_pool": [
+        "battlecruiser_starcraft2/obstacle.usd",
+        "barracks_starcraft2/obstacle.usd",
+        "goliath_blackops/obstacle.usd",
+        "scv_starcraft2/obstacle.usd"
+      ]
+    },
     "minerals": {
       "count": 12,
       "min_spacing_m": 3.0,
@@ -51,49 +61,73 @@
       }
     }
   },
+  "epic_obstacles": [
+    {
+      "id": "north_battlecruiser",
+      "type": "battlecruiser",
+      "asset_usd": "battlecruiser_starcraft2/obstacle.usd",
+      "position": {
+        "x": 0.0,
+        "y": 16.0,
+        "z": 0.19
+      },
+      "yaw": 0.0,
+      "footprint_m": [
+        5.18,
+        7.0
+      ],
+      "height_m": 3.62
+    },
+    {
+      "id": "south_barracks",
+      "type": "barracks",
+      "asset_usd": "barracks_starcraft2/obstacle.usd",
+      "position": {
+        "x": 0.0,
+        "y": -16.0,
+        "z": -0.41
+      },
+      "yaw": 3.142,
+      "footprint_m": [
+        7.0,
+        4.91
+      ],
+      "height_m": 4.61
+    },
+    {
+      "id": "east_goliath",
+      "type": "goliath",
+      "asset_usd": "goliath_blackops/obstacle.usd",
+      "position": {
+        "x": 16.0,
+        "y": 0.0,
+        "z": -0.04
+      },
+      "yaw": 1.571,
+      "footprint_m": [
+        5.69,
+        6.0
+      ],
+      "height_m": 6.74
+    },
+    {
+      "id": "west_scv",
+      "type": "scv",
+      "asset_usd": "scv_starcraft2/obstacle.usd",
+      "position": {
+        "x": -16.0,
+        "y": 0.0,
+        "z": 0.61
+      },
+      "yaw": -1.571,
+      "footprint_m": [
+        5.0,
+        4.17
+      ],
+      "height_m": 4.13
+    }
+  ],
   "spawn_locations": [
-    {
-      "x": -20.77,
-      "y": 16.53,
-      "z": -0.36,
-      "yaw": 2.271,
-      "group": "default"
-    },
-    {
-      "x": 9.26,
-      "y": -22.48,
-      "z": 0.63,
-      "yaw": 5.608,
-      "group": "default"
-    },
-    {
-      "x": -19.96,
-      "y": -14.9,
-      "z": 0.57,
-      "yaw": 4.767,
-      "group": "default"
-    },
-    {
-      "x": 13.32,
-      "y": 4.44,
-      "z": 0.57,
-      "yaw": 3.114,
-      "group": "default"
-    },
-    {
-      "x": -12.9,
-      "y": -11.4,
-      "z": 0.91,
-      "yaw": 0.325,
-      "group": "default"
-    },
-    {
-      "x": 4.57,
-      "y": 6.73,
-      "z": 0.84,
-      "yaw": 3.797,
-      "group": "default"
-    },
     {
       "x": 19.4,
       "y": -10.79,
@@ -228,24 +262,24 @@
       "group": "default"
     },
     {
-      "x": -20.48,
-      "y": -11.11,
-      "z": 0.14,
-      "yaw": 4.792,
+      "x": 5.6,
+      "y": 6.31,
+      "z": 0.93,
+      "yaw": 1.243,
       "group": "default"
     },
     {
-      "x": 15.07,
-      "y": 21.41,
-      "z": 0.9,
-      "yaw": 3.238,
+      "x": -4.72,
+      "y": -20.48,
+      "z": -0.02,
+      "yaw": 1.625,
       "group": "default"
     },
     {
-      "x": -9.6,
-      "y": -7.01,
-      "z": 1.03,
-      "yaw": 5.421,
+      "x": 12.08,
+      "y": 15.07,
+      "z": -0.06,
+      "yaw": 6.066,
       "group": "default"
     },
     {
@@ -270,17 +304,17 @@
       "group": "default"
     },
     {
-      "x": -17.23,
-      "y": -2.57,
-      "z": 1.06,
-      "yaw": 5.575,
+      "x": 22.17,
+      "y": 7.34,
+      "z": -0.3,
+      "yaw": 4.994,
       "group": "default"
     },
     {
-      "x": 7.34,
-      "y": 13.56,
-      "z": 0.03,
-      "yaw": 0.951,
+      "x": -16.04,
+      "y": 17.79,
+      "z": -0.35,
+      "yaw": 5.02,
       "group": "default"
     },
     {
@@ -298,31 +332,31 @@
       "group": "default"
     },
     {
-      "x": 13.4,
-      "y": -0.05,
-      "z": 0.42,
-      "yaw": 4.131,
+      "x": 7.24,
+      "y": 16.57,
+      "z": -0.55,
+      "yaw": 4.661,
       "group": "default"
     },
     {
-      "x": 16.57,
-      "y": 11.12,
-      "z": 0.02,
-      "yaw": 2.933,
+      "x": -6.55,
+      "y": 12.26,
+      "z": 0.27,
+      "yaw": 2.395,
       "group": "default"
     },
     {
-      "x": 12.26,
-      "y": -5.47,
-      "z": 0.47,
-      "yaw": 5.491,
+      "x": 17.2,
+      "y": -14.2,
+      "z": -0.05,
+      "yaw": 0.082,
       "group": "default"
     },
     {
-      "x": -14.2,
-      "y": -22.4,
-      "z": 0.19,
-      "yaw": 5.298,
+      "x": 15.78,
+      "y": 9.88,
+      "z": 0.05,
+      "yaw": 5.718,
       "group": "default"
     },
     {
@@ -354,45 +388,45 @@
       "group": "default"
     },
     {
-      "x": -17.79,
-      "y": -16.55,
-      "z": 0.89,
-      "yaw": 5.659,
+      "x": -14.54,
+      "y": -21.25,
+      "z": 0.36,
+      "yaw": 0.071,
       "group": "default"
     },
     {
-      "x": -10.85,
-      "y": -21.28,
-      "z": 0.06,
-      "yaw": 3.866,
+      "x": 20.19,
+      "y": -1.28,
+      "z": -0.37,
+      "yaw": 2.094,
       "group": "default"
     },
     {
-      "x": 2.25,
-      "y": 20.19,
-      "z": 0.02,
-      "yaw": 2.967,
+      "x": 21.37,
+      "y": -22.75,
+      "z": -0.02,
+      "yaw": 3.29,
       "group": "default"
     },
     {
-      "x": -7.67,
-      "y": 21.37,
-      "z": -0.21,
-      "yaw": 0.034,
+      "x": 6.0,
+      "y": -13.14,
+      "z": 0.47,
+      "yaw": 4.544,
       "group": "default"
     },
     {
-      "x": -13.14,
-      "y": 10.27,
-      "z": -0.2,
-      "yaw": 3.911,
+      "x": 5.63,
+      "y": 9.33,
+      "z": 0.53,
+      "yaw": 1.893,
       "group": "default"
     },
     {
-      "x": 9.33,
-      "y": -9.14,
-      "z": 0.92,
-      "yaw": 2.904,
+      "x": -1.74,
+      "y": -18.84,
+      "z": -0.26,
+      "yaw": 1.542,
       "group": "default"
     },
     {
@@ -400,6 +434,48 @@
       "y": 22.36,
       "z": 1.08,
       "yaw": 1.895,
+      "group": "default"
+    },
+    {
+      "x": 14.76,
+      "y": 4.82,
+      "z": 0.39,
+      "yaw": 3.162,
+      "group": "default"
+    },
+    {
+      "x": -11.25,
+      "y": -0.53,
+      "z": 0.28,
+      "yaw": 0.29,
+      "group": "default"
+    },
+    {
+      "x": 5.08,
+      "y": -8.23,
+      "z": 0.73,
+      "yaw": 1.005,
+      "group": "default"
+    },
+    {
+      "x": -10.32,
+      "y": 21.44,
+      "z": -0.42,
+      "yaw": 6.282,
+      "group": "default"
+    },
+    {
+      "x": 20.67,
+      "y": 5.21,
+      "z": -0.08,
+      "yaw": 0.166,
+      "group": "default"
+    },
+    {
+      "x": 13.08,
+      "y": -5.26,
+      "z": 0.29,
+      "yaw": 6.014,
       "group": "default"
     }
   ],
@@ -422,86 +498,6 @@
   "minerals": [
     {
       "id": 1,
-      "type": "green_gas",
-      "position": {
-        "x": 5.01,
-        "y": 7.84,
-        "z": 0.65
-      },
-      "value": 25
-    },
-    {
-      "id": 2,
-      "type": "green_gas",
-      "position": {
-        "x": 22.56,
-        "y": -4.53,
-        "z": -0.39
-      },
-      "value": 25
-    },
-    {
-      "id": 3,
-      "type": "blue_mineral",
-      "position": {
-        "x": -3.16,
-        "y": 20.7,
-        "z": 0.17
-      },
-      "value": 10
-    },
-    {
-      "id": 4,
-      "type": "blue_mineral",
-      "position": {
-        "x": 6.72,
-        "y": -1.48,
-        "z": 0.44
-      },
-      "value": 10
-    },
-    {
-      "id": 5,
-      "type": "yellow_mineral",
-      "position": {
-        "x": -13.89,
-        "y": 8.41,
-        "z": -0.12
-      },
-      "value": 50
-    },
-    {
-      "id": 6,
-      "type": "yellow_mineral",
-      "position": {
-        "x": 13.61,
-        "y": -13.19,
-        "z": 0.75
-      },
-      "value": 50
-    },
-    {
-      "id": 7,
-      "type": "blue_mineral",
-      "position": {
-        "x": -11.71,
-        "y": 5.28,
-        "z": -0.48
-      },
-      "value": 10
-    },
-    {
-      "id": 8,
-      "type": "green_gas",
-      "position": {
-        "x": 21.03,
-        "y": -1.01,
-        "z": -0.4
-      },
-      "value": 25
-    },
-    {
-      "id": 9,
       "type": "yellow_mineral",
       "position": {
         "x": -3.36,
@@ -511,17 +507,17 @@
       "value": 50
     },
     {
-      "id": 10,
-      "type": "blue_mineral",
+      "id": 2,
+      "type": "yellow_mineral",
       "position": {
-        "x": 18.41,
-        "y": -4.25,
-        "z": -0.57
+        "x": 6.26,
+        "y": 0.52,
+        "z": 0.44
       },
-      "value": 10
+      "value": 50
     },
     {
-      "id": 11,
+      "id": 3,
       "type": "blue_mineral",
       "position": {
         "x": -17.6,
@@ -531,14 +527,94 @@
       "value": 10
     },
     {
-      "id": 12,
-      "type": "yellow_mineral",
+      "id": 4,
+      "type": "green_gas",
       "position": {
-        "x": 0.09,
-        "y": 16.87,
-        "z": 0.34
+        "x": 21.47,
+        "y": -2.45,
+        "z": -0.5
       },
-      "value": 50
+      "value": 25
+    },
+    {
+      "id": 5,
+      "type": "blue_mineral",
+      "position": {
+        "x": 16.87,
+        "y": 18.93,
+        "z": 0.49
+      },
+      "value": 10
+    },
+    {
+      "id": 6,
+      "type": "green_gas",
+      "position": {
+        "x": 16.53,
+        "y": -6.37,
+        "z": -0.15
+      },
+      "value": 25
+    },
+    {
+      "id": 7,
+      "type": "blue_mineral",
+      "position": {
+        "x": -22.48,
+        "y": 18.06,
+        "z": -0.09
+      },
+      "value": 10
+    },
+    {
+      "id": 8,
+      "type": "blue_mineral",
+      "position": {
+        "x": 13.32,
+        "y": 4.44,
+        "z": 0.49
+      },
+      "value": 10
+    },
+    {
+      "id": 9,
+      "type": "blue_mineral",
+      "position": {
+        "x": -12.9,
+        "y": -11.4,
+        "z": 0.83
+      },
+      "value": 10
+    },
+    {
+      "id": 10,
+      "type": "green_gas",
+      "position": {
+        "x": 4.57,
+        "y": 6.73,
+        "z": 0.76
+      },
+      "value": 25
+    },
+    {
+      "id": 11,
+      "type": "blue_mineral",
+      "position": {
+        "x": -7.81,
+        "y": -14.78,
+        "z": 0.13
+      },
+      "value": 10
+    },
+    {
+      "id": 12,
+      "type": "blue_mineral",
+      "position": {
+        "x": -9.6,
+        "y": 4.99,
+        "z": -0.61
+      },
+      "value": 10
     }
   ],
   "physics_zones": [
@@ -601,11 +677,11 @@
     }
   },
   "difficulty": {
-    "score": 0.47,
+    "score": 0.49,
     "rock_density": 0.032,
-    "max_slope_deg": 41.78,
-    "mean_slope_deg": 9.25,
-    "passable_ratio": 0.912,
-    "longest_corridor_m": 47.11
+    "max_slope_deg": 54.64,
+    "mean_slope_deg": 9.08,
+    "passable_ratio": 0.836,
+    "longest_corridor_m": 44.82
   }
 }
