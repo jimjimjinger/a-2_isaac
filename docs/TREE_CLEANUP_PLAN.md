@@ -1,8 +1,20 @@
 # TREE_CLEANUP_PLAN.md — 트리 정리 작업 가이드
 
-> 작성 2026-05-26 시연 직전. 시연 후 (2026-05-27 발표 + 2026-05-28 이후) main 을 팀원이 깔끔하게 받을 수 있게 정리하기 위한 작업 list.
+> ✅ **2026-05-26 정리 완료** — integration 브랜치에서 우선순위 1·2·3 항목 처리 완료. 본 문서는 작업 기록 archive 로 보존.
 
-⚠️ **시연 전에는 진행 X**. 시연 시각 / mvp.launch.py 동작 변화 위험.
+> 작성 2026-05-26 시연 직전. 시연 후 main 을 팀원이 깔끔하게 받을 수 있게 정리한 작업 list.
+
+---
+
+## ✅ 완료된 작업 요약 (2026-05-26 integration 브랜치)
+
+- **launch 6개 갱신** — supervisor (battery → mission_manager 추가), perception (perception_node → yolo_perception_node), drive (cmd_vel remap), manipulation (ik_descend_dz=-0.40), sim (sim_bridge_node mock 명시), full_system (mvp + use_localization/use_rqt_views 옵션)
+- **stub 파일 삭제** — `isaac_manipulation/primitives/`, `isaac_perception/perception_node.py`, `isaac_perception/models/mineral_detector.pt`, `isaac_sim/scripts/{basecamp_visual_builder, mars_physics_config}.py`
+- **setup.py 동기 갱신** — isaac_manipulation (primitives 패키지 제거), isaac_perception (perception_node entry_point 제거)
+- **docs 정리** — `docs/README.enhanced.md` 삭제 (자체 안내대로)
+- **README 트리 갱신** — ⚠️ 마크 제거, 정리된 항목 반영
+
+vehicle_origin_T2.usd / sim_bridge_node / isaac_rl stub / temp/ 는 의도적 보존 (이유: vehicle_v1/build_integrated_vehicle 의존 + mock service 가치 + RL 미래 작업 + 개인 임시 영역).
 
 ---
 
