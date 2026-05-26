@@ -1,13 +1,21 @@
 """Mission manager — supervisor level FSM.
 
 Pattern: cmd_vel mux that never touches coverage_node source.
-- EXPLORE: pass-through from /coverage/cmd_vel_raw to /cmd_vel
-- APPROACH: A* way-point pursuit toward best target (mineral or gas).
-  Uses isaac_drive's ObstacleGrid + astar (no source modification — just
-  imports the same algorithm coverage_node uses).
-- PICK_READY: stop within stop_distance (Phase 3 hooks arm trigger here)
-  hysteresis: APPROACH->PICK_READY at stop_dist, PICK_READY->APPROACH at
-  stop_dist + resume_buffer to prevent flapping.
+
+Modes (orthogonal to phase, controlled via /mission/mode):
+- AUTO    : phase-driven autonomy (default)
+- MANUAL  : pass-through from /teleop/cmd_vel directly to /cmd_vel
+            (phase still tracked for telemetry, but ignored for actuation)
+
+Phases (AUTO mode):
+- EXPLORE          : pass-through from /coverage/cmd_vel_raw
+- APPROACH         : A* way-point pursuit toward best target
+- PICK_READY       : stop within stop_distance, arm action client fires
+                     (hysteresis: APPROACH->PICK_READY at stop_dist,
+                      PICK_READY->APPROACH at stop_dist + resume_buffer)
+- RETURN_TO_BASE   : A* path to (0, 0) basecamp — triggered when
+                     collected_count >= collection_goal OR battery critical
+- MISSION_COMPLETE : stopped at basecamp, mission ended
 
 Coverage_node must be launched with topic remap:
   ros2 run isaac_drive coverage_node --ros-args -r /cmd_vel:=/coverage/cmd_vel_raw
@@ -22,15 +30,15 @@ import os
 from typing import List, Optional, Tuple
 
 import rclpy
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PointStamped, PoseStamped, Twist
+from nav_msgs.msg import Odometry, Path
 from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
 from std_msgs.msg import Empty, String
 
 from isaac_interfaces.action import ExecuteArmTask
-from isaac_interfaces.msg import Detection, DetectionArray
+from isaac_interfaces.msg import BatteryState, Detection, DetectionArray, MissionState
 from isaac_drive.navigation.path_planner import astar, simplify_path
 from isaac_drive.navigation.terrain_loader import load_terrain
 
@@ -99,17 +107,54 @@ class MissionManagerNode(Node):
         self.declare_parameter("phase_log_period_sec", 1.0)
         self.declare_parameter("coverage_cmd_topic", "/coverage/cmd_vel_raw")
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("teleop_cmd_topic", "/teleop/cmd_vel")
         self.declare_parameter("detections_topic", "/perception/detections")
         self.declare_parameter("odom_topic", "/ground_truth/odom")
         self.declare_parameter("phase_topic", "/mission/phase")
+        self.declare_parameter("state_topic", "/mission/state")
+        self.declare_parameter("mode_topic", "/mission/mode")
+        self.declare_parameter("estop_topic", "/mission/estop")
+        self.declare_parameter("battery_topic", "/battery_state")
         self.declare_parameter("min_confidence", 0.6)
         self.declare_parameter("terrain_dir", _default_terrain_dir())
         self.declare_parameter("path_cell_size", 0.2)
-        self.declare_parameter("path_robot_radius", 0.7)
+        # rover 실제 차폭 (m0609 팔 + 후방 바스켓 포함) ≈ 1.5m. inflated 반경
+        # 1.0m 면 path 가 obstacle 중심에서 1m 마진 → rover 차체 끝에서도
+        # 0.25m 여유. 이전 0.7m 는 mars rover 크기에 부족해 가장자리 충돌 잦음.
+        self.declare_parameter("path_robot_radius", 1.0)
         self.declare_parameter("path_replan_target_delta_m", 0.4)
         self.declare_parameter("waypoint_reach_dist_m", 0.4)
+        # Mission termination
+        self.declare_parameter("collection_goal", 5)
+        self.declare_parameter("cargo_capacity", 5)
+        self.declare_parameter("basecamp_x", 0.0)
+        self.declare_parameter("basecamp_y", 0.0)
+        # Basecamp 자체는 obstacle 로 마킹된 영역 (terrain meta: keepout 반경 6m,
+        # visual_footprint 8x8m). path_robot_radius=1.0m inflate 후 obstacle
+        # 외곽 ≈ 7m. fringe 는 그보다 살짝 바깥 (7.5m), arrive 는 fringe 가깝게
+        # 둬서 fringe 도달이 곧 mission_complete.
+        self.declare_parameter("basecamp_fringe_radius_m", 7.5)
+        self.declare_parameter("basecamp_arrive_radius_m", 8.0)
+        self.declare_parameter("rtb_lin_speed", 0.9)
+        self.declare_parameter("teleop_stale_sec", 0.5)
+        self.declare_parameter("state_publish_hz", 2.0)
 
         self.phase = "EXPLORE"
+        self.mode = "AUTO"
+        self.estop = False
+        # Mineral collection / battery
+        self.collected_count: int = 0
+        self.cargo_count: int = 0
+        self.collected_by_class: dict[str, int] = {
+            "blue_mineral": 0, "yellow_mineral": 0, "green_gas": 0}
+        self.battery_percent: float = 100.0
+        self.battery_low: bool = False
+        self.battery_critical: bool = False
+        # Teleop
+        self.last_teleop_cmd: Optional[Twist] = None
+        self.last_teleop_ns: int = 0
+        # Last error string for MissionState
+        self.last_error: str = ""
         self.target: Optional[Detection] = None
         self.last_det_stamp_ns: int = 0
         self.last_coverage_cmd: Optional[Twist] = None
@@ -145,7 +190,7 @@ class MissionManagerNode(Node):
                 f"({self.ogrid.rows}x{self.ogrid.cols} @ {self.ogrid.cell_size:.2f}m)")
         except Exception as e:
             self.get_logger().error(
-                f"terrain load FAILED ({e}) — APPROACH will fall back to straight-line P-control")
+                f"terrain load FAILED ({e}) — APPROACH/RTB will fall back to straight-line P-control")
 
         if bool(self.get_parameter("enable_arm_action").value):
             self.arm_client = ActionClient(
@@ -155,10 +200,20 @@ class MissionManagerNode(Node):
             Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
         self.phase_pub = self.create_publisher(
             String, str(self.get_parameter("phase_topic").value), 10)
+        self.state_pub = self.create_publisher(
+            MissionState, str(self.get_parameter("state_topic").value), 10)
         # Tell coverage_node to drop its stale DRIVE path and replan from
         # the rover's new post-APPROACH/PICK position.
         self.replan_pub = self.create_publisher(
             Empty, "/coverage/replan_request", 10)
+        # Supervisor 가 APPROACH/RTB 시 자체적으로 그린 A* path / target.
+        # coverage_node 의 /mission/path / /mission/markers 와 별개 토픽이라
+        # 두 source 가 시간상 분리돼서 UI 에 표시됨 (EXPLORE 때는 coverage,
+        # 그 외엔 supervisor).
+        self.supervisor_path_pub = self.create_publisher(
+            Path, "/supervisor/path", 1)
+        self.supervisor_target_pub = self.create_publisher(
+            PointStamped, "/supervisor/target", 1)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("detections_topic").value),
@@ -169,12 +224,27 @@ class MissionManagerNode(Node):
         self.create_subscription(
             Odometry, str(self.get_parameter("odom_topic").value),
             self._on_odom, SENSOR_QOS)
+        self.create_subscription(
+            Twist, str(self.get_parameter("teleop_cmd_topic").value),
+            self._on_teleop_cmd, 10)
+        self.create_subscription(
+            String, str(self.get_parameter("mode_topic").value),
+            self._on_mode, 10)
+        self.create_subscription(
+            Empty, str(self.get_parameter("estop_topic").value),
+            self._on_estop, 10)
+        self.create_subscription(
+            BatteryState, str(self.get_parameter("battery_topic").value),
+            self._on_battery, 10)
 
         self.create_timer(0.05, self._tick)
         self.create_timer(
             float(self.get_parameter("phase_log_period_sec").value), self._log_phase)
+        state_hz = max(float(self.get_parameter("state_publish_hz").value), 0.5)
+        self.create_timer(1.0 / state_hz, self._publish_state)
         self.get_logger().info(
-            "mission_manager_node ready. EXPLORE pass-through active.")
+            f"mission_manager_node ready. mode=AUTO phase=EXPLORE goal="
+            f"{int(self.get_parameter('collection_goal').value)} minerals.")
 
     def _on_detections(self, msg: DetectionArray) -> None:
         # While the arm is executing a pick, ignore new detections so the
@@ -248,10 +318,86 @@ class MissionManagerNode(Node):
     def _on_odom(self, msg: Odometry) -> None:
         self.last_odom = msg
 
+    def _on_teleop_cmd(self, msg: Twist) -> None:
+        self.last_teleop_cmd = msg
+        self.last_teleop_ns = self.get_clock().now().nanoseconds
+
+    def _on_mode(self, msg: String) -> None:
+        new_mode = (msg.data or "").strip().upper()
+        if new_mode not in ("AUTO", "MANUAL"):
+            self.get_logger().warn(
+                f"ignored unknown mission mode: {msg.data!r} (expected AUTO/MANUAL)")
+            return
+        if new_mode == self.mode:
+            return
+        self.get_logger().info(f"mode: {self.mode} -> {new_mode}")
+        self.mode = new_mode
+        # Reset autonomy lock/target when switching to MANUAL so re-engaging
+        # AUTO starts from a clean phase.
+        if self.mode == "MANUAL":
+            self.target = None
+            self.lock_target = None
+            self.waypoints = []
+            self.wp_idx = 0
+            self.last_plan_target = None
+
+    def _on_estop(self, _msg: Empty) -> None:
+        if not self.estop:
+            self.get_logger().warn("ESTOP received — mission halted.")
+        self.estop = True
+        self.last_error = "ESTOP triggered"
+
+    def _on_battery(self, msg: BatteryState) -> None:
+        self.battery_percent = float(msg.percentage)
+        self.battery_low = bool(msg.is_low)
+        was_critical = self.battery_critical
+        self.battery_critical = bool(msg.is_critical)
+        if self.battery_critical and not was_critical:
+            self.get_logger().warn(
+                f"battery critical ({self.battery_percent:.1f}%) — RTB will engage.")
+
     def _tick(self) -> None:
+        # 1. Hard overrides (highest priority): ESTOP / MANUAL / MISSION_COMPLETE.
+        if self.estop:
+            self._enter_phase("MISSION_COMPLETE", reason="ESTOP")
+            self.cmd_pub.publish(Twist())
+            return
+
+        if self.mode == "MANUAL":
+            # Phase stays where it was (for telemetry) but we don't transition.
+            # Forward fresh teleop cmd; stale -> zero twist.
+            stale_sec = float(self.get_parameter("teleop_stale_sec").value)
+            age = (self.get_clock().now().nanoseconds - self.last_teleop_ns) / 1e9 \
+                if self.last_teleop_ns else float("inf")
+            if self.last_teleop_cmd is not None and age < stale_sec:
+                self.cmd_pub.publish(self.last_teleop_cmd)
+            else:
+                self.cmd_pub.publish(Twist())
+            return
+
+        if self.phase == "MISSION_COMPLETE":
+            self.cmd_pub.publish(Twist())
+            return
+
         # During arm action, hold rover stopped and freeze FSM transitions.
         if self.arm_in_flight:
             self.cmd_pub.publish(Twist())
+            return
+
+        # 2. Mission termination gates (AUTO only): collection goal / battery.
+        goal = int(self.get_parameter("collection_goal").value)
+        if self.phase != "RETURN_TO_BASE" and (
+            (goal > 0 and self.collected_count >= goal)
+            or self.battery_critical
+        ):
+            why = (f"goal reached ({self.collected_count}/{goal})"
+                   if self.collected_count >= goal
+                   else f"battery critical ({self.battery_percent:.1f}%)")
+            self._enter_phase("RETURN_TO_BASE", reason=why)
+
+        # 3. RTB drives toward basecamp; arrival -> MISSION_COMPLETE.
+        if self.phase == "RETURN_TO_BASE":
+            self._drive_to_basecamp()
             return
 
         now_ns = self.get_clock().now().nanoseconds
@@ -339,10 +485,21 @@ class MissionManagerNode(Node):
                 self.cmd_pub.publish(self.last_coverage_cmd)
             else:
                 self.cmd_pub.publish(Twist())
+            # EXPLORE: supervisor path/target 비움 — UI 가 coverage 의 path/
+            # marker 만 보이게.
+            self.waypoints = []
+            self._publish_supervisor_viz(target_xy=None)
         elif self.phase == "APPROACH":
             self.cmd_pub.publish(self._approach_twist(dist))
+            # _maybe_replan 후 waypoints + target 발행.
+            tgt = (self.target.world_position.x, self.target.world_position.y) \
+                  if self.target is not None else None
+            self._publish_supervisor_viz(target_xy=tgt)
         else:  # PICK_READY
             self.cmd_pub.publish(Twist())
+            tgt = (self.target.world_position.x, self.target.world_position.y) \
+                  if self.target is not None else None
+            self._publish_supervisor_viz(target_xy=tgt)
 
     def _distance_to_target(self) -> float:
         if self.target is None or self.last_odom is None:
@@ -375,7 +532,18 @@ class MissionManagerNode(Node):
                     break
             goal_x, goal_y = self.waypoints[self.wp_idx]
         else:
-            goal_x, goal_y = tx, ty
+            # A* 실패 — 이 mineral 까지 obstacle 회피 path 없음. 직진하면
+            # obstacle 통과 위험. 정지 + target/lock 폐기로 다음 tick 에
+            # det_fresh=False → 자동 EXPLORE 복귀. 같은 mineral 이 다시
+            # 감지되면 rover 위치가 바뀐 상태에서 재시도 가능.
+            self.get_logger().warn(
+                f"APPROACH A* failed for target ({tx:.2f},{ty:.2f}) — "
+                f"dropping target, returning to EXPLORE",
+                throttle_duration_sec=2.0)
+            self.target = None
+            self.lock_target = None
+            self.last_det_stamp_ns = 0
+            return Twist()
 
         q = self.last_odom.pose.pose.orientation
         siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
@@ -415,19 +583,35 @@ class MissionManagerNode(Node):
 
         start = self.ogrid.world_to_cell(rx, ry, clip=True)
         goal = self.ogrid.world_to_cell(tx, ty, clip=True)
-        # If the start or goal cell itself is blocked (mineral sitting on
-        # an inflated obstacle, or rover anchored on edge), nudge to the
-        # nearest free cell for a best-effort plan.
         if self.ogrid.grid[start] == 1:
             start = self._nearest_free(start)
         if goal is not None and self.ogrid.grid[goal] == 1:
             goal = self._nearest_free(goal)
 
+        # 1차 시도 — 표준 grid 로.
         path = astar(self.ogrid.grid, start, goal) if start and goal else None
+
+        # 2차 시도 — 실패 시 시작 cell 주변 5×5 일시 free 처리 후 재시도.
+        # mission_fsm._free_start_grid 와 동일 패턴. rover 가 PICK 직후
+        # inflated obstacle 영역에 있을 때 발동. _nearest_free 의 12-cell
+        # 검색이 부족한 케이스 보강.
+        if not path and start and goal:
+            relaxed = self.ogrid.grid.copy()
+            si, sj = start
+            for di in range(-2, 3):
+                for dj in range(-2, 3):
+                    ii, jj = si + di, sj + dj
+                    if self.ogrid.in_bounds(ii, jj):
+                        relaxed[ii, jj] = 0
+            path = astar(relaxed, start, goal)
+            if path:
+                self.get_logger().warn(
+                    f"A* recovered with relaxed start cell "
+                    f"(rover was in inflated obstacle area)")
+
         if not path:
             self.get_logger().warn(
-                f"A* no path: start={start} goal={goal} target=({tx:.2f},{ty:.2f}) "
-                f"— falling back to straight-line",
+                f"A* no path: start={start} goal={goal} target=({tx:.2f},{ty:.2f})",
                 throttle_duration_sec=2.0)
             self.waypoints = []
             self.last_plan_target = (tx, ty)
@@ -458,6 +642,7 @@ class MissionManagerNode(Node):
         goal.metadata = self.target.class_name
         self.arm_in_flight = True
         self._pending_pick_world = (goal.target_x, goal.target_y)
+        self._pending_pick_class = self.target.class_name
         future = self.arm_client.send_goal_async(goal)
         future.add_done_callback(self._on_arm_goal_accepted)
         self.get_logger().info(
@@ -488,15 +673,167 @@ class MissionManagerNode(Node):
         self.arm_in_flight = False
         self.last_pick_done_ns = self.get_clock().now().nanoseconds
         self.last_pick_world = getattr(self, "_pending_pick_world", None)
+        if ok:
+            self.collected_count += 1
+            cap = int(self.get_parameter("cargo_capacity").value)
+            self.cargo_count = min(self.collected_count, cap) if cap > 0 else self.collected_count
+            # 종류별 카운트 — arm action 의 metadata 에 class_name 이 들어있음.
+            picked_class = (self.target.class_name if self.target is not None
+                            else getattr(self, "_pending_pick_class", ""))
+            if picked_class in self.collected_by_class:
+                self.collected_by_class[picked_class] += 1
+            # 직전 실패 메시지는 깨끗하게 — 한 번 실패가 영원히 화면에 박혀
+            # 있는 현상 방지. 다음 실패가 발생하면 그때 다시 채워짐.
+            self.last_error = ""
+        else:
+            self.last_error = f"arm failed: {msg_text}"
         # Drop the current target so PICK_READY exits and EXPLORE resumes.
         self.target = None
         self.last_det_stamp_ns = 0
+        goal = int(self.get_parameter("collection_goal").value)
         self.get_logger().info(
-            f"arm action done success={ok} message={msg_text!r} — cooldown engaged")
+            f"arm action done success={ok} message={msg_text!r} — "
+            f"collected={self.collected_count}/{goal} — cooldown engaged")
+
+    def _enter_phase(self, new_phase: str, *, reason: str = "") -> None:
+        if self.phase == new_phase:
+            return
+        prev = self.phase
+        self.phase = new_phase
+        # Stale path 폐기 — EXPLORE 로 복귀할 때처럼 RTB 진입 시에도 이전 phase
+        # (APPROACH/PICK_READY) 의 waypoint 가 남아있으면 rover 의 새 위치
+        # 기준 obstacle 회피 path 가 안 그려져서 일직선으로 가는 사고가 남.
+        # 다음 _drive_to_basecamp tick 에서 fresh A* 가 자동 실행됨.
+        if new_phase in ("MISSION_COMPLETE", "EXPLORE", "RETURN_TO_BASE"):
+            self.waypoints = []
+            self.wp_idx = 0
+            self.last_plan_target = None
+        suffix = f" ({reason})" if reason else ""
+        self.get_logger().info(f"phase: {prev} -> {new_phase}{suffix}")
+
+    def _drive_to_basecamp(self) -> None:
+        if self.last_odom is None:
+            self.cmd_pub.publish(Twist())
+            return
+        bx = float(self.get_parameter("basecamp_x").value)
+        by = float(self.get_parameter("basecamp_y").value)
+        rx = self.last_odom.pose.pose.position.x
+        ry = self.last_odom.pose.pose.position.y
+        dist_to_center = math.hypot(bx - rx, by - ry)
+
+        arrive_r = float(self.get_parameter("basecamp_arrive_radius_m").value)
+        if dist_to_center <= arrive_r:
+            self._enter_phase("MISSION_COMPLETE",
+                              reason=f"basecamp reached at ({rx:.2f},{ry:.2f})")
+            self.cmd_pub.publish(Twist())
+            return
+
+        # Basecamp 중심 (0,0) 자체가 obstacle 영역 → goal nudge 실패해 A* fail.
+        # rover 에서 basecamp 향한 방향의 fringe 점을 target 으로 사용.
+        fringe_r = float(self.get_parameter("basecamp_fringe_radius_m").value)
+        if dist_to_center > fringe_r:
+            ux = (bx - rx) / dist_to_center
+            uy = (by - ry) / dist_to_center
+            tx = bx - ux * fringe_r
+            ty = by - uy * fringe_r
+        else:
+            tx, ty = bx, by
+
+        # APPROACH 와 동일하게 A* 한 번 만들어두면 다음부터 같은 target 이라
+        # replan 안 함. RTB 진입 시 _enter_phase 에서 waypoints/last_plan_target
+        # 을 비웠으므로 첫 호출에서 fresh plan 생성.
+        self._maybe_replan(rx, ry, tx, ty)
+
+        if not self.waypoints:
+            # A* 실패 — basecamp 까지 obstacle 회피 path 없음. 직진하면
+            # obstacle 통과 위험. 자리에서 MISSION_COMPLETE 로 종료.
+            self._enter_phase(
+                "MISSION_COMPLETE",
+                reason=f"RTB A* failed at ({rx:.2f},{ry:.2f}) — stopping in place")
+            self.last_error = "RTB unreachable"
+            self.cmd_pub.publish(Twist())
+            return
+
+        wp_reach = float(self.get_parameter("waypoint_reach_dist_m").value)
+        while self.wp_idx < len(self.waypoints) - 1:
+            wx, wy = self.waypoints[self.wp_idx]
+            if math.hypot(wx - rx, wy - ry) < wp_reach:
+                self.wp_idx += 1
+            else:
+                break
+        gx, gy = self.waypoints[self.wp_idx]
+        # UI 표시 — fringe target 을 분홍 별로.
+        self._publish_supervisor_viz(target_xy=(tx, ty))
+
+        q = self.last_odom.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        bearing = math.atan2(gy - ry, gx - rx)
+        heading_err = math.atan2(math.sin(bearing - yaw), math.cos(bearing - yaw))
+
+        t = Twist()
+        lin = float(self.get_parameter("rtb_lin_speed").value)
+        if abs(heading_err) > 0.4:
+            lin *= 0.3
+        t.linear.x = lin
+        t.angular.z = max(-1.2, min(1.2,
+            float(self.get_parameter("steer_gain").value) * heading_err))
+        self.cmd_pub.publish(t)
+
+    def _publish_supervisor_viz(self, target_xy=None) -> None:
+        """Supervisor 의 현재 path/target 을 UI 용 토픽으로 발행.
+        target_xy: (tx, ty) 또는 None. None 이면 target marker 안 그림."""
+        stamp = self.get_clock().now().to_msg()
+        # Path
+        msg = Path()
+        msg.header.stamp = stamp
+        msg.header.frame_id = "map"
+        for wx, wy in (self.waypoints or []):
+            ps = PoseStamped()
+            ps.header = msg.header
+            ps.pose.position.x = float(wx)
+            ps.pose.position.y = float(wy)
+            ps.pose.orientation.w = 1.0
+            msg.poses.append(ps)
+        self.supervisor_path_pub.publish(msg)
+        # Target — None 이면 NaN 으로 보내서 dashboard 가 hide.
+        tgt = PointStamped()
+        tgt.header.stamp = stamp
+        tgt.header.frame_id = "map"
+        if target_xy is None:
+            tgt.point.x = float("nan")
+            tgt.point.y = float("nan")
+        else:
+            tgt.point.x = float(target_xy[0])
+            tgt.point.y = float(target_xy[1])
+        self.supervisor_target_pub.publish(tgt)
+
+    def _publish_state(self) -> None:
+        s = MissionState()
+        s.state = self.phase if self.mode == "AUTO" else f"MANUAL/{self.phase}"
+        s.previous_state = ""
+        s.battery_percent = float(self.battery_percent)
+        s.low_battery = bool(self.battery_low)
+        s.critical_battery = bool(self.battery_critical)
+        s.cargo_count = int(self.cargo_count)
+        s.cargo_capacity = int(self.get_parameter("cargo_capacity").value)
+        s.collected_count = int(self.collected_count)
+        s.collection_goal = int(self.get_parameter("collection_goal").value)
+        s.collected_blue   = int(self.collected_by_class.get("blue_mineral", 0))
+        s.collected_yellow = int(self.collected_by_class.get("yellow_mineral", 0))
+        s.collected_green  = int(self.collected_by_class.get("green_gas", 0))
+        s.active_task = ("picking" if self.arm_in_flight
+                         else "manual" if self.mode == "MANUAL"
+                         else self.phase.lower())
+        s.last_error = self.last_error
+        self.state_pub.publish(s)
 
     def _nearest_free(self, cell: Tuple[int, int]) -> Tuple[int, int]:
+        # search radius 25 cell (= 5m at cell_size=0.2). 이전 12 cell (2.4m) 은
+        # basecamp 같은 큰 obstacle 영역 옆에서 free 못 찾는 케이스가 있었음.
         i0, j0 = cell
-        for r in range(1, 12):
+        for r in range(1, 25):
             for di in range(-r, r + 1):
                 for dj in range(-r, r + 1):
                     if max(abs(di), abs(dj)) != r:

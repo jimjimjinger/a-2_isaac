@@ -36,5 +36,11 @@ def generate_launch_description() -> LaunchDescription:
                 name="battery_monitor_node",
                 output="screen",
             ),
+            Node(
+                package="isaac_supervisor",
+                executable="mission_web_node",
+                name="mission_web_node",
+                output="screen",
+            ),
         ]
     )

@@ -62,9 +62,32 @@ source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
 ros2 launch isaac_bringup rqt_views.launch.py
 ```
 
-→ rover 가 자율적으로 EXPLORE → mineral 발견 → APPROACH → PICK → CARGO RELEASE 반복.
+→ rover 가 자율적으로 EXPLORE → APPROACH → PICK 반복 후, `collection_goal` (기본 5개) 도달
+또는 배터리 critical 시 **RETURN_TO_BASE** → 베이스캠프 (0,0) 도착 → **MISSION_COMPLETE**.
 
-### 4. T5 정공법 졸업 (선택, 정확도 검증 완료 시점에)
+### 4. Mission Control UI (Web HUD)
+
+`mvp.launch.py` 가 띄우는 **mission_web_node** (Flask+SocketIO) + **web_video_server** 가
+SC2 풍 HUD 를 제공합니다.
+
+```bash
+# 1회만: 의존성 설치
+pip3 install --user flask-socketio eventlet
+sudo apt install -y ros-humble-web-video-server
+
+# 브라우저 접속
+xdg-open http://localhost:8088     # 또는 LAN 내 다른 PC: http://<host-ip>:8088
+```
+
+- **좌하단**: coverage minimap (canvas, rover 위치/베이스캠프 표시)
+- **중앙하단**: portrait + phase 배지 + battery/collected 바 + POS/YAW/SPEED/CMD/TASK/ERR
+- **우상단**: 광물 종류별 카운터 + collected/goal
+- **우하단**: 3×3 액션 그리드 (디자인 단계 — placeholder, 버튼 비활성)
+- **중앙 메인**: Isaac Sim overview (현재 sun cam placeholder) / Body YOLO / Wrist YOLO
+
+원격조종 (teleop_twist_keyboard) 과 AUTO/MANUAL/ESTOP 버튼 연동은 다음 단계.
+
+### 5. T5 정공법 졸업 (선택, 정확도 검증 완료 시점에)
 
 `mvp.launch.py` 의 `odom_to_estimated_pose` 노드를 빼고 별도 터미널에서:
 ```bash
