@@ -110,7 +110,11 @@ def _build_nodes(context, *args, **kwargs):
                     "image_topic": "/camera/sun/image_raw",
                     "camera_info_topic": "/camera/sun/camera_info",
                     "world_sun_yaw": 0.929,
-                    "camera_yaw_offset": 2.889,
+                    # 2026-05-26 시연 진단: 기존 2.889 에서 innovation -3.0 rad,
+                    # 1차 patch -0.253 (=2.889-π) 도 여전 -3.131 rad. 부호 반전
+                    # 후보 시도 — yaw → -yaw 의미. 그래도 reject 이면 sun_yaw_node
+                    # 내부 yaw 계산 부호 반전이 필요할 가능성.
+                    "camera_yaw_offset": 0.253,
                     "camera_elevation": 1.5707963268,
                     "imu_topic": "/imu/data",
                     "use_imu_tilt_compensation": True,

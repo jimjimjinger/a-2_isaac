@@ -36,6 +36,7 @@ def _default_terrain_root() -> str:
 def _build_nodes(context, *args, **kwargs):
     terrain_id = LaunchConfiguration("terrain_id").perform(context)
     terrain_root = LaunchConfiguration("terrain_root").perform(context)
+    collection_goal = LaunchConfiguration("collection_goal").perform(context)
     terrain_dir = os.path.join(terrain_root, terrain_id)
     bringup_share = get_package_share_directory("isaac_bringup")
     localization_launch = os.path.join(
@@ -95,6 +96,7 @@ def _build_nodes(context, *args, **kwargs):
                     "cmd_vel_topic": "/cmd_vel",
                     "approach_engage_dist_m": 30.0,
                     "approach_lin_speed": 1.2,
+                    "collection_goal": int(collection_goal),
                 }
             ],
         ),
@@ -132,6 +134,11 @@ def generate_launch_description() -> LaunchDescription:
                 "terrain_root",
                 default_value=_default_terrain_root(),
                 description="Directory containing terrain_<id> assets.",
+            ),
+            DeclareLaunchArgument(
+                "collection_goal",
+                default_value="5",
+                description="N개 채집 시 RETURN_TO_BASE 자동 전환. 빠른 시연용 1.",
             ),
             OpaqueFunction(function=_build_nodes),
         ]

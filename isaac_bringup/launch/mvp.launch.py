@@ -38,14 +38,40 @@ UI 접속:
   의 <img src=...> 가 자동 임베드. enable_web_video:=false 로 끌 수 있음.
 """
 
+import os
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.conditions import IfCondition
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
+def _default_terrain_root() -> str:
+    env = os.environ.get("ISAAC_TERRAIN_ROOT")
+    if env:
+        return env
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidate = os.path.normpath(
+        os.path.join(here, "..", "..", "..", "isaac_sim", "assets", "generated_terrains")
+    )
+    if os.path.isdir(candidate):
+        return candidate
+    return os.path.expanduser(
+        "~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains"
+    )
+
+
 def generate_launch_description() -> LaunchDescription:
+    terrain_id_arg = DeclareLaunchArgument(
+        "terrain_id", default_value="terrain_00023",
+        description="coverage/mission_manager 가 사용할 terrain. T1 Isaac Sim "
+                    "의 --terrain 인자와 같아야 obstacle_grid/baseanchor 정합. "
+                    "default=terrain_00023 (epic obstacle 4종 = T5 localization "
+                    "sun_yaw/TRN 특징점). 다른 terrain 으로 실험 시 명시 전달.")
+    terrain_root_arg = DeclareLaunchArgument(
+        "terrain_root", default_value=_default_terrain_root(),
+        description="terrain_<id> 디렉토리들이 모여있는 루트.")
     collection_goal_arg = DeclareLaunchArgument(
         "collection_goal", default_value="5",
         description="광물 N개 채집 시 RETURN_TO_BASE 자동 전환.")
@@ -64,8 +90,15 @@ def generate_launch_description() -> LaunchDescription:
                      "차지하는 일이 있어 충돌 회피용으로 8090 default. "
                      "mission_web_node 에 WEB_VIDEO_PORT 환경변수로 자동 전달."))
 
+    terrain_dir = PathJoinSubstitution([
+        LaunchConfiguration("terrain_root"),
+        LaunchConfiguration("terrain_id"),
+    ])
+
     return LaunchDescription(
         [
+            terrain_id_arg,
+            terrain_root_arg,
             collection_goal_arg,
             battery_drain_arg,
             enable_dashboard_arg,
@@ -96,6 +129,15 @@ def generate_launch_description() -> LaunchDescription:
                 name="coverage_node",
                 output="screen",
                 remappings=[("/cmd_vel", "/coverage/cmd_vel_raw")],
+                parameters=[{
+                    "terrain_dir": terrain_dir,
+                    # matplotlib viewer 비활성 — 시연용으론 Web HUD 의 minimap
+                    # 위젯만 사용. viewer 는 디버깅용 (별도 `/tmp/starcraft_map_state.npz`
+                    # 폴링, partial-write 시 깜박임 발생). topics 는 계속 발행해
+                    # Web HUD 가 동작.
+                    "enable_minimap": False,
+                    "enable_minimap_topics": True,
+                }],
             ),
             # Supervisor — EXPLORE→APPROACH→PICK→RTB→COMPLETE 전환 + AUTO/MANUAL
             # mux + arm action client + battery_state subscribe + MissionState 발행.
@@ -109,6 +151,7 @@ def generate_launch_description() -> LaunchDescription:
                         "approach_engage_dist_m": 30.0,
                         "approach_lin_speed": 1.2,
                         "collection_goal": LaunchConfiguration("collection_goal"),
+                        "terrain_dir": terrain_dir,
                     }
                 ],
             ),

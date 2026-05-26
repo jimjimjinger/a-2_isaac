@@ -646,7 +646,13 @@ class TRNNode(Node):
         ) = candidates[0]
 
         best_x, best_y = self.grid_to_world(best_i, best_j)
-        best_z = float(self.heightmap[best_j, best_i])
+        # candidate 가 heightmap 경계 밖을 가리키는 경우 clip — 그렇지 않으면
+        # IndexError 로 trn_node 가 죽어 절대 위치 보정이 완전히 정지한다
+        # (2026-05-26 시연 회귀). best_j 가 axis 0, best_i 가 axis 1.
+        hm_h, hm_w = self.heightmap.shape
+        best_j_clip = max(0, min(int(best_j), hm_h - 1))
+        best_i_clip = max(0, min(int(best_i), hm_w - 1))
+        best_z = float(self.heightmap[best_j_clip, best_i_clip])
 
         separation_cells = max(
             1,
