@@ -363,3 +363,33 @@ body {
 .act-warn .act-icon { color: #ff8a8a; }
 .act-empty { opacity: 0.35; }
 .act-empty .act-icon { color: #5a6a82; }
+
+/* ── Rover selector chips (멀티 rover 모드 전용) ───────────────── */
+.rover-selector {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #0b1426 0%, #06101f 100%);
+  border-top: 1px solid #1a2b48;
+  border-bottom: 1px solid #1a2b48;
+}
+.rover-chip {
+  padding: 4px 14px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: bold;
+  color: #cfe6ff;
+  background: #0b1426;
+  border: 2px solid #6cd9ff;
+  border-radius: 4px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  transition: background 0.1s, color 0.1s;
+}
+.rover-chip:hover { background: #122842; }
+.rover-chip.active {
+  background: #1a3a5e;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(108, 217, 255, 0.4);
+}

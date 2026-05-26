@@ -11,16 +11,22 @@ VIEWER_LOG = "/tmp/starcraft_map_viewer.log"
 
 
 class StateWriter:
-    def __init__(self, fog_map, viewer_script_path, write_every=3):
+    def __init__(self, fog_map, viewer_script_path, write_every=3, rover_id=""):
         """
         Args:
             fog_map: FogMap 인스턴스 (obstacle_mask 격자 포함)
             viewer_script_path: viewer.py 경로
             write_every: 매 N step 마다 저장
+            rover_id: namespace 분리용 — multi-rover 시 각 rover 의 npz 와
+                      viewer log 가 unique path 가 되어 두 matplotlib 창이
+                      독립적으로 뜬다. 빈 문자열이면 단일 rover (기존 동작).
         """
         self.fog_map = fog_map
         self.write_every = int(write_every)
-        self.data_path = os.path.join(tempfile.gettempdir(), DATA_FILENAME)
+        suffix = f"_{rover_id}" if rover_id else ""
+        data_name = f"starcraft_map_state{suffix}.npz"
+        self.data_path = os.path.join(tempfile.gettempdir(), data_name)
+        self.viewer_log = f"/tmp/starcraft_map_viewer{suffix}.log"
 
         # 이전 캐시 제거
         for p in (self.data_path, self.data_path + ".tmp.npz"):
@@ -47,11 +53,11 @@ class StateWriter:
         try:
             proc = subprocess.Popen(
                 [SYS_PYTHON, viewer_script_path, self.data_path],
-                stdout=open(VIEWER_LOG, "w"),
+                stdout=open(self.viewer_log, "w"),
                 stderr=subprocess.STDOUT,
                 env=clean_env,
             )
-            print(f"[viewer] 시작 pid={proc.pid}  (log={VIEWER_LOG})")
+            print(f"[viewer] 시작 pid={proc.pid}  (log={self.viewer_log})")
             return proc
         except Exception as e:
             print(f"[viewer] 시작 실패: {e}")

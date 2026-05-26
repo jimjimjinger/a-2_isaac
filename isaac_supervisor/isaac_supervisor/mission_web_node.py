@@ -20,7 +20,7 @@ from __future__ import annotations
 import math
 import os
 import threading
-from typing import Optional
+from typing import Dict, List, Optional
 
 # Async mode: we use "threading" (Flask-SocketIO's built-in werkzeug + thread
 # worker) rather than eventlet. eventlet.monkey_patch() rewires the standard
@@ -75,41 +75,69 @@ class MissionWebRosNode(Node):
             os.path.expanduser(
                 "~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/"
                 "generated_terrains/terrain_00004/preview.png"))
-        # Cached last messages so a late-connecting browser can be primed.
-        self._last_state: Optional[dict] = None
-        self._last_odom: Optional[dict] = None
-        self._last_minimap: Optional[dict] = None
-        self._last_path: Optional[dict] = None
-        self._last_target: Optional[dict] = None
+        # rover_namespaces — 멀티 rover 추적용. 빈 리스트 또는 [""] 면 단일
+        # rover (absolute 토픽 sub). 예: ["rover_1", "rover_2"] 면 각 namespace
+        # 의 토픽을 모두 sub 하고 payload 에 rover_id 필드를 박아 emit.
+        self.declare_parameter("rover_namespaces", [""])
+        nss_raw = self.get_parameter("rover_namespaces").value
+        # ROS2 string_array param 이 빈 list 면 None 으로 들어오는 케이스 방어
+        self.rover_namespaces: List[str] = (
+            [str(s) for s in nss_raw] if nss_raw else [""]
+        )
+        # Per-rover cache so a late-connecting browser can be primed.
+        # 단일 모드는 rover_id="" 키로 저장됨.
+        self._last_state: Dict[str, dict] = {}
+        self._last_odom: Dict[str, dict] = {}
+        self._last_minimap: Dict[str, dict] = {}
+        self._last_path: Dict[str, dict] = {}
+        self._last_target: Dict[str, Optional[dict]] = {}
 
+        minimap_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
+        for ns in self.rover_namespaces:
+            self._subscribe_for_rover(ns, minimap_qos)
+        self.get_logger().info(
+            f"mission_web_node ROS interface ready — "
+            f"rover_namespaces={self.rover_namespaces}.")
+
+    def _topic(self, ns: str, relative: str) -> str:
+        """ns="" 이면 absolute /<relative>. 그 외엔 /<ns>/<relative>."""
+        rel = relative.lstrip("/")
+        if not ns:
+            return "/" + rel
+        return f"/{ns.strip('/')}/{rel}"
+
+    def _subscribe_for_rover(self, ns: str, minimap_qos) -> None:
+        """단일 rover (ns="" 또는 "rover_1" 등) 의 모든 토픽 sub."""
+        from functools import partial
         self.create_subscription(
-            MissionState, "/mission/state", self._on_state, 10)
+            MissionState, self._topic(ns, "mission/state"),
+            partial(self._on_state, ns), 10)
         self.create_subscription(
-            Odometry, "/ground_truth/odom", self._on_odom, SENSOR_QOS)
+            Odometry, self._topic(ns, "ground_truth/odom"),
+            partial(self._on_odom, ns), SENSOR_QOS)
         self.create_subscription(
-            Twist, "/cmd_vel", self._on_cmd_vel, 10)
-        # minimap_publisher 가 VOLATILE/depth=1 으로 발행하므로 호환 QoS 사용.
-        # 첫 프레임 놓치면 다음 publish 까지 awaiting 으로 보일 수 있지만,
-        # minimap 은 1~2 Hz 로 갱신되므로 곧 들어옴.
+            Twist, self._topic(ns, "cmd_vel"),
+            partial(self._on_cmd_vel, ns), 10)
         self.create_subscription(
-            OccupancyGrid, "/mission/minimap", self._on_minimap,
-            QoSProfile(
-                reliability=ReliabilityPolicy.RELIABLE,
-                durability=DurabilityPolicy.VOLATILE,
-                history=HistoryPolicy.KEEP_LAST,
-                depth=1,
-            ))
-        # coverage_node 의 현재 계획 경로 + target anchor — SC2 풍 minimap.
-        self.create_subscription(Path, "/mission/path", self._on_path, 10)
+            OccupancyGrid, self._topic(ns, "mission/minimap"),
+            partial(self._on_minimap, ns), minimap_qos)
         self.create_subscription(
-            MarkerArray, "/mission/markers", self._on_markers, 10)
-        # mission_manager (supervisor) 의 APPROACH/RTB path/target. 같은 socket
-        # event 로 emit 해서 dashboard 가 시간상 최신 source 그리도록.
+            Path, self._topic(ns, "mission/path"),
+            partial(self._on_path, ns), 10)
         self.create_subscription(
-            Path, "/supervisor/path", self._on_supervisor_path, 10)
+            MarkerArray, self._topic(ns, "mission/markers"),
+            partial(self._on_markers, ns), 10)
         self.create_subscription(
-            PointStamped, "/supervisor/target", self._on_supervisor_target, 10)
-        self.get_logger().info("mission_web_node ROS interface ready.")
+            Path, self._topic(ns, "supervisor/path"),
+            partial(self._on_supervisor_path, ns), 10)
+        self.create_subscription(
+            PointStamped, self._topic(ns, "supervisor/target"),
+            partial(self._on_supervisor_target, ns), 10)
 
     def topics_for_camera_urls(self) -> dict:
         return {
@@ -120,16 +148,26 @@ class MissionWebRosNode(Node):
         }
 
     def last_snapshot(self) -> dict:
+        """Per-rover cache snapshot — dict-by-ns 형태.
+        예: {"state": {"rover_1": {...}, "rover_2": {...}}, "odom": {...}, ...}
+        client 가 connect 시 모든 rover 의 latest 값을 prime 받을 수 있다.
+        """
         return {
-            "state":   self._last_state,
-            "odom":    self._last_odom,
-            "minimap": self._last_minimap,
-            "path":    self._last_path,
-            "target":  self._last_target,
+            "rover_namespaces": list(self.rover_namespaces),
+            "state":   dict(self._last_state),
+            "odom":    dict(self._last_odom),
+            "minimap": dict(self._last_minimap),
+            "path":    dict(self._last_path),
+            "target":  dict(self._last_target),
         }
 
-    def _on_state(self, msg: MissionState) -> None:
-        self._last_state = {
+    def _emit(self, event: str, ns: str, payload: dict) -> None:
+        """ns 를 payload 의 rover_id 필드로 박아 emit. 단일 모드는 빈 문자열."""
+        payload["rover_id"] = ns
+        self._sio.emit(event, payload)
+
+    def _on_state(self, ns: str, msg: MissionState) -> None:
+        payload = {
             "state": msg.state,
             "previous_state": msg.previous_state,
             "battery_percent": float(msg.battery_percent),
@@ -145,72 +183,76 @@ class MissionWebRosNode(Node):
             "active_task": msg.active_task,
             "last_error": msg.last_error,
         }
-        self._sio.emit("state", self._last_state)
+        self._last_state[ns] = payload
+        self._emit("state", ns, payload)
 
-    def _on_odom(self, msg: Odometry) -> None:
+    def _on_odom(self, ns: str, msg: Odometry) -> None:
         p = msg.pose.pose.position
         v = msg.twist.twist.linear
         w = msg.twist.twist.angular
         yaw = _yaw_from_quat(msg.pose.pose.orientation)
         # vehicle_v3 의 GT_SCRIPT 는 PubGtOdom 에 position/orientation 만 보내고
-        # twist 는 채우지 않는다 → 수신측 v.x/v.y 가 항상 0. 그래서 position
-        # 변화율로 numerical velocity 를 계산해 SPEED 슬롯이 의미있는 값을
-        # 갖게 한다. 짧은 dt 는 0 으로 두어 노이즈/divide-by-zero 방지.
+        # twist 는 채우지 않는다 → 수신측 v.x/v.y 가 항상 0. position 변화율로
+        # numerical velocity 계산 (per-rover prev cache).
         now_ns = self.get_clock().now().nanoseconds
         speed = 0.0
-        prev = getattr(self, "_prev_odom_for_speed", None)
+        prev_map = getattr(self, "_prev_odom_for_speed", None)
+        if prev_map is None:
+            prev_map = {}
+            self._prev_odom_for_speed = prev_map
+        prev = prev_map.get(ns)
         if prev is not None:
             dt = (now_ns - prev["ns"]) * 1e-9
             if dt > 0.02:
                 dx = float(p.x) - prev["x"]
                 dy = float(p.y) - prev["y"]
                 speed = math.hypot(dx, dy) / dt
-        self._prev_odom_for_speed = {"x": float(p.x), "y": float(p.y), "ns": now_ns}
-        self._last_odom = {
+        prev_map[ns] = {"x": float(p.x), "y": float(p.y), "ns": now_ns}
+        payload = {
             "x": float(p.x), "y": float(p.y), "z": float(p.z),
             "yaw_deg": math.degrees(yaw),
             "vx": float(v.x), "vy": float(v.y),
             "speed": float(speed),
             "wz": float(w.z),
         }
-        self._sio.emit("odom", self._last_odom)
+        self._last_odom[ns] = payload
+        self._emit("odom", ns, payload)
 
-    def _on_cmd_vel(self, msg: Twist) -> None:
-        self._sio.emit("cmd_vel", {
+    def _on_cmd_vel(self, ns: str, msg: Twist) -> None:
+        self._emit("cmd_vel", ns, {
             "lin": float(msg.linear.x),
             "ang": float(msg.angular.z),
         })
 
-    def _on_path(self, msg: Path) -> None:
+    def _on_path(self, ns: str, msg: Path) -> None:
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
                for ps in msg.poses]
-        self._last_path = {"pts": pts}
-        self._sio.emit("path", self._last_path)
-
-    def _on_supervisor_path(self, msg: Path) -> None:
-        pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
-               for ps in msg.poses]
-        # supervisor 가 빈 path 발행하면 (EXPLORE 시) lastPath 그대로 두지 않고
-        # 비워서 화면에서 사라지게.
         payload = {"pts": pts}
-        self._last_path = payload
-        self._sio.emit("path", payload)
+        self._last_path[ns] = payload
+        self._emit("path", ns, payload)
 
-    def _on_supervisor_target(self, msg: PointStamped) -> None:
+    def _on_supervisor_path(self, ns: str, msg: Path) -> None:
+        pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
+               for ps in msg.poses]
+        # supervisor 가 빈 path 발행하면 (EXPLORE 시) lastPath 비워서 화면에서
+        # 사라지게.
+        payload = {"pts": pts}
+        self._last_path[ns] = payload
+        self._emit("path", ns, payload)
+
+    def _on_supervisor_target(self, ns: str, msg: PointStamped) -> None:
         import math as _math
         x, y = float(msg.point.x), float(msg.point.y)
         if not (_math.isfinite(x) and _math.isfinite(y)):
-            # NaN → target 없음. None 으로 emit.
-            self._last_target = None
-            self._sio.emit("target", {})
+            self._last_target[ns] = None
+            self._emit("target", ns, {})
             return
         target = {"x": x, "y": y}
-        self._last_target = target
-        self._sio.emit("target", target)
+        self._last_target[ns] = target
+        self._emit("target", ns, dict(target))
 
-    def _on_markers(self, msg: MarkerArray) -> None:
+    def _on_markers(self, ns: str, msg: MarkerArray) -> None:
         # minimap_publisher 의 ns="target" SPHERE 만 추려서 분홍색 별 위치로.
-        # action == 2 (DELETE) 면 target 없음 표시.
         target = None
         for m in msg.markers:
             if m.ns == "target":
@@ -220,14 +262,12 @@ class MissionWebRosNode(Node):
                     target = {"x": float(m.pose.position.x),
                               "y": float(m.pose.position.y)}
                 break
-        self._last_target = target  # None or {x,y}
-        self._sio.emit("target", target or {})
+        self._last_target[ns] = target
+        self._emit("target", ns, dict(target) if target else {})
 
-    def _on_minimap(self, msg: OccupancyGrid) -> None:
+    def _on_minimap(self, ns: str, msg: OccupancyGrid) -> None:
         # OccupancyGrid -> compact dict the browser can paint on a canvas.
-        # data is row-major int8 in [-1, 100]; we keep as plain list (a few
-        # hundred kB) since minimap is published low-rate.
-        self._last_minimap = {
+        payload = {
             "w": int(msg.info.width),
             "h": int(msg.info.height),
             "res": float(msg.info.resolution),
@@ -235,7 +275,8 @@ class MissionWebRosNode(Node):
             "oy": float(msg.info.origin.position.y),
             "data": list(msg.data),
         }
-        self._sio.emit("minimap", self._last_minimap)
+        self._last_minimap[ns] = payload
+        self._emit("minimap", ns, payload)
 
 
 def _spin_ros(ros_node: Node) -> None:
@@ -301,11 +342,18 @@ def main(args: list[str] | None = None) -> None:
     @sio.on("connect")
     def _on_connect():
         snap = ros_node.last_snapshot()
-        if snap["state"]:   sio.emit("state",   snap["state"])
-        if snap["odom"]:    sio.emit("odom",    snap["odom"])
-        if snap["minimap"]: sio.emit("minimap", snap["minimap"])
-        if snap["path"]:    sio.emit("path",    snap["path"])
-        if snap["target"]:  sio.emit("target",  snap["target"])
+        # rover namespace 리스트 먼저 — JS 가 selector UI 구성 시 사용
+        sio.emit("rovers", {"namespaces": snap["rover_namespaces"]})
+        # Per-rover cache 를 ns 별로 re-emit. payload 마다 rover_id 박혀있음
+        # (사실 캐시 시점 emit 의 payload 와 동일). 늦게 들어온 client 도
+        # 모든 rover 의 latest state 받음.
+        for event_key in ("state", "odom", "minimap", "path", "target"):
+            for ns, payload in snap[event_key].items():
+                if payload is None:
+                    continue
+                p = dict(payload)
+                p["rover_id"] = ns
+                sio.emit(event_key, p)
 
     spinner = threading.Thread(target=_spin_ros, args=(ros_node,), daemon=True)
     spinner.start()

@@ -19,7 +19,9 @@ setup(
             "launch/localization.launch.py",
             "launch/integrated_localization.launch.py",
             "launch/mvp.launch.py",
+            "launch/mvp_multi.launch.py",
             "launch/rqt_views.launch.py",
+            "launch/rqt_views_multi.launch.py",
         ]),
         (f"share/{package_name}/rviz", [
             "rviz/localization_map.rviz",

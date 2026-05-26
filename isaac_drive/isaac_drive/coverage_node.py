@@ -106,6 +106,10 @@ class CoverageNode(Node):
         self.declare_parameter("enable_minimap_topics", True)
         self.declare_parameter("minimap_publish_every", 10)
         self.declare_parameter("minimap_frame_id", "map")
+        # multi-rover 시 각 rover 의 viewer 가 unique npz / log path 쓰도록
+        # rover_id (예: "rover_1") 를 StateWriter 에 전달. 빈 문자열이면 단일
+        # rover (기존 동작 — /tmp/starcraft_map_state.npz).
+        self.declare_parameter("minimap_rover_id", "")
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         pose_topic = str(self.get_parameter("pose_topic").value)
@@ -208,9 +212,15 @@ class CoverageNode(Node):
                 f"미니맵 비활성화 — state_writer import 실패: {exc}")
             return
         viewer = os.path.join(scripts_dir, "viewer.py")
+        rover_id = str(self.get_parameter("minimap_rover_id").value).strip()
         self.writer = StateWriter(
-            self.fog, viewer_script_path=viewer, write_every=write_every)
-        self.get_logger().info(f"미니맵 viewer 시작 — {viewer}")
+            self.fog, viewer_script_path=viewer, write_every=write_every,
+            rover_id=rover_id)
+        if rover_id:
+            self.get_logger().info(
+                f"미니맵 viewer 시작 (rover_id={rover_id}) — {viewer}")
+        else:
+            self.get_logger().info(f"미니맵 viewer 시작 — {viewer}")
 
     # ── I5 구독 콜백: PoseWithCovarianceStamped → PoseProvider ──
     def _on_pose(self, msg: PoseWithCovarianceStamped) -> None:

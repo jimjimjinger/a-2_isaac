@@ -176,10 +176,14 @@ class ArmExecutorNode(Node):
         self._rover_xyz: Optional[np.ndarray] = None
         self._rover_yaw: Optional[float] = None
 
+        # 상대 토픽 "execute_arm_task" 사용 — 단일 시연에선 root namespace 라
+        # "/execute_arm_task" 로 광고되고 (기존 동작 유지), multi 시연에선
+        # namespace=ns 가 적용되어 "/<ns>/execute_arm_task" 로 자동 광고된다.
+        # ROS2 action 의 sub-topic (_action/status 등) 도 따라서 namespace 안.
         self.action_server = ActionServer(
             self,
             ExecuteArmTask,
-            "/execute_arm_task",
+            "execute_arm_task",
             execute_callback=self._execute_callback,
             goal_callback=self._goal_callback,
             cancel_callback=self._cancel_callback,
