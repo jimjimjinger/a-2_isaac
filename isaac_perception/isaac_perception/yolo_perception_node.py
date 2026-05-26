@@ -118,7 +118,10 @@ class CamChannel:
         self.pub_det = node.create_publisher(DetectionArray, det_topic, 10)
         self.pub_ann = None
         if publish_annotated:
-            self.pub_ann = node.create_publisher(Image, ann_topic, SENSOR_QOS)
+            # depth=10 → default RELIABLE QoS. rqt_image_view 가 default RELIABLE
+            # 으로 subscribe 하므로 SENSOR_QOS(BEST_EFFORT) 대신 RELIABLE 사용해야
+            # 토픽 매칭됨.
+            self.pub_ann = node.create_publisher(Image, ann_topic, 10)
 
     def _log(self, msg: str, level: str = "info") -> None:
         # rclpy logger caches severity per source line, so call distinct

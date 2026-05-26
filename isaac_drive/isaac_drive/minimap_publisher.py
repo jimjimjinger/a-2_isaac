@@ -47,9 +47,11 @@ class MinimapPublisher:
         self.frame_id = frame_id
         self.publish_every = max(1, int(publish_every))
 
-        self.grid_pub = node.create_publisher(OccupancyGrid, "/mission/minimap", 1)
-        self.path_pub = node.create_publisher(Path, "/mission/path", 1)
-        self.marker_pub = node.create_publisher(MarkerArray, "/mission/markers", 1)
+        # Relative topic name (no leading /) → namespace 자동 prefix.
+        # 단일: /mission/minimap, 다중: /rover_X/mission/minimap.
+        self.grid_pub = node.create_publisher(OccupancyGrid, "mission/minimap", 1)
+        self.path_pub = node.create_publisher(Path, "mission/path", 1)
+        self.marker_pub = node.create_publisher(MarkerArray, "mission/markers", 1)
 
         # OccupancyGrid 의 정적 메타(해상도·크기·origin)는 1회만 계산.
         self._grid_info = self._build_grid_info()

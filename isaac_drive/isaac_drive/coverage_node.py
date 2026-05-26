@@ -100,6 +100,10 @@ class CoverageNode(Node):
         self.declare_parameter("enable_minimap_topics", True)
         self.declare_parameter("minimap_publish_every", 10)
         self.declare_parameter("minimap_frame_id", "map")
+        # 다중 rover 시 — 자신 식별자 (state file 분리). 빈 값이면 단일 rover.
+        self.declare_parameter("minimap_rover_id", "")
+        # 다중 rover 시 — 첫 rover 만 True 로 두면 1개 viewer 가 모든 rover overlay.
+        self.declare_parameter("minimap_spawn_viewer", True)
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         pose_topic = str(self.get_parameter("pose_topic").value)
@@ -143,13 +147,14 @@ class CoverageNode(Node):
         # 로버의 새 위치 기준으로 다음 anchor 까지 path 재계산.
         from std_msgs.msg import Empty as _Empty
         self.create_subscription(
-            _Empty, "/coverage/replan_request", self._on_replan_request, 10)
+            _Empty, "coverage/replan_request", self._on_replan_request, 10)
 
         # ── 출력 publisher ──
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
+        # Relative names → namespace 자동 prefix (다중 rover 시 격리)
         self.action_pub = self.create_publisher(
-            SelectedDriveAction, "/selected_drive_action", 10)
-        self.state_pub = self.create_publisher(MissionState, "/mission_state", 10)
+            SelectedDriveAction, "selected_drive_action", 10)
+        self.state_pub = self.create_publisher(MissionState, "mission_state", 10)
 
         # ── 미니맵 viewer (T3 의 StateWriter + viewer.py 재배선) ──
         # coverage 알고리즘이 fog·mission 을 들고 있는 유일한 프로세스라
@@ -200,9 +205,19 @@ class CoverageNode(Node):
                 f"미니맵 비활성화 — state_writer import 실패: {exc}")
             return
         viewer = os.path.join(scripts_dir, "viewer.py")
+        rover_id = str(self.get_parameter("minimap_rover_id").value).strip()
+        if not rover_id:
+            # namespace 에서 추출 (단일 rover 면 빈 문자열 유지)
+            ns = self.get_namespace().strip("/")
+            rover_id = ns if ns else ""
+        spawn = bool(self.get_parameter("minimap_spawn_viewer").value)
         self.writer = StateWriter(
-            self.fog, viewer_script_path=viewer, write_every=write_every)
-        self.get_logger().info(f"미니맵 viewer 시작 — {viewer}")
+            self.fog, viewer_script_path=viewer,
+            write_every=write_every,
+            rover_id=rover_id, spawn_viewer=spawn)
+        self.get_logger().info(
+            f"미니맵 viewer 시작 — {viewer} "
+            f"(rover_id={rover_id or '<none>'}, spawn_viewer={spawn})")
 
     # ── I5 구독 콜백: PoseWithCovarianceStamped → PoseProvider ──
     def _on_pose(self, msg: PoseWithCovarianceStamped) -> None:

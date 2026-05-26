@@ -22,7 +22,7 @@ import os
 from typing import List, Optional, Tuple
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PointStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.action import ActionClient
 from rclpy.node import Node
@@ -64,8 +64,8 @@ VALUE_PRIORITY = {"yellow_mineral": 50.0, "green_gas": 25.0, "blue_mineral": 10.
 # and rover P-control overshoot. T2 standalone uses tighter values (0.25 blue,
 # 0.75 yellow/green) but assumes precise rover positioning; we widen here.
 CLASS_STOP_DIST_M = {
-    "blue_mineral":   0.55,
-    "yellow_mineral": 0.70,
+    "blue_mineral":   0.80,
+    "yellow_mineral": 0.85,
     "green_gas":      0.70,
 }
 
@@ -109,6 +109,31 @@ class MissionManagerNode(Node):
         self.declare_parameter("path_replan_target_delta_m", 0.4)
         self.declare_parameter("waypoint_reach_dist_m", 0.4)
 
+        # ── 다중 rover mineral claim 협조 ──
+        # 두 rover 가 동일 mineral 노리지 않도록. /mineral_claims 공유 토픽으로
+        # 각자 현재 target XY 를 publish, 다른 rover 의 claim 안 (radius) mineral
+        # 은 후보에서 제외. enable_mineral_claim=False (default) 시 비활성 = 단일
+        # rover 시연 호환.
+        self.declare_parameter("enable_mineral_claim", False)
+        self.declare_parameter("claim_topic", "/mineral_claims")
+        self.declare_parameter("claim_skip_radius_m", 1.5)
+        self.declare_parameter("claim_ttl_sec", 5.0)
+        self.declare_parameter("claim_publish_period_sec", 0.5)
+        # 비우면 self.get_namespace() 사용 → "/rover_1" → "rover_1"
+        self.declare_parameter("claim_rover_id", "")
+
+        # ── 다중 rover 동적 충돌 회피 (Phase C) ──
+        # 각자 자신 odom 을 /rover_positions 에 publish (frame_id=rover_id).
+        # 다른 rover 위치를 A* 의 obstacle_grid 에 inflate 해서 자연스러운 우회.
+        self.declare_parameter("enable_rover_avoid", False)
+        self.declare_parameter("rover_positions_topic", "/rover_positions")
+        self.declare_parameter("rover_position_publish_period_sec", 0.2)
+        self.declare_parameter("rover_position_ttl_sec", 2.0)
+        # A* obstacle 으로 박을 다른 rover 주변 반지름 (m)
+        self.declare_parameter("rover_avoid_radius_m", 1.2)
+        # 다른 rover 가 N m 이상 움직였으면 replan 강제
+        self.declare_parameter("rover_replan_trigger_m", 0.8)
+
         self.phase = "EXPLORE"
         self.target: Optional[Detection] = None
         self.last_det_stamp_ns: int = 0
@@ -132,6 +157,18 @@ class MissionManagerNode(Node):
         # EXPLORE resume cooldown — force stop briefly after any APPROACH/PICK
         # exit so coverage_node can replan from the rover's new position.
         self.explore_entry_ns: int = 0
+        # Mineral claim — other_claims[rover_id] = (x, y, stamp_ns)
+        self.other_claims: dict = {}
+        # 자신 식별자 — param 또는 namespace
+        _rid = str(self.get_parameter("claim_rover_id").value).strip()
+        if not _rid:
+            _rid = self.get_namespace().strip("/") or "rover_solo"
+        self._my_rover_id: str = _rid
+
+        # other_rovers[rover_id] = (x, y, stamp_ns) — 동적 obstacle 후보
+        self.other_rovers: dict = {}
+        # replan trigger 추적 — 마지막 plan 시 다른 rover 위치
+        self._last_plan_other_rovers: dict = {}
 
         terrain_dir = str(self.get_parameter("terrain_dir").value)
         try:
@@ -158,7 +195,7 @@ class MissionManagerNode(Node):
         # Tell coverage_node to drop its stale DRIVE path and replan from
         # the rover's new post-APPROACH/PICK position.
         self.replan_pub = self.create_publisher(
-            Empty, "/coverage/replan_request", 10)
+            Empty, "coverage/replan_request", 10)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("detections_topic").value),
@@ -170,11 +207,171 @@ class MissionManagerNode(Node):
             Odometry, str(self.get_parameter("odom_topic").value),
             self._on_odom, SENSOR_QOS)
 
+        # Rover 위치 공유 pub/sub (절대 토픽 — A* 동적 obstacle 입력)
+        if bool(self.get_parameter("enable_rover_avoid").value):
+            pos_topic = str(self.get_parameter("rover_positions_topic").value)
+            self.rover_pos_pub = self.create_publisher(
+                PointStamped, pos_topic, 10)
+            self.create_subscription(
+                PointStamped, pos_topic, self._on_rover_position, 10)
+            self.create_timer(
+                float(self.get_parameter(
+                    "rover_position_publish_period_sec").value),
+                self._publish_rover_position)
+            self.get_logger().info(
+                f"rover avoidance 활성 — id={self._my_rover_id} "
+                f"topic={pos_topic} inflate="
+                f"{float(self.get_parameter('rover_avoid_radius_m').value):.2f}m")
+        else:
+            self.rover_pos_pub = None
+
+        # Mineral claim pub/sub (절대 토픽 — namespace 무관 공유)
+        if bool(self.get_parameter("enable_mineral_claim").value):
+            claim_topic = str(self.get_parameter("claim_topic").value)
+            self.claim_pub = self.create_publisher(PointStamped, claim_topic, 10)
+            self.create_subscription(
+                PointStamped, claim_topic, self._on_claim, 10)
+            self.create_timer(
+                float(self.get_parameter("claim_publish_period_sec").value),
+                self._publish_claim)
+            self.get_logger().info(
+                f"mineral claim 협조 활성 — id={self._my_rover_id} "
+                f"topic={claim_topic} radius="
+                f"{float(self.get_parameter('claim_skip_radius_m').value):.2f}m "
+                f"ttl={float(self.get_parameter('claim_ttl_sec').value):.1f}s")
+        else:
+            self.claim_pub = None
+
         self.create_timer(0.05, self._tick)
         self.create_timer(
             float(self.get_parameter("phase_log_period_sec").value), self._log_phase)
         self.get_logger().info(
             "mission_manager_node ready. EXPLORE pass-through active.")
+
+    def _on_claim(self, msg: PointStamped) -> None:
+        """다른 rover 의 mineral claim 수신. frame_id == rover_id."""
+        rid = (msg.header.frame_id or "").strip()
+        if not rid or rid == self._my_rover_id:
+            return  # 자기 자신 무시
+        now_ns = self.get_clock().now().nanoseconds
+        self.other_claims[rid] = (
+            float(msg.point.x), float(msg.point.y), now_ns)
+
+    def _publish_claim(self) -> None:
+        """phase 가 APPROACH/PICK_READY 일 때 자신 target XY publish."""
+        if self.claim_pub is None:
+            return
+        if self.phase not in ("APPROACH", "PICK_READY"):
+            return
+        tgt = self.target if self.target is not None else self.lock_target
+        if tgt is None:
+            return
+        msg = PointStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self._my_rover_id
+        msg.point.x = float(tgt.world_position.x)
+        msg.point.y = float(tgt.world_position.y)
+        msg.point.z = 0.0
+        self.claim_pub.publish(msg)
+
+    def _on_rover_position(self, msg: PointStamped) -> None:
+        """다른 rover 의 odom 위치 수신. frame_id == rover_id."""
+        rid = (msg.header.frame_id or "").strip()
+        if not rid or rid == self._my_rover_id:
+            return
+        now_ns = self.get_clock().now().nanoseconds
+        self.other_rovers[rid] = (
+            float(msg.point.x), float(msg.point.y), now_ns)
+
+    def _publish_rover_position(self) -> None:
+        """자신 odom XY 를 /rover_positions 에 publish (frame_id=self id)."""
+        if self.rover_pos_pub is None or self.last_odom is None:
+            return
+        p = self.last_odom.pose.pose.position
+        msg = PointStamped()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = self._my_rover_id
+        msg.point.x = float(p.x)
+        msg.point.y = float(p.y)
+        msg.point.z = 0.0
+        self.rover_pos_pub.publish(msg)
+
+    def _other_rovers_alive(self) -> dict:
+        """TTL 안 살아있는 다른 rover 만 반환 {rid: (x, y)}."""
+        ttl_ns = int(float(
+            self.get_parameter("rover_position_ttl_sec").value) * 1e9)
+        now_ns = self.get_clock().now().nanoseconds
+        alive = {}
+        for rid, (rx, ry, ts) in list(self.other_rovers.items()):
+            if now_ns - ts > ttl_ns:
+                self.other_rovers.pop(rid, None)
+                continue
+            alive[rid] = (rx, ry)
+        return alive
+
+    def _build_dynamic_grid(self):
+        """static obstacle_grid + 다른 rover 위치를 inflate 한 snapshot grid.
+
+        다른 rover 가 없거나 enable_rover_avoid=False 면 static grid 그대로 반환.
+        """
+        if self.ogrid is None:
+            return None
+        if self.rover_pos_pub is None:
+            return self.ogrid.grid
+        others = self._other_rovers_alive()
+        if not others:
+            return self.ogrid.grid
+        import numpy as np
+        g = self.ogrid.grid.copy()
+        r_m = float(self.get_parameter("rover_avoid_radius_m").value)
+        cells_r = max(1, int(math.ceil(r_m / self.ogrid.cell_size)))
+        cells_r2 = cells_r * cells_r
+        for rid, (rx, ry) in others.items():
+            i0, j0 = self.ogrid.world_to_cell(rx, ry, clip=True)
+            for di in range(-cells_r, cells_r + 1):
+                for dj in range(-cells_r, cells_r + 1):
+                    if di * di + dj * dj > cells_r2:
+                        continue
+                    ni, nj = i0 + di, j0 + dj
+                    if 0 <= ni < self.ogrid.rows and 0 <= nj < self.ogrid.cols:
+                        g[ni, nj] = 1
+        return g
+
+    def _other_rovers_moved(self) -> bool:
+        """다른 rover 가 마지막 plan 후 trigger_m 이상 움직였으면 replan 필요."""
+        if self.rover_pos_pub is None:
+            return False
+        trigger = float(self.get_parameter("rover_replan_trigger_m").value)
+        trigger2 = trigger * trigger
+        cur = self._other_rovers_alive()
+        prev = self._last_plan_other_rovers
+        # 새로 나타난 / 사라진 rover 도 replan
+        if set(cur.keys()) != set(prev.keys()):
+            return True
+        for rid, (cx, cy) in cur.items():
+            px, py = prev.get(rid, (cx, cy))
+            if (cx - px) ** 2 + (cy - py) ** 2 > trigger2:
+                return True
+        return False
+
+    def _is_claimed_by_other(self, det_x: float, det_y: float) -> bool:
+        """다른 rover 가 ttl 안에 claim 한 mineral 좌표 근처면 True."""
+        if not self.other_claims:
+            return False
+        skip_r = float(self.get_parameter("claim_skip_radius_m").value)
+        ttl_ns = int(float(self.get_parameter("claim_ttl_sec").value) * 1e9)
+        now_ns = self.get_clock().now().nanoseconds
+        skip_r2 = skip_r * skip_r
+        for rid, (cx, cy, ts) in list(self.other_claims.items()):
+            if now_ns - ts > ttl_ns:
+                # expired — drop
+                self.other_claims.pop(rid, None)
+                continue
+            dx = det_x - cx
+            dy = det_y - cy
+            if dx * dx + dy * dy < skip_r2:
+                return True
+        return False
 
     def _on_detections(self, msg: DetectionArray) -> None:
         # While the arm is executing a pick, ignore new detections so the
@@ -202,6 +399,8 @@ class MissionManagerNode(Node):
                      and d.world_position.y == 0.0
                      and d.world_position.z == 0.0)
             and not in_cooldown(d)
+            and not self._is_claimed_by_other(
+                float(d.world_position.x), float(d.world_position.y))
         ]
         if not candidates:
             return
@@ -409,21 +608,25 @@ class MissionManagerNode(Node):
             or math.hypot(tx - self.last_plan_target[0],
                           ty - self.last_plan_target[1])
                 > float(self.get_parameter("path_replan_target_delta_m").value)
+            or self._other_rovers_moved()
         )
         if not need_replan:
             return
+
+        # 다른 rover 위치를 박은 snapshot grid (없거나 비활성이면 static grid)
+        plan_grid = self._build_dynamic_grid()
 
         start = self.ogrid.world_to_cell(rx, ry, clip=True)
         goal = self.ogrid.world_to_cell(tx, ty, clip=True)
         # If the start or goal cell itself is blocked (mineral sitting on
         # an inflated obstacle, or rover anchored on edge), nudge to the
         # nearest free cell for a best-effort plan.
-        if self.ogrid.grid[start] == 1:
-            start = self._nearest_free(start)
-        if goal is not None and self.ogrid.grid[goal] == 1:
-            goal = self._nearest_free(goal)
+        if plan_grid[start] == 1:
+            start = self._nearest_free(start, plan_grid)
+        if goal is not None and plan_grid[goal] == 1:
+            goal = self._nearest_free(goal, plan_grid)
 
-        path = astar(self.ogrid.grid, start, goal) if start and goal else None
+        path = astar(plan_grid, start, goal) if start and goal else None
         if not path:
             self.get_logger().warn(
                 f"A* no path: start={start} goal={goal} target=({tx:.2f},{ty:.2f}) "
@@ -433,13 +636,17 @@ class MissionManagerNode(Node):
             self.last_plan_target = (tx, ty)
             return
 
-        path = simplify_path(self.ogrid.grid, path)
+        path = simplify_path(plan_grid, path)
         self.waypoints = [self.ogrid.cell_to_world(i, j) for (i, j) in path]
         self.wp_idx = 1 if len(self.waypoints) > 1 else 0
         self.last_plan_target = (tx, ty)
+        # plan 시점 다른 rover 위치 snapshot (다음 replan trigger 비교용)
+        self._last_plan_other_rovers = dict(self._other_rovers_alive())
         self.get_logger().info(
             f"A* replanned: {len(self.waypoints)} waypoints "
-            f"to ({tx:.2f},{ty:.2f})")
+            f"to ({tx:.2f},{ty:.2f})"
+            + (f" [avoid {len(self._last_plan_other_rovers)} rover(s)]"
+               if self._last_plan_other_rovers else ""))
 
     def _send_arm_goal(self) -> None:
         if self.arm_client is None or self.target is None or self.arm_in_flight:
@@ -494,7 +701,10 @@ class MissionManagerNode(Node):
         self.get_logger().info(
             f"arm action done success={ok} message={msg_text!r} — cooldown engaged")
 
-    def _nearest_free(self, cell: Tuple[int, int]) -> Tuple[int, int]:
+    def _nearest_free(self, cell: Tuple[int, int], grid=None) -> Tuple[int, int]:
+        """`grid` 가 None 이면 static obstacle_grid 사용. dynamic plan_grid 도 가능."""
+        if grid is None:
+            grid = self.ogrid.grid
         i0, j0 = cell
         for r in range(1, 12):
             for di in range(-r, r + 1):
@@ -502,7 +712,7 @@ class MissionManagerNode(Node):
                     if max(abs(di), abs(dj)) != r:
                         continue
                     ni, nj = i0 + di, j0 + dj
-                    if self.ogrid.in_bounds(ni, nj) and self.ogrid.grid[ni, nj] == 0:
+                    if self.ogrid.in_bounds(ni, nj) and grid[ni, nj] == 0:
                         return (ni, nj)
         return cell
 

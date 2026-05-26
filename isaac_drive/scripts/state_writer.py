@@ -11,16 +11,25 @@ VIEWER_LOG = "/tmp/starcraft_map_viewer.log"
 
 
 class StateWriter:
-    def __init__(self, fog_map, viewer_script_path, write_every=3):
+    def __init__(self, fog_map, viewer_script_path, write_every=3,
+                 rover_id: str = "", spawn_viewer: bool = True):
         """
         Args:
             fog_map: FogMap 인스턴스 (obstacle_mask 격자 포함)
             viewer_script_path: viewer.py 경로
             write_every: 매 N step 마다 저장
+            rover_id: 다중 rover 시 파일명 구분용 (예: "rover_1"). 비우면 기존 단일 파일.
+            spawn_viewer: False 면 파일만 쓰고 viewer subprocess 안 띄움 (다중 rover 시 첫 rover 만 True).
         """
         self.fog_map = fog_map
         self.write_every = int(write_every)
-        self.data_path = os.path.join(tempfile.gettempdir(), DATA_FILENAME)
+        # 다중 rover — 각자 별도 파일 (viewer 가 모두 overlay 로 읽음)
+        if rover_id:
+            self.data_path = os.path.join(
+                tempfile.gettempdir(),
+                DATA_FILENAME.replace(".npz", f"_{rover_id}.npz"))
+        else:
+            self.data_path = os.path.join(tempfile.gettempdir(), DATA_FILENAME)
 
         # 이전 캐시 제거
         for p in (self.data_path, self.data_path + ".tmp.npz"):
@@ -30,7 +39,16 @@ class StateWriter:
                 except OSError:
                     pass
 
-        self.viewer_proc = self._spawn_viewer(viewer_script_path)
+        # 다중 rover 모드 (rover_id 가 설정됨) → viewer 에 glob pattern 전달해서
+        # 한 viewer 가 모든 rover 의 state file 을 동시 overlay.
+        if rover_id and spawn_viewer:
+            self._viewer_arg = os.path.join(
+                tempfile.gettempdir(),
+                DATA_FILENAME.replace(".npz", "_*.npz"))
+        else:
+            self._viewer_arg = self.data_path
+        self.viewer_proc = (self._spawn_viewer(viewer_script_path)
+                            if spawn_viewer else None)
 
     def _spawn_viewer(self, viewer_script_path):
         if not os.path.exists(viewer_script_path):
@@ -46,12 +64,13 @@ class StateWriter:
             clean_env.pop(var, None)
         try:
             proc = subprocess.Popen(
-                [SYS_PYTHON, viewer_script_path, self.data_path],
+                [SYS_PYTHON, viewer_script_path, self._viewer_arg],
                 stdout=open(VIEWER_LOG, "w"),
                 stderr=subprocess.STDOUT,
                 env=clean_env,
             )
-            print(f"[viewer] 시작 pid={proc.pid}  (log={VIEWER_LOG})")
+            print(f"[viewer] 시작 pid={proc.pid}  arg={self._viewer_arg}  "
+                  f"(log={VIEWER_LOG})")
             return proc
         except Exception as e:
             print(f"[viewer] 시작 실패: {e}")

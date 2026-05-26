@@ -63,7 +63,7 @@ HOME_DEG = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 
 # Pick down — joint_1=0 (forward toward mineral), shoulder dip + wrist tilt.
 # Mineral is in front of rover (supervisor APPROACH P-control aligns it).
-PICK_DOWN_DEG = [0.0, 25.0, 90.0, 0.0, 65.0, 0.0]
+PICK_DOWN_DEG = [0.0, 0.0, 90.0, 0.0, 90.0, 0.0]
 
 # Cargo (back of rover) — HOME 의 joint_1 만 180° 회전. LIFT → HOME 경유 후
 # 단순 yaw swing 으로 무게중심 안정성 ↑ (이전 [180,25,90,0,55,0] 큰 반경 dip 시
@@ -76,6 +76,27 @@ PICK_TRAJ_DEG: List[List[float]] = [
     [  0.0, 25.0, 90.0, 0.0, 65.0, 0.0],
     [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],
 ]
+
+# rover_yolo_demo.py 포팅 — JS_PRE / JS_POST joint-space dump 시퀀스.
+# ATTACH_LIFT 후 cargo (rover 뒤) 로 dump 자세 잡고 release → HOME 복귀.
+# 단일 CARGO_DEG swing 보다 부드럽고 dump 자세 명확.
+PLACE_TRAJ_PRE_DEG: List[List[float]] = [
+    [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # HOME (lift 후 정렬)
+    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # joint_1 0 → 180 (베이스 뒤)
+    [180.0, 12.5, 90.0, 0.0, 55.0, 0.0],   # 어깨(완만) + 손목 dump
+]
+PLACE_TRAJ_POST_DEG: List[List[float]] = [
+    [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # 어깨/손목 복귀
+    [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # HOME
+]
+
+# Place trajectory alias used by legacy place_to_cargo / unload_to_base /
+# deploy_solar_panel scripted fallbacks (referenced by _execute_callback +
+# _execute_pick_ik). Prior to this they were left undefined — wiring through
+# PLACE_TRAJ_PRE+POST so those code paths don't NameError.
+PLACE_BASKET_TRAJ_DEG: List[List[float]] = (
+    [list(HOME_DEG)] + PLACE_TRAJ_PRE_DEG + PLACE_TRAJ_POST_DEG
+)
 
 
 def _wrist_optical_to_link6(
@@ -113,14 +134,19 @@ class ArmExecutorNode(Node):
         self.declare_parameter("wrist_detection_wait_sec", 6.0)
         self.declare_parameter("hover_above_mineral_m", 0.05)
         self.declare_parameter("min_confidence", 0.5)
-        # Best-effort wrist-cam -> link_6 mount calibration. Tune after USD dump.
-        self.declare_parameter("wrist_mount_xyz_link6", [0.10, 0.0, 0.0])
-        # Rotation: optical (z fwd, x right, y down) -> link_6 axes (best guess).
-        # Stored as 9 flat values, row-major 3x3.
+        # wrist-cam optical origin → link_6 origin (link_6 frame), m.
+        # vehicle_v3.usd 의 rigid chain (link_6 → angle_bracket → realsense_d455 →
+        # RSD455 → Camera_OmniVision_OV9782_Color) 의 fixed transform 을
+        # ComputeLocalToWorldTransform 으로 추출 (모든 사이 joint 가 PhysicsFixedJoint).
+        self.declare_parameter("wrist_mount_xyz_link6", [0.0115, 0.0450, 0.0500])
+        # Rotation: OpenCV optical (x right, y down, z forward) → link_6 axes.
+        # 동일 USD 추출에서 link_6 → USD camera body = diag(1,-1,-1), USD body →
+        # OpenCV optical = diag(1,-1,-1) 합성 → identity. 즉 optical XYZ 와 link_6
+        # XYZ 축이 우연히 정렬됨. 행 우선 9-flat.
         self.declare_parameter("wrist_R_optical_to_link6", [
-            0.0, 0.0, 1.0,
             1.0, 0.0, 0.0,
-            0.0, -1.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0,
         ])
         self.declare_parameter("ik_use_orientation", False)
         # 3-mode pick_mineral:
@@ -138,6 +164,30 @@ class ArmExecutorNode(Node):
         # Step delay between grasp publish and arm continuing — gives
         # vehicle_v3 ScriptNode time to attach the FixedJoint.
         self.declare_parameter("grasp_publish_delay_sec", 0.3)
+
+        # rover_yolo_demo.py 포팅 모드. "world_target" (default, 기존 7-state) /
+        # "rover_yolo_demo" (9-state: HOME_PRE → WRIST_SERVO → APPROACH_DESCEND →
+        # GRASP_CLOSE → ATTACH_LIFT → JS_PRE → RELEASE → JS_POST → DONE) /
+        # "scripted" / "wrist_servo". 미지정 시 enable_ik + use_world_target_ik 로 fallback.
+        self.declare_parameter("pick_style", "")
+        # rover_yolo_demo 의 HOVER_ABOVE_MINERAL (TCP 가 mineral 위 4cm).
+        self.declare_parameter("hover_above_mineral_z_m", 0.04)
+        # rover_yolo_demo 의 LIFT_HEIGHT (mineral 위 45cm 까지 들어올림).
+        self.declare_parameter("lift_height_m", 0.45)
+        # 시연 시각화용 APPROACH phase 높이 (mineral 위 N m hover). 0 이면 phase
+        # skip 하고 곧바로 DESCEND. default 0.20 → 위에서 접근 → 내려가기 단계 가시화.
+        self.declare_parameter("approach_above_mineral_z_m", 0.20)
+        # GRASP_CLOSE 후 ATTACH_LIFT 전 dwell (sec). vehicle_v3 의 FixedJoint snap
+        # 이 instant 라서 dwell 없으면 grasp 순간이 안 보임. default 1.5s.
+        self.declare_parameter("grasp_dwell_sec", 1.5)
+        # WRIST_SERVO 단계 wrist detection 대기 시간 (sec). 짧게 (1초) — 못 잡으면 nav XYZ 사용.
+        self.declare_parameter("wrist_servo_timeout_sec", 1.0)
+        # WRIST_SERVO 의 XY 보정 활성화. 주의: yolo_perception_node 가 wrist det 을
+        # optical frame 으로 publish ("nav: world, wrist: optical") → world frame 변환은
+        # wrist_mount_xyz_link6 / wrist_R_optical_to_link6 calibration 정확도에 의존.
+        # default False — nav XYZ (이미 world) 그대로 사용 (안전). calibration 검증
+        # 후 true 로 ros2 param set 권장.
+        self.declare_parameter("wrist_servo_apply_xy", False)
 
         self.joint_pub = self.create_publisher(
             JointState, str(self.get_parameter("joint_command_topic").value), 10)
@@ -176,10 +226,12 @@ class ArmExecutorNode(Node):
         self._rover_xyz: Optional[np.ndarray] = None
         self._rover_yaw: Optional[float] = None
 
+        # Action name relative (no leading /) → ROS2 namespace 자동 prefix.
+        # 단일 rover: /execute_arm_task. 다중 rover: /rover_1/execute_arm_task 등.
         self.action_server = ActionServer(
             self,
             ExecuteArmTask,
-            "/execute_arm_task",
+            "execute_arm_task",
             execute_callback=self._execute_callback,
             goal_callback=self._goal_callback,
             cancel_callback=self._cancel_callback,
@@ -190,9 +242,6 @@ class ArmExecutorNode(Node):
 
         self.get_logger().info(
             "arm_executor_node ready: /execute_arm_task (wrist-cam visual servo + DLS-IK)")
-        self.get_logger().warn(
-            "WRIST_T_LINK6 is best-effort estimate — tune wrist_mount_xyz_link6 / "
-            "wrist_R_optical_to_link6 parameters after USD cross-check.")
 
     def _send_initial_home_once(self) -> None:
         if self._initial_home_sent:
@@ -270,6 +319,16 @@ class ArmExecutorNode(Node):
         self.get_logger().info(f"Executing arm command: {command}")
 
         if command == "pick_mineral":
+            style = str(self.get_parameter("pick_style").value).strip().lower()
+            if style == "rover_yolo_demo":
+                return self._execute_pick_rover_yolo_demo(goal_handle)
+            if style == "scripted":
+                return self._execute_pick_scripted(goal_handle)
+            if style == "wrist_servo":
+                return self._execute_pick_ik(goal_handle)
+            if style == "world_target":
+                return self._execute_pick_world_target(goal_handle)
+            # pick_style 미지정 — 기존 enable_ik / use_world_target_ik 로 fallback.
             if bool(self.get_parameter("enable_ik").value):
                 if bool(self.get_parameter("use_world_target_ik").value):
                     return self._execute_pick_world_target(goal_handle)
@@ -469,6 +528,221 @@ class ArmExecutorNode(Node):
         self.get_logger().info("pick_mineral (T2 DLS-IK world target) done")
         return ExecuteArmTask.Result(
             success=True, message="pick_mineral completed (IK)")
+
+    def _execute_pick_rover_yolo_demo(self, goal_handle):
+        """rover_yolo_demo.py 의 PickPlaceStateMachine 행동 포팅 — 9 phase.
+
+        HOME_PRE → WRIST_SERVO (XY 보정) → APPROACH_DESCEND (TCP 가 mineral 위 hover)
+          → GRASP_CLOSE (/grasp/command pickup) → ATTACH_LIFT (mineral 위 lift_height)
+          → JS_PRE (PLACE_TRAJ_PRE_DEG 3-step dump) → RELEASE (/grasp/command release)
+          → JS_POST (PLACE_TRAJ_POST_DEG 2-step return) → DONE
+
+        호환성 차이 (rover_yolo_demo standalone 대비):
+          - IK: Isaac Sim Jacobian 대신 자체 kinematics.dls_ik (arm base local).
+          - Grip: USD FixedJoint 대신 /grasp/command Twist (vehicle_v3 ScriptNode 수신).
+          - Gripper joint drive: 생략 (vehicle_v3 가 grip cmd 받아서 FixedJoint snap).
+          - Wrist servo: 직접 cam 읽기 대신 /perception/wrist_detections 토픽 사용.
+          - TCP offset 보정: 단순화 — link_6 기준 IK 에 hover Z offset 만 더함.
+        """
+        req = goal_handle.request
+        mineral_world = np.array(
+            [req.target_x, req.target_y, req.target_z], dtype=np.float64)
+
+        # 1) /ground_truth/odom 도착 대기 (최대 2초) — arm base world pose
+        deadline_ns = self.get_clock().now().nanoseconds + int(2e9)
+        while self.get_clock().now().nanoseconds < deadline_ns:
+            with self._odom_lock:
+                if self._rover_xyz is not None:
+                    break
+            time.sleep(0.05)
+        with self._odom_lock:
+            arm_base_xyz = (None if self._rover_xyz is None
+                            else self._rover_xyz.copy())
+            yaw = self._rover_yaw
+        if arm_base_xyz is None or yaw is None:
+            self.get_logger().error(
+                "rover_yolo_demo: no /ground_truth/odom — abort")
+            goal_handle.abort()
+            return ExecuteArmTask.Result(success=False, message="no odom")
+
+        hover = float(self.get_parameter("hover_above_mineral_z_m").value)
+        lift_h = float(self.get_parameter("lift_height_m").value)
+        approach_z = float(
+            self.get_parameter("approach_above_mineral_z_m").value)
+        grasp_dwell = float(self.get_parameter("grasp_dwell_sec").value)
+        wrist_wait = float(
+            self.get_parameter("wrist_servo_timeout_sec").value)
+        min_conf = float(self.get_parameter("min_confidence").value)
+
+        cur_q_rad = (self._current_arm_q_rad
+                     if self._current_arm_q_rad is not None
+                     else np.radians(HOME_DEG))
+        cur_deg = list(np.degrees(cur_q_rad))
+
+        # ── Phase 1: HOME_PRE ─────────────────────────────────────────
+        self._goto(cur_deg, HOME_DEG, goal_handle, "HOME_PRE", 0.0, 0.05)
+        cur_deg = list(HOME_DEG)
+
+        # ── Phase 2: WRIST_SERVO — wrist det 짧게 대기 (선택적 XY 보정) ─
+        # yolo_perception_node 는 wrist det 을 optical frame 으로 publish 함.
+        # default 로는 nav XYZ (이미 world) 신뢰 → wrist det 도착 시점만 잠깐 대기.
+        # wrist_servo_apply_xy=True 시 optical → link_6 → arm base → world 변환 적용.
+        det = self._best_wrist_detection(wrist_wait, min_conf)
+        apply_wrist = bool(self.get_parameter("wrist_servo_apply_xy").value)
+        if det is not None and apply_wrist:
+            xyz_optical = np.array(
+                [det.world_position.x, det.world_position.y,
+                 det.world_position.z], dtype=np.float64)
+            mount_xyz = tuple(float(v) for v in
+                              self.get_parameter("wrist_mount_xyz_link6").value)
+            R_flat = list(
+                self.get_parameter("wrist_R_optical_to_link6").value)
+            R_oc = np.array(R_flat, dtype=np.float64).reshape(3, 3)
+            p_link6 = _wrist_optical_to_link6(xyz_optical, mount_xyz, R_oc)
+            q_cur = (self._current_arm_q_rad
+                     if self._current_arm_q_rad is not None
+                     else np.radians(HOME_DEG))
+            p_arm_base = _link6_to_base(p_link6, q_cur)
+            p_world_refined = arm_base_xyz + _yaw_rot_z(yaw) @ p_arm_base
+            old_xy = mineral_world[:2].copy()
+            mineral_world[0] = float(p_world_refined[0])
+            mineral_world[1] = float(p_world_refined[1])
+            self.get_logger().info(
+                f"WRIST_SERVO refined XY (world) {old_xy.round(3).tolist()} → "
+                f"{mineral_world[:2].round(3).tolist()} "
+                f"(class={det.class_name} conf={det.confidence:.2f})")
+        elif det is not None:
+            self.get_logger().info(
+                f"WRIST_SERVO det observed (class={det.class_name} "
+                f"conf={det.confidence:.2f}) — XY refinement 비활성 "
+                f"(wrist_servo_apply_xy=False), nav XYZ 사용")
+        else:
+            self.get_logger().info(
+                f"WRIST_SERVO no det in {wrist_wait:.1f}s — nav XYZ 사용")
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "WRIST_SERVO"
+        fb.progress = 0.1
+        fb.message = "wrist refine done"
+        goal_handle.publish_feedback(fb)
+
+        # mineral world → arm base local (yaw 보정)
+        R = _yaw_rot_z(yaw)
+        target_local = R.T @ (mineral_world - arm_base_xyz)
+
+        # ── Phase 3a: APPROACH — TCP 가 mineral 위 approach_z (높은 hover) ──
+        # 시각화용 — 위에서 접근 → 내려가기 두 단계 명확히 보이게.
+        # approach_z<=0 이면 skip 하고 곧바로 DESCEND.
+        q_home = np.array([math.radians(v) for v in HOME_DEG])
+        q_seed = q_home
+        if approach_z > 1e-3:
+            t_approach = target_local + np.array([0.0, 0.0, approach_z])
+            q_approach, ok_a, err_a = dls_ik(
+                t_approach, None, q_seed, position_only=True)
+            if not ok_a:
+                self.get_logger().warn(
+                    f"APPROACH IK 마진 err={err_a:.4f} → DESCEND 로 점프")
+            else:
+                deg_approach = list(np.degrees(q_approach))
+                self.get_logger().info(
+                    f"APPROACH target_local=({t_approach[0]:.3f},"
+                    f"{t_approach[1]:.3f},{t_approach[2]:.3f}) "
+                    f"q_deg={[round(v,1) for v in deg_approach]}")
+                self._goto(cur_deg, deg_approach, goal_handle, "APPROACH",
+                           0.1, 0.25)
+                cur_deg = list(deg_approach)
+                q_seed = q_approach
+
+        # ── Phase 3b: DESCEND — TCP 가 mineral 위 hover (4cm) ────────
+        t_descend = target_local + np.array([0.0, 0.0, hover])
+        q_descend, ok_d, err_d = dls_ik(
+            t_descend, None, q_seed, position_only=True)
+        if not ok_d:
+            self.get_logger().error(
+                f"DESCEND IK 미수렴 err={err_d:.4f} → abort")
+            goal_handle.abort()
+            return ExecuteArmTask.Result(
+                success=False, message=f"IK fail descend err={err_d:.4f}")
+        deg_descend = list(np.degrees(q_descend))
+        self.get_logger().info(
+            f"DESCEND target_local="
+            f"({t_descend[0]:.3f},{t_descend[1]:.3f},{t_descend[2]:.3f}) "
+            f"q_deg={[round(v,1) for v in deg_descend]}")
+        self._goto(cur_deg, deg_descend, goal_handle, "DESCEND", 0.25, 0.4)
+        cur_deg = list(deg_descend)
+
+        # ── Phase 4: GRASP_CLOSE — /grasp/command pickup + dwell ─────
+        # grasp_dwell 동안 정지하여 FixedJoint snap 이 시각적으로 보이게.
+        self._publish_grasp("pickup",
+                            x=float(mineral_world[0]),
+                            y=float(mineral_world[1]),
+                            z=float(mineral_world[2]),
+                            target_id=req.target_id)
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "GRASP_CLOSE"
+        fb.progress = 0.42
+        fb.message = "pickup published"
+        goal_handle.publish_feedback(fb)
+        if grasp_dwell > 0.0:
+            self.get_logger().info(
+                f"GRASP_CLOSE dwell {grasp_dwell:.2f}s — FixedJoint snap 시각 확인 시간")
+            # dwell 동안 현재 joint pose 유지 publish (정지 표시 + 안정)
+            n_dwell_pub = max(1, int(grasp_dwell * 5.0))  # 5Hz
+            for _ in range(n_dwell_pub):
+                self._publish_joint_state(cur_deg)
+                time.sleep(grasp_dwell / n_dwell_pub)
+
+        # ── Phase 5: ATTACH_LIFT — TCP 를 mineral 위 lift_height 로 ──
+        t_lift = target_local + np.array([0.0, 0.0, lift_h])
+        q_lift, ok_l, err_l = dls_ik(
+            t_lift, None, q_descend, position_only=True)
+        if not ok_l:
+            self.get_logger().warn(
+                f"ATTACH_LIFT IK 마진 err={err_l:.4f} — best effort 진행")
+        deg_lift = list(np.degrees(q_lift))
+        self.get_logger().info(
+            f"ATTACH_LIFT q_deg={[round(v,1) for v in deg_lift]}")
+        self._goto(cur_deg, deg_lift, goal_handle, "ATTACH_LIFT", 0.4, 0.55)
+        cur_deg = list(deg_lift)
+
+        # ── Phase 6: JS_PRE — PLACE_TRAJ_PRE_DEG 3 waypoints ─────────
+        n_pre = max(1, len(PLACE_TRAJ_PRE_DEG))
+        seg_pre = (0.75 - 0.55) / n_pre
+        for i, wp in enumerate(PLACE_TRAJ_PRE_DEG):
+            seg_start = 0.55 + i * seg_pre
+            seg_end = seg_start + seg_pre
+            self.get_logger().info(
+                f"JS_PRE_{i + 1}/{n_pre} → wp_deg={wp}")
+            self._goto(cur_deg, wp, goal_handle, f"JS_PRE_{i + 1}",
+                       seg_start, seg_end)
+            cur_deg = list(wp)
+
+        # ── Phase 7: RELEASE — /grasp/command release ────────────────
+        self._publish_grasp("release")
+        fb = ExecuteArmTask.Feedback()
+        fb.state = "RELEASE"
+        fb.progress = 0.8
+        fb.message = "release published"
+        goal_handle.publish_feedback(fb)
+
+        # ── Phase 8: JS_POST — PLACE_TRAJ_POST_DEG 2 waypoints ───────
+        n_post = max(1, len(PLACE_TRAJ_POST_DEG))
+        seg_post = (1.0 - 0.8) / n_post
+        for i, wp in enumerate(PLACE_TRAJ_POST_DEG):
+            seg_start = 0.8 + i * seg_post
+            seg_end = seg_start + seg_post
+            self.get_logger().info(
+                f"JS_POST_{i + 1}/{n_post} → wp_deg={wp}")
+            self._goto(cur_deg, wp, goal_handle, f"JS_POST_{i + 1}",
+                       seg_start, seg_end)
+            cur_deg = list(wp)
+
+        # ── Phase 9: DONE — HOME guarantee ────────────────────────────
+        self._publish_joint_state(HOME_DEG)
+        goal_handle.succeed()
+        self.get_logger().info("pick_mineral (rover_yolo_demo 9-state) done")
+        return ExecuteArmTask.Result(
+            success=True,
+            message="pick_mineral completed (rover_yolo_demo)")
 
     def _execute_pick_ik(self, goal_handle):
         """pick_mineral with IK + wrist-cam servo (Phase 3b-3, off by default).
