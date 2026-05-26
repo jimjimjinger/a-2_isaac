@@ -116,6 +116,12 @@ def _build_nodes(context, *args, **kwargs):
                     # 계산 검증으로 졸업 과제 이관 (list_to_fix).
                     "camera_yaw_offset": 2.889,
                     "camera_elevation": 1.5707963268,
+                    "initial_yaw": prior["initial_yaw"],
+                    "auto_align_initial_yaw": True,
+                    "alignment_samples": 6,
+                    "alignment_min_confidence": 0.20,
+                    "alignment_max_residual": 3.1415926536,
+                    "debug_log_hz": 0.5,
                     "imu_topic": "/imu/data",
                     "use_imu_tilt_compensation": True,
                     "base_yaw_variance": 0.10,
@@ -177,6 +183,10 @@ def _build_nodes(context, *args, **kwargs):
                 {
                     "terrain_id": terrain_id_str,
                     "terrain_root": terrain_root_str,
+                    # TRN은 scan matching의 탐색 중심만 필요하다. raw wheel_odom은
+                    # yaw drift가 누적되어 카메라 patch 후보를 엉뚱한 곳으로 끌고
+                    # 갈 수 있으므로 EKF prediction을 prior로 사용한다.
+                    "prior_odom_topic": "/rover/estimated_odom",
                     "local_obstacle_topic": "/rover/local_obstacle_patch",
                     "match_sigma": 0.85,
                     "height_weight": 0.85,
