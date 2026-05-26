@@ -70,16 +70,17 @@
 
 ## 🚀 기능 확장 (시연 후)
 
-### [ ] 머신러닝 활용 (PPO RL 통합)
+### [ ] 머신러닝 활용 (PPO RL 통합) — 신규 패키지 신설부터
 
-**현재** — `isaac_rl/driving_policy_node.py` 가 PPO inference 골격만 (stub). 학습된 정책 없음. 시연에선 비활성.
+**상태** — 2026-05-26 cleanup 으로 `isaac_rl/` 패키지 삭제됨 (stub 만 차있어 시연 임팩트 부족).
 
-**계획**:
-1. `isaac_rl/rl_environment.py` 구현 — Isaac Sim ↔ gym-style Env wrapper (observation = lidar/카메라/IMU, action = cmd_vel)
-2. `reward_function.py` — coverage 효율 + mineral 수집 + 에너지/충돌 penalty
-3. `rl_trainer.py` — PPO 학습 (stable-baselines3 또는 RLLib)
-4. `policy_loader.py` — 학습 정책 load + `driving_policy_node` 가 inference
-5. 통합: supervisor 가 EXPLORE 시 RL policy 호출 vs coverage BCD (param 으로 분기)
+**다시 시작할 때**:
+1. 신규 패키지 `isaac_rl/` 생성 (setup.py + package.xml)
+2. `rl_environment.py` — Isaac Sim ↔ gym-style Env wrapper (observation = lidar/카메라/IMU, action = cmd_vel)
+3. `reward_function.py` — coverage 효율 + mineral 수집 + 에너지/충돌 penalty
+4. `rl_trainer.py` — PPO 학습 (stable-baselines3 또는 RLLib)
+5. `driving_policy_node.py` — 학습 정책 inference
+6. 통합: supervisor 가 EXPLORE 시 RL policy 호출 vs coverage BCD (param 으로 분기)
 
 **용도** — 단순 coverage BCD 대비 동적 obstacle 회피 + 효율적 mineral 우선순위 학습 가능.
 
@@ -163,16 +164,9 @@
 
 ## 🛠️ 인프라 / 정리
 
-### [ ] outdated launch 파일 정리
+### [완료] outdated launch 파일 정리
 
-`isaac_bringup/launch/` 의 다음 launch 들이 mvp.launch.py 와 mismatch:
-- `supervisor.launch.py` — `battery_monitor_node` 띄움. 실제 mission 노드는 `mission_manager_node` 라 잘못된 default.
-- `perception.launch.py` — `perception_node` (stub) 띄움. 실제는 `yolo_perception_node`.
-- `drive.launch.py` — coverage_node 만, param 없음 (mvp 와 비교 시 cmd_vel remap + robot_radius 빠짐).
-- `manipulation.launch.py` — arm_executor 만, ik_descend_dz 등 default 외 없음.
-- `full_system.launch.py` — 위 outdated launch 들 include. 실 동작 검증 안 됨.
-
-**수정** — 각 launch 파일을 mvp.launch.py 와 동일 패턴으로 갱신 + full_system 에 T5 localization include 옵션 추가.
+2026-05-26 cleanup — `drive/full_system/perception/manipulation/sim/supervisor.launch.py` 모두 삭제. 현재 active launch = `mvp / mvp_multi / integrated_localization / localization / rqt_views / rqt_views_multi`.
 
 ---
 
@@ -189,9 +183,9 @@
 
 ---
 
-### [ ] README.enhanced.md archive 결정
+### [완료] README.enhanced.md archive 결정
 
-`docs/README.enhanced.md` 가 README.md 와 중복 정보. archive 디렉토리 이동 또는 삭제.
+2026-05-26 cleanup — `docs/README.enhanced.md` 삭제 완료 (README.md 와 중복).
 
 ---
 

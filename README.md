@@ -41,7 +41,7 @@ source install/setup.bash
 
 > ✅ **별도 build 불필요한 자산** (모두 main 에 baked):
 > - `vehicle_v3.usd` (액션그래프 내장 로버) — `build_vehicle_v3.py` 재실행 불필요
-> - `terrain_00001~00022` (heightmap + obstacle + meta) — `mars_terrain_generator_v2.py` 재실행 불필요
+> - `terrain_00001~00023` (heightmap + obstacle + meta + epic obstacle 4종) — `mars_terrain_generator_v3.py` 재실행 불필요
 > - YOLO 모델 `mineral_yolo_best.pt` (5.3MB) — git tracked
 > - Doosan M0609 + RG2 gripper USDs
 > 빌드 스크립트는 USD/terrain 자체를 수정·재생성할 때만 실행.
@@ -97,7 +97,7 @@ ros2 launch isaac_bringup localization.launch.py
 
 ---
 
-> ℹ️ 명칭 명료성·책임 분리를 위한 **9개 패키지 구조**가 `main`에 정착 완료 (6개 → 9개 재편성). 설계 의도: [docs/STUDY_AND_PLAN.md](docs/STUDY_AND_PLAN.md) Part XI.
+> ℹ️ 명칭 명료성·책임 분리를 위한 **8개 패키지 구조**가 `main`에 정착 (2026-05-26 cleanup 으로 isaac_rl stub 정리). 설계 의도: [docs/STUDY_AND_PLAN.md](docs/STUDY_AND_PLAN.md) Part XI.
 
 ## 트랙 ↔ 담당자
 
@@ -177,10 +177,10 @@ colcon build --symlink-install
 # source (매 터미널 또는 .bashrc에 등록)
 source install/setup.bash
 
-# 검증 — 9개 패키지 등록 확인
+# 검증 — 8개 패키지 등록 확인
 ros2 pkg list | grep isaac_
 # 예상 출력: isaac_bringup, isaac_drive, isaac_interfaces, isaac_localization,
-#           isaac_manipulation, isaac_perception, isaac_rl, isaac_sim, isaac_supervisor
+#           isaac_manipulation, isaac_perception, isaac_sim, isaac_supervisor
 ```
 
 ### 4. (선택) bashrc 설정
@@ -196,9 +196,9 @@ ros2 pkg list | grep isaac_
 # Isaac Sim에서 master scene 열기:
 isaac ~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/worlds/mars_exploration_world.usd
 
-# 또는 다른 seed로 새 terrain 생성:
+# 또는 다른 seed로 새 terrain 생성 (v3 = epic obstacle 4종 포함):
 cd ~/dev_ws/rover_ws/src/a2_isaac
-python3 isaac_sim/scripts/mars_terrain_generator_v2.py --seed 777 --terrain-id terrain_00004
+python3 isaac_sim/scripts/mars_terrain_generator_v3.py --seed 777 --terrain-id terrain_00004
 ```
 
 → I1 풀 가이드: [docs/interfaces/I1_TERRAIN_ASSETS.md](docs/interfaces/I1_TERRAIN_ASSETS.md)
@@ -226,16 +226,20 @@ ros2 launch isaac_bringup rqt_views.launch.py
 
 → rover 가 자율적으로 EXPLORE → mineral 발견 → APPROACH → PICK → CARGO RELEASE 반복.
 
-### 트랙별 부분 launch (개발용)
+### 시연 시나리오별 launch — 자세히는 [docs/DEMO_COMMANDS.md](docs/DEMO_COMMANDS.md)
 
 ```bash
-ros2 launch isaac_bringup sim.launch.py            # 환경 검증 (T1)
-ros2 launch isaac_bringup perception.launch.py     # vision (T2)
-ros2 launch isaac_bringup drive.launch.py          # 주행 (T3)
-ros2 launch isaac_bringup localization.launch.py   # T5 EKF stack (정공법, 졸업 대기)
-ros2 launch isaac_bringup manipulation.launch.py   # M0609 (T2)
-ros2 launch isaac_bringup supervisor.launch.py     # mission (T4)
-ros2 launch isaac_bringup full_system.launch.py    # 전체 (모든 트랙 통합)
+# 단일 rover GT cheat baseline
+ros2 launch isaac_bringup mvp.launch.py collection_goal:=5
+
+# 단일 rover T5 정공법 (GT 없이 EKF stack)
+ros2 launch isaac_bringup integrated_localization.launch.py collection_goal:=1
+
+# 멀티 rover (2대 동시 운용 + 협조 + Web HUD 멀티 추적)
+ros2 launch isaac_bringup mvp_multi.launch.py collection_goal:=1
+
+# T5 EKF stack 단독 (open-loop 검증)
+ros2 launch isaac_bringup localization.launch.py
 ```
 
 ### 시연용 → 정공법 졸업 경로
@@ -272,113 +276,89 @@ a2_isaac/
 │  └─ README.md                           # tools/ 가이드
 │
 ├─ isaac_bringup/                         # ① 진입점 — launch 파일 모음 (T4)
-│  └─ launch/
-│     ├─ mvp.launch.py                    # ⭐ 시연용 5노드 통합 (T2 entry, GT cheat 모드)
-│     ├─ rqt_views.launch.py              # ⭐ body+wrist 카메라 view 2개 (T3 entry)
-│     ├─ localization.launch.py           # T5 EKF stack + EDL prior 자동 (졸업용)
-│     ├─ full_system.launch.py            # mvp + use_localization/use_rqt_views 옵션
-│     ├─ supervisor.launch.py             # mission_manager + battery_monitor (단독 검증용)
-│     ├─ perception.launch.py             # yolo_perception_node 단독
-│     ├─ drive.launch.py                  # coverage_node + cmd_vel remap 단독
-│     ├─ manipulation.launch.py           # arm_executor_node + ik_descend_dz=-0.40 단독
-│     └─ sim.launch.py                    # sim_bridge_node (mock lifecycle service, 단위 테스트용)
+│  ├─ launch/
+│  │  ├─ mvp.launch.py                    # ⭐ 단일 rover GT cheat MVP (Web HUD 자동)
+│  │  ├─ mvp_multi.launch.py              # ⭐ 멀티 rover 통합 (협조 + Web HUD 멀티 추적)
+│  │  ├─ integrated_localization.launch.py # 단일 rover T5 정공법 (GT 없이 EKF)
+│  │  ├─ localization.launch.py           # T5 EKF stack 단독 (open-loop 검증)
+│  │  ├─ rqt_views.launch.py              # body+wrist 카메라 (단일)
+│  │  └─ rqt_views_multi.launch.py        # 4창 카메라 (멀티 rover_1/2 × body/wrist)
+│  └─ rviz/localization_map.rviz
 │
 ├─ isaac_sim/                             # ② Isaac Sim 환경 + 자산 (T1)
 │  ├─ assets/
 │  │  ├─ vehicle/
-│  │  │  ├─ vehicle_v3.usd                # ⭐ 액션그래프 내장 자립 로버 (시연 사용)
-│  │  │  ├─ vehicle_v2.usd                # v3 빌드 입력 (외형·물리·관절)
-│  │  │  ├─ vehicle_v2_scene.usd          # v2 시각 검증용
-│  │  │  ├─ vehicle_v1.usd                # T3 coverage 검증 끝난 구버전
-│  │  │  └─ vehicle_origin_T2.usd         # T2 원본 (vehicle_v1 base, build_integrated_vehicle 의존)
+│  │  │  └─ vehicle_v3.usd                # ⭐ 액션그래프 내장 자립 로버 (시연 사용)
 │  │  ├─ markers/tier2_mineral/           # ⭐ 광물 mesh + texture (T2 YOLO 학습 대상)
-│  │  │  ├─ blue_mineral.usd              # 30cm 청색 광물 (RigidBody + convexHull)
-│  │  │  ├─ yellow_mineral.usd            # 30cm 황색 광물
-│  │  │  └─ green_gas.usd                 # 20cm 가스 cube
-│  │  ├─ markers/                         # mineral 변형 + basecamp/command_center USD
+│  │  ├─ epic_obstacles/                  # SC2 풍 landmark obstacle 4종 (sun_yaw/TRN 특징점)
 │  │  ├─ generated_terrains/
-│  │  │  └─ terrain_00001~00022/          # 22개 terrain (heightmap + obstacle + USD + meta)
-│  │  ├─ doosan-robot2/                   # Doosan M0609 arm 자산
-│  │  ├─ onrobot_rg2/                     # RG2-FT 그리퍼 자산
-│  │  └─ rover/                           # AAU Mars rover 자산
-│  ├─ worlds/
-│  │  └─ mars_exploration_world.usd       # master scene (최신 alias)
+│  │  │  └─ terrain_00001~00023/          # 23개 v3 terrain (epic obstacle 통일)
+│  │  ├─ doosan-robot2/, onrobot_rg2/, rover/  # arm + gripper + rover 자산
+│  ├─ worlds/                             # terrain_NNNNN.usd + mars_exploration_world.usd
 │  └─ scripts/
-│     ├─ run_vehicle_v3.py                # ⭐ vehicle_v3 + terrain 런처 (T1 entry script)
+│     ├─ run_vehicle_v3.py                # ⭐ 단일/멀티 (--rovers) 런처
 │     ├─ build_vehicle_v3.py              # vehicle_v3.usd 빌더 (USD 수정 시만)
-│     ├─ mars_terrain_generator_v2.py     # terrain 생성기 (새 terrain 필요 시만)
-│     └─ test_grip_unit.py                # grip 격리 단위 테스트
+│     ├─ mars_terrain_generator_v3.py     # ⭐ terrain 생성기 (epic obstacle 포함)
+│     ├─ bake_m0609_home.py               # M0609 home pose 베이크 도구
+│     └─ test_grip_unit.py                # grip 단위 테스트
 │
 ├─ isaac_drive/                           # ③ 주행 (T3 — Critical Path)
-│  └─ isaac_drive/
-│     ├─ coverage_node.py                 # ⭐ BCD anchor sweep + A* obstacle 회피 + replan
-│     ├─ odom_to_estimated_pose.py        # GT cheat 어댑터 (T5 졸업 시 폐기)
-│     ├─ minimap_publisher.py             # /mission/minimap 시각화
-│     └─ navigation/                      # A*, BCD, fog_map, terrain_loader, navigator 모듈
+│  ├─ isaac_drive/
+│  │  ├─ coverage_node.py                 # ⭐ BCD anchor sweep + A* obstacle 회피
+│  │  ├─ odom_to_estimated_pose.py        # GT cheat 어댑터 (T5 졸업 시 폐기)
+│  │  ├─ minimap_publisher.py             # /mission/minimap 시각화
+│  │  └─ navigation/                      # A*, BCD, fog_map, terrain_loader 모듈
+│  └─ scripts/                            # state_writer + viewer (matplotlib 보조)
 │
 ├─ isaac_perception/                      # ④ 인지 (T2)
 │  ├─ isaac_perception/
 │  │  ├─ yolo_perception_node.py          # ⭐ YOLO + depth backproject → mineral world XYZ
-│  │  ├─ vision/                          # mineral_detector, value_estimator 등
-│  │  └─ depth/                           # depth_estimator
-│  └─ models/
-│     └─ mineral_yolo_best.pt             # ⭐ 학습된 YOLO 모델 (5.3MB, 시연 필수)
+│  │  └─ yolo_mineral_detector.py         # YOLO wrapper class
+│  └─ models/mineral_yolo_best.pt         # ⭐ 학습된 YOLO 모델 (5.3MB)
 │
-├─ isaac_supervisor/                      # ⑤ mission FSM (T4)
-│  └─ isaac_supervisor/
-│     ├─ mission_manager_node.py          # ⭐ EXPLORE/APPROACH/PICK phase + cmd_vel mux
-│     └─ battery_monitor_node.py          # 배터리 모니터 (시연 미사용)
+├─ isaac_supervisor/                      # ⑤ mission FSM + Web HUD (T4)
+│  ├─ isaac_supervisor/
+│  │  ├─ mission_manager_node.py          # ⭐ EXPLORE/APPROACH/PICK/RTB FSM + 멀티 rover 협조
+│  │  ├─ mission_web_node.py              # ⭐ SC2 풍 Web HUD (Flask + SocketIO, 멀티 추적)
+│  │  └─ battery_monitor_node.py
+│  └─ web/                                # HTML/CSS/JS (rover selector + minimap canvas)
 │
 ├─ isaac_manipulation/                    # ⑥ M0609 arm (T2)
-│  ├─ isaac_manipulation/
-│  │  ├─ arm_executor_node.py             # ⭐ DLS-IK 상태머신 + /grasp/command FixedJoint
-│  │  └─ kinematics.py                    # M0609 DH 파라미터 + DLS-IK
-│  └─ scripts/                            # T2 standalone 데모 (참고 archive)
+│  └─ isaac_manipulation/
+│     ├─ arm_executor_node.py             # ⭐ DLS-IK 상태머신 + /grasp/command FixedJoint
+│     └─ kinematics.py                    # M0609 DH 파라미터 + DLS-IK
 │
 ├─ isaac_localization/                    # ⑦ localization (T5, 정확도 졸업 대기)
 │  └─ isaac_localization/
-│     ├─ ekf_fusion.py                    # ⭐ EKF (wheel+imu+sun+TRN) + EDL initial prior
+│     ├─ ekf_fusion.py                    # ⭐ EKF (wheel+imu+sun+TRN) + EDL prior
 │     ├─ trn.py                           # Terrain Relative Navigation
-│     ├─ localization_node.py             # 통합 wrapper
-│     ├─ terrain_map_publisher.py         # terrain heightmap publish
+│     ├─ localization_node.py
+│     ├─ terrain_map_publisher.py
 │     └─ sensors/                         # wheel_odom + imu_integrator + sun_yaw + splitter
 │
-├─ isaac_interfaces/                      # ⑧ msg/srv/action 계약 (T4)
-│  ├─ msg/                                # Detection, DetectionArray 등
-│  ├─ srv/
-│  └─ action/                             # ExecuteArmTask 등
+├─ isaac_interfaces/                      # ⑧ msg/action 계약 (T4)
+│  ├─ msg/                                # MissionState, Detection, BatteryState 등
+│  └─ action/ExecuteArmTask.action
 │
-├─ isaac_rl/                              # ⑨ 강화학습 (T3, 시연 미사용 stub)
-│  ├─ isaac_rl/driving_policy_node.py     # PPO inference 골격 (stub)
-│  └─ policies/driving_policy.pt          # 학습 정책 placeholder
-│
-└─ temp/                                  # (gitignored) 개인 임시 작업 (팀원별 자유)
+└─ temp/                                  # (gitignored) 개인 임시 작업
 ```
 
 > ✅ = 동작, ⏳ = stub (트랙 owner가 채울 자리), 📦 = binary asset
 
-## Patch from previous structure
-
-| 이전 | 변경 후 | 사유 |
-|------|--------|------|
-| `isaac_ai` | `isaac_perception` + `isaac_rl` | vision과 RL은 다른 책임, 다른 owner |
-| `isaac_navigation` | `isaac_drive` | 실제 콘텐츠 = "주행 실행" (navigation은 내부 서브) |
-| `isaac_nodes` | `isaac_supervisor` + `isaac_manipulation` | "nodes" 모호, 책임별 분리 |
-| (없음) | `isaac_localization` 신규 | GPS-less Mars TRN 영역 |
-
-## 패키지 매핑
+## 패키지 매핑 (2026-05-26 cleanup 기준 — 8개)
 
 | 패키지 | 트랙 | 담당자 | 주요 노드 | 상태 |
 |--------|:----:|:-----:|----------|:----:|
-| `isaac_bringup` | T4 | 성선규 | 8 launch | ⏳ launch 골격 |
-| `isaac_sim` | T1 | 김현중 | `sim_bridge_node`, 지형 생성기 v2 | ✅ I1 3샘플 |
-| `isaac_perception` | T2 | 최진우 | `perception_node` (vision/depth/lidar) | ✅ 노드 / ⏳ 세부 |
-| `isaac_rl` | T3 | 이찬휘 | `driving_policy_node`, PPO wrapper | ✅ 노드 / ⏳ 내부 |
-| `isaac_drive` | T3 | 이찬휘 | `drive_manager_node` + navigation 일습 | ✅ 노드+navigation |
-| `isaac_supervisor` | T4 | 성선규 | `mission_manager_node`, `battery_monitor_node` | ✅ |
-| `isaac_manipulation` | T2 | 최진우 | `arm_executor_node` + 4 primitives | ✅ 노드 / ⏳ primitives |
-| `isaac_localization` | T5 | 이지민 | `localization_node`, TRN, EKF | ⏳ 미착수 |
-| `isaac_interfaces` | T4 | 성선규 | msg/srv/action 정의 | ✅ 정의됨 |
+| `isaac_bringup` | T4 | 성선규 | mvp / mvp_multi / integrated_localization / localization / rqt_views(_multi) | ✅ |
+| `isaac_sim` | T1 | 김현중 | terrain v3 generator + vehicle_v3 빌더 + 23 terrain | ✅ |
+| `isaac_perception` | T2 | 최진우 | `yolo_perception_node` (YOLO + depth backproject) | ✅ |
+| `isaac_drive` | T3 | 이찬휘 | `coverage_node` (BCD + A*) + navigation 모듈 + `odom_to_estimated_pose` | ✅ |
+| `isaac_supervisor` | T4 | 성선규 | `mission_manager_node` (FSM + 협조), `mission_web_node`, `battery_monitor_node` | ✅ |
+| `isaac_manipulation` | T2 | 최진우 | `arm_executor_node` (DLS-IK + grasp snap) | ✅ |
+| `isaac_localization` | T5 | 이지민 | `ekf_fusion_node`, `trn_node`, `sun_yaw_node`, `wheel_odom_node` 등 9 노드 | ⏳ 정확도 졸업 |
+| `isaac_interfaces` | T4 | 성선규 | MissionState, Detection, BatteryState, ExecuteArmTask | ✅ |
+
+> 2026-05-26 cleanup: `isaac_rl` 패키지 (PPO stub) + 6 outdated launch + `sim_bridge_node` (mock) + 옛 v2 빌더 도구 모두 정리.
 
 ## 핵심 문서 인덱스
 

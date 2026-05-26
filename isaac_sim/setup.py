@@ -27,9 +27,6 @@ setup(
     maintainer_email="jimjimjinger@users.noreply.github.com",
     description="Isaac Sim environment package for Mars rover exploration.",
     license="MIT",
-    entry_points={
-        "console_scripts": [
-            "sim_bridge_node = isaac_sim.sim_bridge_node:main",
-        ],
-    },
+    # entry_points 비움 — sim_bridge_node (mock service) 삭제.
+    # isaac_sim 패키지 자체는 worlds/assets share install 만 담당.
 )

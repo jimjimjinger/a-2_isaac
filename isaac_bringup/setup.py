@@ -10,12 +10,6 @@ setup(
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
         (f"share/{package_name}", ["package.xml"]),
         (f"share/{package_name}/launch", [
-            "launch/full_system.launch.py",
-            "launch/sim.launch.py",
-            "launch/perception.launch.py",
-            "launch/drive.launch.py",
-            "launch/supervisor.launch.py",
-            "launch/manipulation.launch.py",
             "launch/localization.launch.py",
             "launch/integrated_localization.launch.py",
             "launch/mvp.launch.py",

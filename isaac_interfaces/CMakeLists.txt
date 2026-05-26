@@ -13,14 +13,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Detection.msg"
   "msg/DetectionArray.msg"
   "msg/MissionState.msg"
-  "msg/PerceptionResult.msg"
   "msg/SelectedDriveAction.msg"
-  "srv/CheckSystemReady.srv"
-  "srv/ResetSimulation.srv"
-  "srv/SaveExplorationMap.srv"
   "action/ExecuteArmTask.action"
-  "action/ExecuteDriveTask.action"
-  "action/NavigateTask.action"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs action_msgs
 )
 

@@ -1,6 +1,0 @@
-string map_name
-string target_path
----
-bool success
-string saved_path
-string message

@@ -7,9 +7,6 @@ setup(
     version="0.0.1",
     packages=[
         package_name,
-        f"{package_name}.vision",
-        f"{package_name}.depth",
-        f"{package_name}.lidar",
     ],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),

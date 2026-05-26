@@ -9,9 +9,7 @@ __pycache__/
 *.db3
 .colcon/
 *.pt
-!isaac_perception/models/mineral_detector.pt
 !isaac_perception/models/mineral_yolo_best.pt
-!isaac_rl/policies/driving_policy.pt
 
 .agents/
 .codex/
