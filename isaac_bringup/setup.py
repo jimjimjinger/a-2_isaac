@@ -17,6 +17,7 @@ setup(
             "launch/supervisor.launch.py",
             "launch/manipulation.launch.py",
             "launch/localization.launch.py",
+            "launch/integrated_localization.launch.py",
             "launch/mvp.launch.py",
             "launch/rqt_views.launch.py",
         ]),

@@ -8,6 +8,7 @@ terrain 로드 + v3 reference + play 만 한다. 팀 누구든 이 패턴(또는
 """
 import argparse
 import json
+import math
 import os
 import sys
 
@@ -38,7 +39,7 @@ app.update()
 import omni.usd
 from isaacsim.core.api import World
 from isaacsim.core.utils.stage import add_reference_to_stage
-from pxr import Gf, UsdGeom
+from pxr import Gf, Sdf, UsdGeom, UsdLux, UsdShade
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ISAAC_SIM = os.path.dirname(HERE)
@@ -50,6 +51,15 @@ ROVER_PRIM = "/World/Rover"
 # 갱신됨. ROVER_PRIM (reference xform root) 은 spawn 시점 그대로 고정.
 # build_vehicle_v3.ROVER_CAM 의 경로 패턴 차용: /Root/Vehicle/rover/Body.
 ROVER_BODY_PRIM = ROVER_PRIM + "/Vehicle/rover/Body"
+
+# T5 localization (PR #11): vehicle_v3 USD 에 baked 된 좁은 24mm sun camera 를
+# runtime 에 wide lens 로 재설정 + 시각용 sun disk/light 를 World 에 추가해
+# sun_yaw bearing 추출이 안정적으로 동작하도록 한다.
+SUN_CAMERA_PRIM = f"{ROVER_PRIM}/Vehicle/rover/Body/SunCamera"
+WORLD_SUN_YAW = 0.929
+WORLD_SUN_ELEVATION = math.radians(55.0)
+VISUAL_SUN_PRIM = "/World/VisualSun"
+VISUAL_SUN_LIGHT = "/World/VisualSunLight"
 
 # World-fixed overview camera — terrain 전체 부감 (50m 아레나 한눈에). vehicle_v3
 # 와 무관하게 World prim 에 별도 author. UI 메인 화면 overview 슬롯이 구독.
@@ -283,6 +293,83 @@ def _update_chase_cam(stage, transform_op, state: dict) -> None:
     transform_op.Set(cam_xform)
 
 
+def configure_sun_camera(stage) -> None:
+    """Widen the baked v3 sun camera at runtime.
+
+    vehicle_v3.usd was built with a narrow 24 mm lens. The visible sun is a
+    bearing target, so it needs the wide view used in the proven feature/local
+    setup; otherwise the detector may lock onto bright terrain instead.
+    """
+    prim = stage.GetPrimAtPath(SUN_CAMERA_PRIM)
+    if not prim or not prim.IsValid():
+        print(f"[run_v3] ⚠ sun camera 없음: {SUN_CAMERA_PRIM}")
+        return
+    xform = UsdGeom.Xformable(prim)
+    xform.ClearXformOpOrder()
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.10, 0.0, 2.50))
+    # Match the proven v2 sun-camera mount: optical axis points upward from
+    # the rover body, with image axes stable for bearing extraction.
+    xform.AddRotateXYZOp().Set(Gf.Vec3f(180.0, 0.0, -90.0))
+    cam = UsdGeom.Camera(prim)
+    cam.GetFocalLengthAttr().Set(6.0)
+    cam.GetHorizontalApertureAttr().Set(20.955)
+    cam.GetVerticalApertureAttr().Set(15.2908)
+    cam.GetClippingRangeAttr().Set(Gf.Vec2f(0.01, 10000.0))
+    print(f"[run_v3] sun camera wide lens applied: {SUN_CAMERA_PRIM}")
+
+
+def create_visual_sun(stage) -> None:
+    """Create a visible sun disk/sphere for the upward sun camera.
+
+    Isaac DistantLight illuminates the scene but is not a visible object in the
+    camera image. T5 sun_yaw needs an actual bright blob, so we add one far
+    above the map at the same azimuth as the localization world_sun_yaw.
+    """
+    distance = 2000.0
+    radius = 100.0
+
+    horizontal_distance = distance * math.cos(WORLD_SUN_ELEVATION)
+    x = math.cos(WORLD_SUN_YAW) * horizontal_distance
+    y = math.sin(WORLD_SUN_YAW) * horizontal_distance
+    z = distance * math.sin(WORLD_SUN_ELEVATION)
+
+    sun = UsdGeom.Sphere.Define(stage, Sdf.Path(VISUAL_SUN_PRIM))
+    sun.GetRadiusAttr().Set(radius)
+    sun.GetDisplayColorAttr().Set([Gf.Vec3f(1.0, 0.86, 0.22)])
+    UsdGeom.XformCommonAPI(sun.GetPrim()).SetTranslate(Gf.Vec3d(x, y, z))
+
+    mat = UsdShade.Material.Define(stage, Sdf.Path("/World/VisualSunMaterial"))
+    shader = UsdShade.Shader.Define(
+        stage,
+        Sdf.Path("/World/VisualSunMaterial/PreviewSurface"),
+    )
+    shader.CreateIdAttr("UsdPreviewSurface")
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(
+        Gf.Vec3f(1.0, 0.82, 0.12)
+    )
+    shader.CreateInput("emissiveColor", Sdf.ValueTypeNames.Color3f).Set(
+        Gf.Vec3f(1.0, 0.82, 0.12)
+    )
+    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.0)
+    mat.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+    UsdShade.MaterialBindingAPI(sun.GetPrim()).Bind(mat)
+
+    light = UsdLux.SphereLight.Define(stage, Sdf.Path(VISUAL_SUN_LIGHT))
+    light.CreateRadiusAttr(radius)
+    light.CreateIntensityAttr(250000.0)
+    light.CreateExposureAttr(0.0)
+    light.CreateColorAttr(Gf.Vec3f(1.0, 0.86, 0.18))
+    UsdGeom.XformCommonAPI(light.GetPrim()).SetTranslate(Gf.Vec3d(x, y, z))
+
+    print(
+        f"[run_v3] visual sun: {VISUAL_SUN_PRIM} "
+        f"pos=({x:.1f}, {y:.1f}, {z:.1f}), "
+        f"yaw={WORLD_SUN_YAW:.3f} rad, "
+        f"elev={math.degrees(WORLD_SUN_ELEVATION):.1f} deg, "
+        f"radius={radius:.1f}"
+    )
+
+
 def main() -> None:
     for f in (WORLD, V3):
         if not os.path.isfile(f):
@@ -296,6 +383,7 @@ def main() -> None:
 
     # 검증된 spawn 위치 (terrain meta.json)
     spawn = (0.0, 0.0, 1.0)
+    spawn_yaw = 0.0
     meta = os.path.join(TERRAIN_DIR, "meta.json")
     if os.path.isfile(meta):
         with open(meta) as f:
@@ -303,20 +391,33 @@ def main() -> None:
         if spots:
             s = spots[0]
             spawn = (float(s["x"]), float(s["y"]), float(s["z"]) + 0.3)
+            spawn_yaw = float(s.get("yaw", 0.0))
 
     # v3 reference — 그래프가 USD 에 내장돼 있어 그대로 따라온다.
     add_reference_to_stage(usd_path=V3, prim_path=ROVER_PRIM)
     stage = omni.usd.get_context().get_stage()
+    # T5 localization (PR #11): sun camera lens 와이드 + 시각 sun disk 추가.
+    # v3 reference 직후, transform 갱신 전에 실행해 SUN_CAMERA_PRIM 이
+    # composed stage 에 보이는 시점에 author 한다.
+    configure_sun_camera(stage)
+    create_visual_sun(stage)
     xf = UsdGeom.Xformable(stage.GetPrimAtPath(ROVER_PRIM))
     top = None
+    rot = None
     for op in xf.GetOrderedXformOps():
         if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
             top = op
-            break
+        elif op.GetOpType() == UsdGeom.XformOp.TypeRotateXYZ:
+            rot = op
     if top is None:
         top = xf.AddTranslateOp()
     top.Set(Gf.Vec3d(*spawn))
-    print(f"[run_v3] vehicle_v3 spawn: {spawn}")
+    if abs(spawn_yaw) > 1e-9:
+        if rot is None:
+            rot = xf.AddRotateXYZOp()
+        rot.Set(Gf.Vec3f(0.0, 0.0, math.degrees(spawn_yaw)))
+    print(f"[run_v3] vehicle_v3 spawn: {spawn}, "
+          f"yaw={math.degrees(spawn_yaw):.1f} deg")
 
     # World-fixed overview camera + 자체 OmniGraph 추가. UI 메인 화면 overview
     # 슬롯이 /camera/overview/image_raw 토픽을 구독. vehicle_v3 reference 이후
