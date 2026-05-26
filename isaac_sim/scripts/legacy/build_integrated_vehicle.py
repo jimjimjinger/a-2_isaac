@@ -1,0 +1,350 @@
+"""통합 로버 차량 v1 빌드 — vehicle_origin_T2.usd 베이스 보정·확장.
+
+vehicle_origin_T2.usd (rover + M0609 + RG2-FT 결합본, T2 제작) 를 베이스로:
+  · 후방 바스켓 (visual-only, T5 build_rover_m0609_scene.py 에서 이식)
+  · Vehicle 원점 재정렬 — T2 원본은 차량이 spawn 좌표(5,0,0.5)에 박혀 있어
+    Vehicle 원점이 차량에서 ~5m 떨어짐. 차량을 원점으로 가져온다.
+  · MDL 머티리얼 경로 교정 — /home/rokey/... 절대경로 → repo 상대경로.
+  · m0609 HOME 자세 — joint drive/state 를 HOME(0,0,90,0,90,0)으로.
+  · rover 주행 모드 게인 — 휠 잠금(k=1e8) → 주행값(휠 속도제어·스티어
+    위치제어·로커 passive). 통합 차량의 nominal default = 주행 가능.
+  · D455 wrist 카메라 — angle_bracket 에 rsd455.usd 부착.
+을 적용해 vehicle_v1.usd 를 만든다.
+
+순수 pxr(USD) 로만 동작 — Isaac Sim/SimulationApp 불필요.
+
+    python3 isaac_sim/scripts/build_integrated_vehicle.py
+
+이후 m0609 HOME 자세를 정지 USD 에서도 보이게 link xform 에 굳히려면
+bake_m0609_home.py (Isaac Sim) 를 이어서 실행한다.
+
+⚠️ 휠 freeze·RoverAnchor 등 모드 의존 설정은 미포함(런타임 모드 레이어 담당).
+"""
+from pathlib import Path
+import shutil
+import sys
+
+from pxr import Usd, UsdGeom, UsdShade, UsdPhysics, Gf, Sdf
+
+# ── 경로 (스크립트 = isaac_sim/scripts/build_integrated_vehicle.py) ──
+_ISAAC_SIM = Path(__file__).resolve().parents[1]
+_VEHICLE_DIR = _ISAAC_SIM / "assets" / "vehicle"
+ORIGIN_USD = _VEHICLE_DIR / "vehicle_origin_T2.usd"
+OUTPUT_USD = _VEHICLE_DIR / "vehicle_v1.usd"
+
+# ── vehicle_origin_T2.usd 내부 prim 경로 ──
+VEHICLE_ROOT  = "/Root/Vehicle"
+ROVER_ROOT    = "/Root/Vehicle/rover"
+M0609_ROOT    = "/Root/Vehicle/m0609"
+GRIPPER_ROOT  = "/Root/Vehicle/onrobot_rg2ft"
+ROVER_BODY    = "/Root/Vehicle/rover/Body"
+ANGLE_BRACKET = "/Root/Vehicle/onrobot_rg2ft/angle_bracket"
+
+# ── 후방 바스켓 부착 대상 + 치수 (T5 build_rover_m0609_scene.py 에서 이식) ──
+# rover Body 기준 로컬 좌표. -X = 로봇팔 반대편 = 후방.
+BASKET_LOCAL  = (-0.38, 0.0, 0.02)
+BASKET_LENGTH = 0.22
+BASKET_WIDTH  = 0.46
+BASKET_HEIGHT = 0.18
+BASKET_WALL   = 0.035
+BASKET_BOTTOM = 0.035
+
+# ── m0609 HOME 자세 (T2 pickplace_visual_rover.py HOME_JOINT_POSITIONS_DEG) ──
+# joint_3=90·joint_5=90 → 손목이 아래를 보는 '카메라 down' 자세. 단위 degree.
+M0609_HOME_DEG = {
+    "joint_1": 0.0, "joint_2": 0.0, "joint_3": 90.0,
+    "joint_4": 0.0, "joint_5": 90.0, "joint_6": 0.0,
+}
+
+# ── rover 주행 모드 드라이브 게인 (Mars_Rover.usd 원본값) ──
+# vehicle_origin_T2.usd 는 manipulation 용으로 rover 조인트 드라이브를 전부
+# k=1e8 로 굳혀 놨다 — 휠이 위치 0 에 잠겨 안 굴러간다. 통합 차량의 nominal
+# default 는 '주행 가능' 이므로 Mars_Rover.usd 원본 주행값으로 되돌려 USD 에
+# 박는다. manipulation 모드는 런타임 레이어가 휠 freeze 를 편차로 적용한다.
+DRIVING_GAINS = {        # 조인트명 키워드 → (stiffness, damping)
+    "DRIVE_CONTINUOUS": (100.0, 4000.0),   # 휠 — 속도제어
+    "STEER_REVOLUTE":   (8000.0, 1000.0),  # 스티어 — 위치제어
+    "ROCKER_REVOLUTE":  (0.0, 0.0),        # 로커-보기 서스펜션 — passive
+}
+
+# ── D455 wrist 카메라 (T2 realsense_mount.py / README 2.1) ──
+# rsd455.usd 는 isaac_sim/assets/d455/ 에 로컬화돼 있음. vehicle_v1.usd 기준 상대경로.
+D455_USD_REL    = "../d455/rsd455.usd"
+D455_OFFSET_T   = (0.0, 0.045, 0.05)
+D455_OFFSET_RPY = (0.0, -90.0, 90.0)
+
+
+# ── USD 헬퍼 ────────────────────────────────────────────────────────
+def _make_preview_material(stage, mat_path, rgb, roughness=0.55, metallic=0.35):
+    """UsdPreviewSurface 머티리얼 생성."""
+    material = UsdShade.Material.Define(stage, mat_path)
+    shader = UsdShade.Shader.Define(stage, f"{mat_path}/Shader")
+    shader.CreateIdAttr("UsdPreviewSurface")
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*rgb))
+    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(roughness)
+    shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metallic)
+    material.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
+    return material
+
+
+def _define_local_box(stage, path, translation, scale, material=None):
+    """size=1 Cube 를 translation/scale 로 배치 (로컬 박스)."""
+    cube = UsdGeom.Cube.Define(stage, path)
+    cube.CreateSizeAttr(1.0)
+    xf = UsdGeom.Xformable(cube.GetPrim())
+    xf.ClearXformOpOrder()
+    xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*translation))
+    xf.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*scale))
+    if material is not None:
+        UsdShade.MaterialBindingAPI.Apply(cube.GetPrim())
+        UsdShade.MaterialBindingAPI(cube.GetPrim()).Bind(material)
+    return cube.GetPrim()
+
+
+def _get_translate_op(prim):
+    """prim 의 xformOp:translate op 반환 (없으면 None)."""
+    for op in UsdGeom.Xformable(prim).GetOrderedXformOps():
+        if op.GetOpName() == "xformOp:translate":
+            return op
+    return None
+
+
+# ── 빌드 단계 ───────────────────────────────────────────────────────
+def attach_rear_basket(stage, rover_body):
+    """로버 Body 뒤쪽에 visual 바스켓 부착 (충돌체 없음)."""
+    body_prim = stage.GetPrimAtPath(rover_body)
+    if not body_prim.IsValid():
+        raise RuntimeError(f"rover Body prim 없음: {rover_body}")
+
+    basket_path = f"{rover_body}/RearBasket"
+    basket = stage.DefinePrim(basket_path, "Xform")
+    xf = UsdGeom.Xformable(basket)
+    xf.ClearXformOpOrder()
+    xf.AddTranslateOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*BASKET_LOCAL))
+
+    mat = _make_preview_material(stage, f"{basket_path}/Looks/BasketDarkMetal",
+                                 rgb=(0.09, 0.075, 0.06), roughness=0.5, metallic=0.45)
+    rim_mat = _make_preview_material(stage, f"{basket_path}/Looks/BasketRimMetal",
+                                     rgb=(0.45, 0.42, 0.36), roughness=0.35, metallic=0.75)
+
+    lx, wy, hz = BASKET_LENGTH, BASKET_WIDTH, BASKET_HEIGHT
+    t, b = BASKET_WALL, BASKET_BOTTOM
+
+    # 바닥 + 벽. 위는 열려 있고 앞쪽(FrontLip)은 트레이처럼 낮다.
+    _define_local_box(stage, f"{basket_path}/Bottom",
+                      (0.0, 0.0, b * 0.5), (lx, wy, b), mat)
+    _define_local_box(stage, f"{basket_path}/LeftWall",
+                      (0.0, wy * 0.5 - t * 0.5, hz * 0.5), (lx, t, hz), mat)
+    _define_local_box(stage, f"{basket_path}/RightWall",
+                      (0.0, -wy * 0.5 + t * 0.5, hz * 0.5), (lx, t, hz), mat)
+    _define_local_box(stage, f"{basket_path}/BackWall",
+                      (-lx * 0.5 + t * 0.5, 0.0, hz * 0.45), (t, wy, hz * 0.9), mat)
+    _define_local_box(stage, f"{basket_path}/FrontLip",
+                      (lx * 0.5 - t * 0.5, 0.0, hz * 0.28), (t, wy, hz * 0.56), mat)
+
+    # 밝은 테두리 — 단순 박스가 아니라 바스켓처럼 보이게.
+    rim_z = hz + t * 0.5
+    _define_local_box(stage, f"{basket_path}/LeftTopRim",
+                      (0.0, wy * 0.5, rim_z), (lx + t, t, t), rim_mat)
+    _define_local_box(stage, f"{basket_path}/RightTopRim",
+                      (0.0, -wy * 0.5, rim_z), (lx + t, t, t), rim_mat)
+    _define_local_box(stage, f"{basket_path}/BackTopRim",
+                      (-lx * 0.5, 0.0, rim_z), (t, wy + t, t), rim_mat)
+    _define_local_box(stage, f"{basket_path}/FrontTopRim",
+                      (lx * 0.5, 0.0, hz * 0.58), (t, wy + t, t), rim_mat)
+
+    n_box = len([c for c in stage.GetPrimAtPath(basket_path).GetChildren()
+                 if c.GetName() != "Looks"])
+    print(f"  [basket] {basket_path}  (박스 {n_box}개)")
+    return basket_path
+
+
+def recenter_vehicle(stage):
+    """Vehicle 원점을 차량(rover)에 맞춘다.
+
+    T2 vehicle_origin_T2.usd 는 빌드 시 차량을 spawn 좌표(rover translate
+    (5,0,0.5))에 둔 상태로 저장돼 Vehicle 원점이 차량에서 ~5m 떨어져 있다.
+    rover·m0609·onrobot_rg2ft 세 컴포넌트를 rover translate 만큼 동일 시프트
+    하면 상대 관계는 그대로 유지되면서 rover 원점이 곧 Vehicle 원점이 된다.
+    """
+    rover = stage.GetPrimAtPath(ROVER_ROOT)
+    if not rover.IsValid():
+        print("  [recenter] rover prim 없음 — skip")
+        return
+    rover_t = _get_translate_op(rover)
+    if rover_t is None:
+        print("  [recenter] rover translate 없음 — skip")
+        return
+    off = Gf.Vec3d(rover_t.Get())
+    if off == Gf.Vec3d(0, 0, 0):
+        print("  [recenter] rover 가 이미 원점 — skip")
+        return
+    for path in (ROVER_ROOT, M0609_ROOT, GRIPPER_ROOT):
+        prim = stage.GetPrimAtPath(path)
+        if not prim.IsValid():
+            continue
+        op = _get_translate_op(prim)
+        if op is not None:
+            op.Set(Gf.Vec3d(op.Get()) - off)
+    print(f"  [recenter] -({off[0]:.3f},{off[1]:.3f},{off[2]:.3f}) 시프트 "
+          f"→ Vehicle 원점 = 차량")
+
+
+def fix_mdl_paths(stage):
+    """MDL sourceAsset 의 /home/rokey/... 절대경로를 repo 상대경로로 교정.
+
+    .mdl 파일명만 살려 repo 내 실제 위치로 상대경로(../rover/SubUSDs/
+    materials/) 재작성. OmniPBR.mdl 등 Omniverse 기본 MDL 은 그대로 둔다.
+    """
+    fixed = 0
+    for prim in stage.Traverse():
+        if prim.GetTypeName() != "Shader":
+            continue
+        attr = prim.GetAttribute("info:mdl:sourceAsset")
+        if not attr:
+            continue
+        val = attr.Get()
+        if not val:
+            continue
+        old = val.path
+        if "SubUSDs/materials/" in old:
+            fname = old.rsplit("/", 1)[-1]
+            attr.Set(Sdf.AssetPath(f"../rover/SubUSDs/materials/{fname}"))
+            fixed += 1
+    print(f"  [mdl] sourceAsset 경로 교정 {fixed}개 → ../rover/SubUSDs/materials/")
+
+
+def set_m0609_home(stage):
+    """m0609 6축 조인트의 angular drive target + 초기 state 를 HOME 으로.
+
+    이는 물리 play 시점에 적용된다. 정지 USD 에서도 HOME 으로 보이게 link
+    xform 까지 굳히려면 bake_m0609_home.py 를 이어서 실행한다.
+    UsdPhysics angular drive/state 단위는 degree.
+    """
+    m0609 = stage.GetPrimAtPath(M0609_ROOT)
+    if not m0609.IsValid():
+        print("  [m0609] m0609 prim 없음 — skip")
+        return
+    done = 0
+    for p in Usd.PrimRange(m0609):
+        if p.GetTypeName() != "PhysicsRevoluteJoint":
+            continue
+        deg = M0609_HOME_DEG.get(p.GetName())
+        if deg is None:
+            continue
+        drive = UsdPhysics.DriveAPI.Get(p, "angular")
+        if drive:
+            ta = drive.GetTargetPositionAttr() or drive.CreateTargetPositionAttr()
+            ta.Set(float(deg))
+        sa = p.GetAttribute("state:angular:physics:position")
+        if sa:
+            sa.Set(float(deg))
+        done += 1
+    print(f"  [m0609] HOME 자세 설정 {done}/6 joint  (joint_3=90, joint_5=90)")
+
+
+def set_driving_mode_gains(stage):
+    """rover 휠·스티어·로커 조인트 드라이브를 주행 모드 게인으로 설정.
+
+    vehicle_origin_T2 베이스는 manipulation 용으로 rover 조인트 드라이브가
+    전부 k=1e8(휠 잠김)이다. 통합 차량의 nominal default = 주행 가능 이므로
+    Mars_Rover.usd 원본 주행값으로 되돌린다. 휠은 속도제어(낮은 k·높은 c),
+    스티어는 위치제어, 로커-보기 서스펜션은 passive(k=0,c=0).
+    """
+    rover = stage.GetPrimAtPath(ROVER_ROOT)
+    if not rover.IsValid():
+        print("  [drive] rover prim 없음 — skip")
+        return
+    n = 0
+    for p in Usd.PrimRange(rover):
+        name = p.GetName().upper()
+        gains = next((g for kw, g in DRIVING_GAINS.items() if kw in name), None)
+        if gains is None:
+            continue
+        drive = UsdPhysics.DriveAPI.Get(p, "angular")
+        if not drive:
+            continue
+        k, c = gains
+        (drive.GetStiffnessAttr() or drive.CreateStiffnessAttr()).Set(k)
+        (drive.GetDampingAttr() or drive.CreateDampingAttr()).Set(c)
+        n += 1
+    print(f"  [drive] 주행 모드 게인 {n} joint "
+          f"(휠 k=100·c=4000, 스티어 k=8000·c=1000, 로커 passive)")
+
+
+def attach_d455_camera(stage, angle_bracket_path):
+    """angle_bracket 에 RealSense D455 를 reference 로 부착 (wrist 카메라).
+
+    rsd455.usd 는 isaac_sim/assets/d455/ 에 로컬화돼 있어 상대경로로 참조.
+    angle_bracket 이 이미 rigid body 라 D455 내부 RigidBody/Collision 은
+    비활성화한다(PhysX 계층 충돌 방지). 오프셋은 T2 README 2.1 값.
+    """
+    ab = stage.GetPrimAtPath(angle_bracket_path)
+    if not ab.IsValid():
+        print(f"  [d455] angle_bracket 없음: {angle_bracket_path} — skip")
+        return None
+
+    rs_path = f"{angle_bracket_path}/realsense_d455"
+    rs = stage.DefinePrim(rs_path, "Xform")
+    rs.GetReferences().AddReference(D455_USD_REL)
+
+    xf = UsdGeom.Xformable(rs)
+    xf.ClearXformOpOrder()
+    xf.AddTranslateOp().Set(Gf.Vec3d(*D455_OFFSET_T))
+    xf.AddRotateXYZOp().Set(Gf.Vec3f(*D455_OFFSET_RPY))
+
+    # angle_bracket 이 이미 rigid body 이므로 D455 내부 RigidBody/Collision 을
+    # 비활성화한다(enabled=false). T2 realsense_mount.py 의 검증된 방식 —
+    # RigidBodyAPI 를 제거(RemoveAPI)하면 D455 내장 IMU 가 RSD455 rigid body
+    # 를 못 찾아 physx tensors 에러가 나므로, API 는 남기고 비활성화만 한다.
+    n = 0
+    for p in Usd.PrimRange(stage.GetPrimAtPath(rs_path)):
+        done = False
+        if p.HasAPI(UsdPhysics.RigidBodyAPI):
+            UsdPhysics.RigidBodyAPI(p).GetRigidBodyEnabledAttr().Set(False)
+            done = True
+        if p.HasAPI(UsdPhysics.CollisionAPI):
+            UsdPhysics.CollisionAPI(p).GetCollisionEnabledAttr().Set(False)
+            done = True
+        if done:
+            n += 1
+    print(f"  [d455] {rs_path}  (내부 RigidBody/Collision enabled=false {n} prim)")
+    return rs_path
+
+
+def main():
+    if not ORIGIN_USD.is_file():
+        sys.exit(f"[build] ✗ 원본 USD 없음: {ORIGIN_USD}")
+
+    print(f"[build] 베이스: {ORIGIN_USD.name}")
+    shutil.copy(ORIGIN_USD, OUTPUT_USD)
+    print(f"[build] 복사 → {OUTPUT_USD.name}")
+
+    stage = Usd.Stage.Open(str(OUTPUT_USD))
+    if not stage:
+        sys.exit(f"[build] ✗ Stage 열기 실패: {OUTPUT_USD}")
+
+    print("[build] 후방 바스켓 부착 …")
+    attach_rear_basket(stage, ROVER_BODY)
+
+    print("[build] Vehicle 원점 재정렬 …")
+    recenter_vehicle(stage)
+
+    print("[build] MDL 머티리얼 경로 교정 …")
+    fix_mdl_paths(stage)
+
+    print("[build] m0609 HOME 자세 설정 …")
+    set_m0609_home(stage)
+
+    print("[build] rover 주행 모드 드라이브 게인 설정 …")
+    set_driving_mode_gains(stage)
+
+    print("[build] D455 wrist 카메라 부착 …")
+    attach_d455_camera(stage, ANGLE_BRACKET)
+
+    stage.GetRootLayer().Save()
+    print("[build] ✓ vehicle_v1.usd 저장 완료")
+
+
+if __name__ == "__main__":
+    main()
