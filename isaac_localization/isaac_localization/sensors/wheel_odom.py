@@ -82,6 +82,14 @@ class WheelOdometryNode(Node):
         self.declare_parameter("min_dt", 1.0e-4)
         self.declare_parameter("max_dt", 0.5)
 
+        # Optional map-frame initial pose. When provided from terrain meta.json,
+        # wheel odom stays useful as a relative integrator while sharing the
+        # same world/map origin as TRN and EKF.
+        self.declare_parameter("initial_x", 0.0)
+        self.declare_parameter("initial_y", 0.0)
+        self.declare_parameter("initial_z", 0.0)
+        self.declare_parameter("initial_yaw", 0.0)
+
         self.joint_state_topic = (
             self.get_parameter("joint_state_topic").get_parameter_value().string_value
         )
@@ -127,6 +135,19 @@ class WheelOdometryNode(Node):
         self.min_dt = self.get_parameter("min_dt").get_parameter_value().double_value
         self.max_dt = self.get_parameter("max_dt").get_parameter_value().double_value
 
+        self.initial_x = (
+            self.get_parameter("initial_x").get_parameter_value().double_value
+        )
+        self.initial_y = (
+            self.get_parameter("initial_y").get_parameter_value().double_value
+        )
+        self.initial_z = (
+            self.get_parameter("initial_z").get_parameter_value().double_value
+        )
+        self.initial_yaw = (
+            self.get_parameter("initial_yaw").get_parameter_value().double_value
+        )
+
         if self.track_width <= 0.0:
             raise ValueError("track_width must be greater than 0.0")
 
@@ -139,9 +160,10 @@ class WheelOdometryNode(Node):
         # -----------------------------
         # Internal State
         # -----------------------------
-        self.x = 0.0
-        self.y = 0.0
-        self.yaw = 0.0
+        self.x = self.initial_x
+        self.y = self.initial_y
+        self.z = self.initial_z
+        self.yaw = self.initial_yaw
 
         self.prev_time: Optional[Time] = None
 
@@ -172,6 +194,10 @@ class WheelOdometryNode(Node):
         self.get_logger().info(
             f"wheel_radius={self.wheel_radius}, "
             f"wheelbase_length={self.wheelbase_length}, track_width={self.track_width}"
+        )
+        self.get_logger().info(
+            f"Initial pose: x={self.x:.3f}, y={self.y:.3f}, "
+            f"z={self.z:.3f}, yaw={math.degrees(self.yaw):.1f} deg"
         )
 
     def joint_state_callback(self, msg: JointState) -> None:
@@ -358,7 +384,7 @@ class WheelOdometryNode(Node):
 
         odom.pose.pose.position.x = self.x
         odom.pose.pose.position.y = self.y
-        odom.pose.pose.position.z = 0.0
+        odom.pose.pose.position.z = self.z
 
         odom.pose.pose.orientation = self.quaternion_from_yaw(self.yaw)
 

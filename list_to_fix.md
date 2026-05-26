@@ -106,6 +106,26 @@
 
 ---
 
+### [ ] Rover obstacle 회피 — 충돌 + 과민감 trade-off
+
+**증상** — vehicle_v3 (실제 차체) 와 coverage A*/BCD 의 obstacle 회피 layer 간 mismatch.
+
+- (a) **충돌 이슈** — 명목 footprint 와 USD 콜라이더 영역이 어긋나 일부 obstacle 에 차체가 부딪힘 (특히 epic obstacle 같은 큰 자산 추가 시).
+- (b) **과민감 회피** — (a) 회피용으로 `robot_radius` (또는 keepout/inflation) 를 키우면, 통과 가능한 좁은 통로조차 가지 못하고 우회 (e.g., terrain 베이스캠프 근처 obstacle 의 1.5m 거리 지점도 회피).
+
+**원인 추정**:
+- vehicle_v3 콜라이더 (휠 포함) 의 실제 외접 반경 측정 미완 → coverage 의 `robot_radius` 가 실측 기반이 아님.
+- inflation 이 uniform (한 값) 이라 큰 obstacle 우회와 좁은 통로 통과를 동시에 만족 못 함.
+
+**졸업 방향**:
+- (1) vehicle_v3 USD bbox 측정 후 `robot_radius` 정합 (베이스 + 휠 외접 + 안전 margin 분리).
+- (2) obstacle_grid 에 obstacle 별 inflation 등급 (epic = 더 키움, 작은 rock = 작게) — terrain generator 단계에서 marking.
+- (3) coverage 의 keepout 과 A* 의 inflation 을 분리 (현 v2 단일 generator 는 keepout=6 으로 통합).
+
+**발견** — 2026-05-26, PR #11 (terrain_00023 epic obstacle 도입) 검토 시점.
+
+---
+
 ## 🛠️ 인프라 / 정리
 
 ### [ ] outdated launch 파일 정리

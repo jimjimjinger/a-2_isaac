@@ -56,7 +56,7 @@ def _read_initial_pose(terrain_root: str, terrain_id: str) -> dict:
             return {
                 "initial_x": float(s.get("x", 0.0)),
                 "initial_y": float(s.get("y", 0.0)),
-                "initial_z": float(s.get("z", 0.0)),
+                "initial_z": float(s.get("z", 0.0)) + 0.3,
                 "initial_yaw": float(s.get("yaw", 0.0)),
             }
     except Exception as e:
@@ -88,6 +88,11 @@ def _build_nodes(context, *args, **kwargs):
             executable="wheel_odom_node",
             name="wheel_odom_node",
             output="screen",
+            parameters=[
+                {
+                    **prior,
+                }
+            ],
         ),
         Node(
             package="isaac_localization",
@@ -102,7 +107,25 @@ def _build_nodes(context, *args, **kwargs):
             output="screen",
             parameters=[
                 {
-                    "world_sun_yaw": -0.4363323129985824,
+                    "image_topic": "/camera/sun/image_raw",
+                    "camera_info_topic": "/camera/sun/camera_info",
+                    "world_sun_yaw": 0.929,
+                    "camera_yaw_offset": 2.889,
+                    "camera_elevation": 1.5707963268,
+                    "imu_topic": "/imu/data",
+                    "use_imu_tilt_compensation": True,
+                    "base_yaw_variance": 0.10,
+                    "max_yaw_variance": 4.0,
+                    "min_confidence": 0.20,
+                    "top_crop_ratio": 1.0,
+                    "bright_percentile": 99.7,
+                    "min_peak_luma": 190.0,
+                    "max_area_ratio": 0.018,
+                    "max_blob_width_ratio": 0.18,
+                    "max_blob_height_ratio": 0.18,
+                    "min_dominance": 18.0,
+                    "temporal_alpha": 0.30,
+                    "max_bearing_jump": 0.40,
                     "max_publish_hz": 10.0,
                 }
             ],
@@ -112,6 +135,34 @@ def _build_nodes(context, *args, **kwargs):
             executable="local_height_patch_node",
             name="local_height_patch_node",
             output="screen",
+            parameters=[
+                {
+                    "pixel_stride": 2,
+                    "accumulate_window_s": 4.0,
+                    "fill_sparse_holes": True,
+                    "min_valid_cells": 250,
+                    "obstacle_patch_topic": "/rover/local_obstacle_patch",
+                    "obstacle_height_delta_m": 0.35,
+                    "obstacle_slope_deg": 20.0,
+                    "obstacle_dilation_cells": 1,
+                    # vehicle_v3 /Root/Vehicle/rover/Body/Camera transform,
+                    # expressed in the rover body frame. USD camera looks along
+                    # local -Z, which maps to rover +X; ROS optical +X maps to
+                    # rover -Y, and optical +Y/down maps to rover -Z.
+                    "camera_x": 0.3,
+                    "camera_y": 0.0,
+                    "camera_z": -0.1,
+                    "camera_forward_x": 1.0,
+                    "camera_forward_y": 0.0,
+                    "camera_forward_z": 0.0,
+                    "camera_right_x": 0.0,
+                    "camera_right_y": -1.0,
+                    "camera_right_z": 0.0,
+                    "camera_down_x": 0.0,
+                    "camera_down_y": 0.0,
+                    "camera_down_z": -1.0,
+                }
+            ],
         ),
         Node(
             package="isaac_localization",
@@ -122,6 +173,30 @@ def _build_nodes(context, *args, **kwargs):
                 {
                     "terrain_id": terrain_id_str,
                     "terrain_root": terrain_root_str,
+                    "local_obstacle_topic": "/rover/local_obstacle_patch",
+                    "match_sigma": 0.85,
+                    "height_weight": 0.85,
+                    "slope_weight": 0.25,
+                    "obstacle_weight": 1.40,
+                    "obstacle_dilation_m": 1.25,
+                    "obstacle_distance_sigma_m": 0.75,
+                    "obstacle_distance_max_m": 2.0,
+                    "yaw_search_max_deg": 12.0,
+                    "yaw_search_step_deg": 4.0,
+                    "slope_sigma_deg": 12.0,
+                    "local_obstacle_slope_deg": 20.0,
+                    "local_obstacle_height_delta_m": 0.35,
+                    "min_feature_overlap_cells": 450,
+                    "prior_weight": 0.12,
+                    "prior_sigma_m": 1.0,
+                    "min_confidence": 0.30,
+                    "min_publish_local_obstacle_ratio": 0.08,
+                    "max_publish_obstacle_score": 0.70,
+                    "min_publish_ambiguity_margin": 0.07,
+                    "base_xy_covariance": 0.50,
+                    "base_z_covariance": 0.50,
+                    "distinct_candidate_separation_m": 0.75,
+                    "ambiguity_margin_m": 0.04,
                 }
             ],
         ),
@@ -134,9 +209,10 @@ def _build_nodes(context, *args, **kwargs):
                 {
                     "sun_yaw_topic": "/rover/sun_yaw",
                     "use_sun_yaw": True,
-                    "default_sun_yaw_cov": 1.5,
-                    "min_sun_yaw_cov": 0.25,
-                    "max_sun_yaw_innovation": 1.2,
+                    "default_sun_yaw_cov": 0.60,
+                    "min_sun_yaw_cov": 0.10,
+                    "max_sun_yaw_innovation": 0.90,
+                    "max_trn_innovation_m": 1.0,
                     # EDL initial pose prior — terrain spawn 으로 시드.
                     **prior,
                 }

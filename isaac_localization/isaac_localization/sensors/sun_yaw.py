@@ -23,7 +23,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped, Quaternion
 from rclpy.node import Node
-from sensor_msgs.msg import CameraInfo, Image
+from sensor_msgs.msg import CameraInfo, Image, Imu
 from std_msgs.msg import Float32
 
 
@@ -37,14 +37,26 @@ class SunYawNode(Node):
         self.declare_parameter("camera_info_topic", "/camera/sun/camera_info")
         self.declare_parameter("sun_yaw_topic", "/rover/sun_yaw")
         self.declare_parameter("confidence_topic", "/rover/sun_yaw_confidence")
+        self.declare_parameter("publish_confidence", True)
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("world_sun_yaw", math.radians(-25.0))
         self.declare_parameter("camera_yaw_offset", 0.0)
+        self.declare_parameter("camera_elevation", 0.0)
+        self.declare_parameter("imu_topic", "/imu/data")
+        self.declare_parameter("use_imu_tilt_compensation", False)
         self.declare_parameter("min_confidence", 0.12)
         self.declare_parameter("base_yaw_variance", 0.35)
         self.declare_parameter("max_yaw_variance", 9.0)
         self.declare_parameter("bright_percentile", 99.2)
         self.declare_parameter("top_crop_ratio", 0.65)
+        self.declare_parameter("min_peak_luma", 190.0)
+        self.declare_parameter("min_area_ratio", 1.0e-5)
+        self.declare_parameter("max_area_ratio", 0.025)
+        self.declare_parameter("max_blob_width_ratio", 0.22)
+        self.declare_parameter("max_blob_height_ratio", 0.22)
+        self.declare_parameter("min_dominance", 18.0)
+        self.declare_parameter("temporal_alpha", 0.35)
+        self.declare_parameter("max_bearing_jump", 0.45)
         self.declare_parameter("publish_rejected", False)
         self.declare_parameter("max_publish_hz", 10.0)
 
@@ -52,10 +64,18 @@ class SunYawNode(Node):
         self.camera_info_topic = str(self.get_parameter("camera_info_topic").value)
         self.sun_yaw_topic = str(self.get_parameter("sun_yaw_topic").value)
         self.confidence_topic = str(self.get_parameter("confidence_topic").value)
+        self.publish_confidence = bool(
+            self.get_parameter("publish_confidence").value
+        )
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.world_sun_yaw = float(self.get_parameter("world_sun_yaw").value)
         self.camera_yaw_offset = float(
             self.get_parameter("camera_yaw_offset").value
+        )
+        self.camera_elevation = float(self.get_parameter("camera_elevation").value)
+        self.imu_topic = str(self.get_parameter("imu_topic").value)
+        self.use_imu_tilt_compensation = bool(
+            self.get_parameter("use_imu_tilt_compensation").value
         )
         self.min_confidence = float(self.get_parameter("min_confidence").value)
         self.base_yaw_variance = float(self.get_parameter("base_yaw_variance").value)
@@ -64,11 +84,26 @@ class SunYawNode(Node):
             self.get_parameter("bright_percentile").value
         )
         self.top_crop_ratio = float(self.get_parameter("top_crop_ratio").value)
+        self.min_peak_luma = float(self.get_parameter("min_peak_luma").value)
+        self.min_area_ratio = float(self.get_parameter("min_area_ratio").value)
+        self.max_area_ratio = float(self.get_parameter("max_area_ratio").value)
+        self.max_blob_width_ratio = float(
+            self.get_parameter("max_blob_width_ratio").value
+        )
+        self.max_blob_height_ratio = float(
+            self.get_parameter("max_blob_height_ratio").value
+        )
+        self.min_dominance = float(self.get_parameter("min_dominance").value)
+        self.temporal_alpha = float(self.get_parameter("temporal_alpha").value)
+        self.max_bearing_jump = float(self.get_parameter("max_bearing_jump").value)
         self.publish_rejected = bool(self.get_parameter("publish_rejected").value)
         self.max_publish_hz = float(self.get_parameter("max_publish_hz").value)
 
         self.latest_camera_info: Optional[CameraInfo] = None
+        self.latest_imu: Optional[Imu] = None
         self.last_publish_time = None
+        self.filtered_bearing: Optional[float] = None
+        self.last_raw_bearing: Optional[float] = None
 
         self.create_subscription(
             CameraInfo,
@@ -77,13 +112,19 @@ class SunYawNode(Node):
             10,
         )
         self.create_subscription(Image, self.image_topic, self._on_image, 10)
+        if self.use_imu_tilt_compensation:
+            self.create_subscription(Imu, self.imu_topic, self._on_imu, 10)
 
         self.yaw_pub = self.create_publisher(
             PoseWithCovarianceStamped,
             self.sun_yaw_topic,
             10,
         )
-        self.conf_pub = self.create_publisher(Float32, self.confidence_topic, 10)
+        self.conf_pub = (
+            self.create_publisher(Float32, self.confidence_topic, 10)
+            if self.publish_confidence
+            else None
+        )
 
         self.get_logger().info("Sun Yaw Node initialized.")
         self.get_logger().info(f"Image topic       : {self.image_topic}")
@@ -92,9 +133,14 @@ class SunYawNode(Node):
         self.get_logger().info(
             f"World sun yaw     : {self.world_sun_yaw:.3f} rad"
         )
+        if self.use_imu_tilt_compensation:
+            self.get_logger().info(f"IMU tilt topic    : {self.imu_topic}")
 
     def _on_camera_info(self, msg: CameraInfo) -> None:
         self.latest_camera_info = msg
+
+    def _on_imu(self, msg: Imu) -> None:
+        self.latest_imu = msg
 
     def _on_image(self, msg: Image) -> None:
         if self.latest_camera_info is None:
@@ -110,7 +156,12 @@ class SunYawNode(Node):
             gray,
             self.latest_camera_info,
         )
-        self.conf_pub.publish(Float32(data=float(confidence)))
+        observed_bearing, confidence = self._filter_bearing(
+            observed_bearing,
+            confidence,
+        )
+        if self.conf_pub is not None:
+            self.conf_pub.publish(Float32(data=float(confidence)))
 
         if confidence < self.min_confidence and not self.publish_rejected:
             self.last_publish_time = self.get_clock().now()
@@ -176,10 +227,26 @@ class SunYawNode(Node):
         crop_h = max(1, int(height * max(0.05, min(self.top_crop_ratio, 1.0))))
         crop = gray[:crop_h, :]
 
-        threshold = np.percentile(crop, self.bright_percentile)
+        peak_luma = float(np.max(crop))
+        if peak_luma < self.min_peak_luma:
+            return 0.0, 0.0
+
+        threshold = float(np.percentile(crop, self.bright_percentile))
+        if peak_luma - threshold < self.min_dominance:
+            threshold = max(0.0, peak_luma - self.min_dominance)
+
         bright = crop >= threshold
         if not np.any(bright):
             return 0.0, 0.0
+
+        peak_y, peak_x = np.unravel_index(int(np.argmax(crop)), crop.shape)
+        component = self._connected_component_from_seed(
+            bright,
+            int(peak_y),
+            int(peak_x),
+        )
+        if np.any(component):
+            bright = component
 
         weights = np.maximum(crop - threshold, 1.0) * bright
         total = float(np.sum(weights))
@@ -187,26 +254,215 @@ class SunYawNode(Node):
             return 0.0, 0.0
 
         xs = np.arange(width, dtype=np.float32)[None, :]
+        ys = np.arange(crop_h, dtype=np.float32)[:, None]
         u = float(np.sum(weights * xs) / total)
+        v = float(np.sum(weights * ys) / total)
+        dx = xs - u
+        dy = ys - v
+        std_x = math.sqrt(float(np.sum(weights * dx * dx) / total))
+        std_y = math.sqrt(float(np.sum(weights * dy * dy) / total))
 
         fx = float(camera_info.k[0]) if camera_info.k[0] else 0.0
+        fy = float(camera_info.k[4]) if camera_info.k[4] else 0.0
         cx = float(camera_info.k[2]) if camera_info.k[2] else 0.5 * (width - 1)
+        cy = float(camera_info.k[5]) if camera_info.k[5] else 0.5 * (height - 1)
         if fx <= 1e-6:
             fx = 0.5 * width
+        if fy <= 1e-6:
+            fy = fx
 
         x_over_z = (u - cx) / fx
-        bearing_camera = -math.atan(x_over_z)
-        bearing_base = self.normalize_angle(
-            self.camera_yaw_offset + bearing_camera
-        )
+        y_over_z = (v - cy) / fy
+        ray_base = self._ray_from_optical_ray(x_over_z, y_over_z)
+        bearing_base = self._bearing_from_base_ray(ray_base)
+        if self.use_imu_tilt_compensation and self.latest_imu is not None:
+            bearing_base = self._tilt_compensated_bearing(ray_base)
 
-        contrast = float(np.std(crop) / (np.mean(crop) + 1e-6))
-        saturation = float(np.mean(crop[bright]) / 255.0)
         area_ratio = float(np.count_nonzero(bright) / bright.size)
-        focus = min(1.0, max(0.0, 0.02 / max(area_ratio, 1e-6)))
-        confidence = max(0.0, min(1.0, contrast * saturation * focus * 2.5))
+        if area_ratio < self.min_area_ratio or area_ratio > self.max_area_ratio:
+            return bearing_base, 0.0
+
+        width_ratio = std_x / max(1.0, float(width))
+        height_ratio = std_y / max(1.0, float(crop_h))
+        if width_ratio > self.max_blob_width_ratio:
+            return bearing_base, 0.0
+        if height_ratio > self.max_blob_height_ratio:
+            return bearing_base, 0.0
+
+        mean_luma = float(np.mean(crop))
+        dominance = max(0.0, peak_luma - threshold) / max(1.0, self.min_dominance)
+        brightness = max(0.0, min(1.0, (peak_luma - self.min_peak_luma) / 65.0))
+        contrast = max(0.0, min(1.0, (peak_luma - mean_luma) / 180.0))
+        area_score = self._trapezoid_score(
+            area_ratio,
+            self.min_area_ratio,
+            self.min_area_ratio * 8.0,
+            self.max_area_ratio * 0.55,
+            self.max_area_ratio,
+        )
+        compact_x = max(0.0, 1.0 - width_ratio / self.max_blob_width_ratio)
+        compact_y = max(0.0, 1.0 - height_ratio / self.max_blob_height_ratio)
+        top_score = max(0.0, 1.0 - (v / max(1.0, float(crop_h))) * 0.7)
+        confidence = (
+            brightness
+            * contrast
+            * min(1.0, dominance)
+            * area_score
+            * math.sqrt(compact_x * compact_y)
+            * top_score
+        )
+        confidence = max(0.0, min(1.0, confidence))
 
         return bearing_base, confidence
+
+    @staticmethod
+    def _connected_component_from_seed(
+        mask: np.ndarray,
+        seed_y: int,
+        seed_x: int,
+    ) -> np.ndarray:
+        height, width = mask.shape
+        component = np.zeros_like(mask, dtype=bool)
+        if not (0 <= seed_y < height and 0 <= seed_x < width):
+            return component
+        if not bool(mask[seed_y, seed_x]):
+            return component
+
+        stack = [(seed_y, seed_x)]
+        component[seed_y, seed_x] = True
+        while stack:
+            y, x = stack.pop()
+            for ny in range(max(0, y - 1), min(height, y + 2)):
+                for nx in range(max(0, x - 1), min(width, x + 2)):
+                    if component[ny, nx] or not bool(mask[ny, nx]):
+                        continue
+                    component[ny, nx] = True
+                    stack.append((ny, nx))
+        return component
+
+    def _ray_from_optical_ray(
+        self,
+        x_over_z: float,
+        y_over_z: float,
+    ) -> np.ndarray:
+        yaw = self.camera_yaw_offset
+        elev = self.camera_elevation
+        cyaw = math.cos(yaw)
+        syaw = math.sin(yaw)
+        ce = math.cos(elev)
+        se = math.sin(elev)
+
+        forward_x = ce * cyaw
+        forward_y = ce * syaw
+        forward_z = se
+
+        right_x = syaw
+        right_y = -cyaw
+        right_z = 0.0
+
+        down_x = forward_y * right_z - forward_z * right_y
+        down_y = forward_z * right_x - forward_x * right_z
+        down_z = forward_x * right_y - forward_y * right_x
+
+        ray_x = forward_x + x_over_z * right_x + y_over_z * down_x
+        ray_y = forward_y + x_over_z * right_y + y_over_z * down_y
+        ray_z = forward_z + x_over_z * right_z + y_over_z * down_z
+        ray = np.array([ray_x, ray_y, ray_z], dtype=np.float64)
+        norm = float(np.linalg.norm(ray))
+        if norm <= 1e-9:
+            return ray
+        return ray / norm
+
+    def _bearing_from_base_ray(self, ray_base: np.ndarray) -> float:
+        return self.normalize_angle(math.atan2(float(ray_base[1]), float(ray_base[0])))
+
+    def _tilt_compensated_bearing(self, ray_base: np.ndarray) -> float:
+        if self.latest_imu is None:
+            return self._bearing_from_base_ray(ray_base)
+
+        roll, pitch = self._roll_pitch_from_quaternion(
+            self.latest_imu.orientation.x,
+            self.latest_imu.orientation.y,
+            self.latest_imu.orientation.z,
+            self.latest_imu.orientation.w,
+        )
+        cr = math.cos(roll)
+        sr = math.sin(roll)
+        cp = math.cos(pitch)
+        sp = math.sin(pitch)
+
+        x, y, z = float(ray_base[0]), float(ray_base[1]), float(ray_base[2])
+        rx_x = x
+        rx_y = cr * y - sr * z
+        rx_z = sr * y + cr * z
+        world0_x = cp * rx_x + sp * rx_z
+        world0_y = rx_y
+        return self.normalize_angle(math.atan2(world0_y, world0_x))
+
+    @staticmethod
+    def _roll_pitch_from_quaternion(
+        x: float,
+        y: float,
+        z: float,
+        w: float,
+    ) -> tuple[float, float]:
+        sinr_cosp = 2.0 * (w * x + y * z)
+        cosr_cosp = 1.0 - 2.0 * (x * x + y * y)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2.0 * (w * y - z * x)
+        sinp = max(-1.0, min(1.0, sinp))
+        pitch = math.asin(sinp)
+        return roll, pitch
+
+    def _filter_bearing(
+        self,
+        observed_bearing: float,
+        confidence: float,
+    ) -> tuple[float, float]:
+        confidence = max(0.0, min(1.0, float(confidence)))
+        observed_bearing = self.normalize_angle(observed_bearing)
+
+        if confidence <= 0.0:
+            return observed_bearing, 0.0
+
+        if self.last_raw_bearing is not None:
+            jump = abs(self.normalize_angle(observed_bearing - self.last_raw_bearing))
+            if jump > self.max_bearing_jump:
+                confidence *= max(0.0, self.max_bearing_jump / jump)
+
+        self.last_raw_bearing = observed_bearing
+
+        if self.filtered_bearing is None:
+            self.filtered_bearing = observed_bearing
+            return observed_bearing, confidence
+
+        alpha = max(0.0, min(1.0, self.temporal_alpha))
+        delta = self.normalize_angle(observed_bearing - self.filtered_bearing)
+        self.filtered_bearing = self.normalize_angle(
+            self.filtered_bearing + alpha * delta
+        )
+        smoothed_jump = abs(delta)
+        if smoothed_jump > self.max_bearing_jump:
+            confidence *= max(0.0, self.max_bearing_jump / smoothed_jump)
+
+        return self.filtered_bearing, confidence
+
+    @staticmethod
+    def _trapezoid_score(
+        value: float,
+        hard_min: float,
+        soft_min: float,
+        soft_max: float,
+        hard_max: float,
+    ) -> float:
+        if value <= hard_min or value >= hard_max:
+            return 0.0
+        if soft_min <= value <= soft_max:
+            return 1.0
+        if value < soft_min:
+            return max(0.0, (value - hard_min) / max(1e-9, soft_min - hard_min))
+        return max(0.0, (hard_max - value) / max(1e-9, hard_max - soft_max))
 
     def _variance_from_confidence(self, confidence: float) -> float:
         confidence = max(0.0, min(1.0, confidence))

@@ -4,7 +4,7 @@ import json
 import math
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -33,14 +33,18 @@ class TerrainMapPublisher(Node):
         self.declare_parameter("safety_map_topic", "/terrain/safety_map")
         self.declare_parameter("mineral_markers_topic", "/terrain/mineral_markers")
         self.declare_parameter("basecamp_marker_topic", "/terrain/basecamp_marker")
+        self.declare_parameter("obstacle_markers_topic", "/terrain/obstacle_markers")
+        self.declare_parameter("coverage_trail_topic", "/terrain/coverage_trail")
         self.declare_parameter("estimated_odom_topic", "/rover/estimated_odom")
         self.declare_parameter("estimated_marker_topic", "/rover/estimated_marker")
         self.declare_parameter("frame_id", "map")
         self.declare_parameter("marker_publish_hz", 2.0)
+        self.declare_parameter("static_publish_hz", 0.5)
         self.declare_parameter("rover_marker_scale", 0.7)
         self.declare_parameter("safety_radius_m", 0.7)
-        self.declare_parameter("trail_max_points", 1200)
-        self.declare_parameter("trail_min_distance_m", 0.08)
+        self.declare_parameter("obstacle_marker_stride", 6)
+        self.declare_parameter("coverage_trail_radius_m", 1.2)
+        self.declare_parameter("coverage_trail_resolution_m", 0.25)
 
         self.terrain_id = str(self.get_parameter("terrain_id").value)
         self.terrain_root = str(self.get_parameter("terrain_root").value)
@@ -53,6 +57,12 @@ class TerrainMapPublisher(Node):
         self.basecamp_marker_topic = str(
             self.get_parameter("basecamp_marker_topic").value
         )
+        self.obstacle_markers_topic = str(
+            self.get_parameter("obstacle_markers_topic").value
+        )
+        self.coverage_trail_topic = str(
+            self.get_parameter("coverage_trail_topic").value
+        )
         self.estimated_odom_topic = str(
             self.get_parameter("estimated_odom_topic").value
         )
@@ -61,11 +71,19 @@ class TerrainMapPublisher(Node):
         )
         self.frame_id = str(self.get_parameter("frame_id").value)
         self.marker_publish_hz = float(self.get_parameter("marker_publish_hz").value)
+        self.static_publish_hz = float(self.get_parameter("static_publish_hz").value)
         self.rover_marker_scale = float(self.get_parameter("rover_marker_scale").value)
         self.safety_radius_m = float(self.get_parameter("safety_radius_m").value)
-        self.trail_max_points = int(self.get_parameter("trail_max_points").value)
-        self.trail_min_distance_m = float(
-            self.get_parameter("trail_min_distance_m").value
+        self.obstacle_marker_stride = max(
+            1,
+            int(self.get_parameter("obstacle_marker_stride").value),
+        )
+        self.coverage_trail_radius_m = float(
+            self.get_parameter("coverage_trail_radius_m").value
+        )
+        self.coverage_trail_resolution_m = max(
+            0.05,
+            float(self.get_parameter("coverage_trail_resolution_m").value),
         )
 
         self.terrain_dir = self.resolve_terrain_dir()
@@ -107,6 +125,16 @@ class TerrainMapPublisher(Node):
             self.basecamp_marker_topic,
             latched_qos,
         )
+        self.obstacle_marker_pub = self.create_publisher(
+            MarkerArray,
+            self.obstacle_markers_topic,
+            latched_qos,
+        )
+        self.coverage_trail_pub = self.create_publisher(
+            MarkerArray,
+            self.coverage_trail_topic,
+            live_qos,
+        )
         self.rover_marker_pub = self.create_publisher(
             MarkerArray,
             self.estimated_marker_topic,
@@ -114,7 +142,8 @@ class TerrainMapPublisher(Node):
         )
 
         self.latest_odom: Optional[Odometry] = None
-        self.trail_points: List[Point] = []
+        self.coverage_cells = set()
+        self.last_coverage_cell: Optional[tuple[int, int]] = None
         self.create_subscription(
             Odometry,
             self.estimated_odom_topic,
@@ -124,12 +153,17 @@ class TerrainMapPublisher(Node):
 
         period = 1.0 / self.marker_publish_hz if self.marker_publish_hz > 0.0 else 0.5
         self.create_timer(period, self._publish_live_markers)
+        static_period = (
+            1.0 / self.static_publish_hz if self.static_publish_hz > 0.0 else 2.0
+        )
+        self.create_timer(static_period, self.publish_static)
 
         self.map_msg = self.build_occupancy_grid()
         self.height_map_msg = self.build_height_map()
         self.safety_map_msg = self.build_safety_map()
         self.mineral_markers = self.build_mineral_markers()
         self.basecamp_markers = self.build_basecamp_markers()
+        self.obstacle_markers = self.build_obstacle_markers()
 
         self.publish_static()
 
@@ -140,6 +174,8 @@ class TerrainMapPublisher(Node):
         self.get_logger().info(f"Safety map       : {self.safety_map_topic}")
         self.get_logger().info(f"Mineral markers  : {self.mineral_markers_topic}")
         self.get_logger().info(f"Basecamp marker  : {self.basecamp_marker_topic}")
+        self.get_logger().info(f"Obstacle markers : {self.obstacle_markers_topic}")
+        self.get_logger().info(f"Coverage trail   : {self.coverage_trail_topic}")
         self.get_logger().info(f"Estimated odom   : {self.estimated_odom_topic}")
         self.get_logger().info(f"Rover marker     : {self.estimated_marker_topic}")
 
@@ -291,11 +327,11 @@ class TerrainMapPublisher(Node):
             sphere.action = Marker.ADD
             sphere.pose.position.x = float(position.get("x", 0.0))
             sphere.pose.position.y = float(position.get("y", 0.0))
-            sphere.pose.position.z = float(position.get("z", 0.0)) + 0.35
+            sphere.pose.position.z = float(position.get("z", 0.0)) + 0.9
             sphere.pose.orientation.w = 1.0
-            sphere.scale.x = 0.45
-            sphere.scale.y = 0.45
-            sphere.scale.z = 0.45
+            sphere.scale.x = 1.25
+            sphere.scale.y = 1.25
+            sphere.scale.z = 1.25
             sphere.color = self.mineral_color(mineral_type)
             sphere.lifetime = Duration(seconds=0.0).to_msg()
             markers.append(sphere)
@@ -308,15 +344,111 @@ class TerrainMapPublisher(Node):
             label.action = Marker.ADD
             label.pose.position.x = sphere.pose.position.x
             label.pose.position.y = sphere.pose.position.y
-            label.pose.position.z = sphere.pose.position.z + 0.45
+            label.pose.position.z = sphere.pose.position.z + 1.15
             label.pose.orientation.w = 1.0
-            label.scale.z = 0.35
+            label.scale.z = 0.75
             label.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=1.0)
-            label.text = f"{mineral_id}:{mineral_type}"
+            label.text = f"M{mineral_id}:{mineral_type}"
             label.lifetime = Duration(seconds=0.0).to_msg()
             markers.append(label)
 
         return MarkerArray(markers=markers)
+
+    def build_obstacle_markers(self) -> MarkerArray:
+        grid = np.asarray(self.obstacle_grid) > 0
+        stride = self.obstacle_marker_stride
+        rows, cols = np.where(grid[::stride, ::stride])
+
+        marker = Marker()
+        marker.header.frame_id = self.frame_id
+        marker.ns = "collision_obstacles"
+        marker.id = 1
+        marker.type = Marker.CUBE_LIST
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = max(self.resolution * stride * 0.85, 0.12)
+        marker.scale.y = max(self.resolution * stride * 0.85, 0.12)
+        marker.scale.z = 0.55
+        marker.color = ColorRGBA(r=1.0, g=0.1, b=0.0, a=0.95)
+        marker.lifetime = Duration(seconds=0.0).to_msg()
+
+        for row, col in zip(rows.tolist(), cols.tolist()):
+            x = self.origin_x + (col * stride + 0.5) * self.resolution
+            y = self.origin_y + (row * stride + 0.5) * self.resolution
+            marker.points.append(Point(x=float(x), y=float(y), z=0.35))
+
+        label = Marker()
+        label.header.frame_id = self.frame_id
+        label.ns = "collision_obstacles_label"
+        label.id = 2
+        label.type = Marker.TEXT_VIEW_FACING
+        label.action = Marker.ADD
+        label.pose.position.x = self.origin_x + 1.0
+        label.pose.position.y = self.origin_y + 1.0
+        label.pose.position.z = 1.5
+        label.pose.orientation.w = 1.0
+        label.scale.z = 0.55
+        label.color = ColorRGBA(r=1.0, g=0.35, b=0.15, a=1.0)
+        label.text = "collision obstacles"
+        label.lifetime = Duration(seconds=0.0).to_msg()
+
+        markers: List[Marker] = [marker, label]
+        markers.extend(self.build_epic_obstacle_markers())
+        return MarkerArray(markers=markers)
+
+    def build_epic_obstacle_markers(self) -> List[Marker]:
+        markers: List[Marker] = []
+        scale_factor = 0.72
+        epic_obstacles = self.meta.get("epic_obstacles", [])
+
+        for idx, obstacle in enumerate(epic_obstacles):
+            position = obstacle.get("position", {})
+            footprint = obstacle.get("footprint_m", [3.0, 3.0])
+            obstacle_type = str(obstacle.get("type", "obstacle"))
+            yaw = float(obstacle.get("yaw", 0.0))
+            x = float(position.get("x", 0.0))
+            y = float(position.get("y", 0.0))
+            color = self.epic_obstacle_color(obstacle_type)
+
+            footprint_marker = Marker()
+            footprint_marker.header.frame_id = self.frame_id
+            footprint_marker.ns = "epic_obstacles"
+            footprint_marker.id = 100 + idx
+            footprint_marker.type = Marker.CUBE
+            footprint_marker.action = Marker.ADD
+            footprint_marker.pose.position.x = x
+            footprint_marker.pose.position.y = y
+            footprint_marker.pose.position.z = 0.9
+            self.set_marker_yaw(footprint_marker, yaw)
+            footprint_marker.scale.x = max(float(footprint[0]) * scale_factor, 1.0)
+            footprint_marker.scale.y = max(float(footprint[1]) * scale_factor, 1.0)
+            footprint_marker.scale.z = 0.35
+            footprint_marker.color = color
+            footprint_marker.lifetime = Duration(seconds=0.0).to_msg()
+            markers.append(footprint_marker)
+
+            label = Marker()
+            label.header.frame_id = self.frame_id
+            label.ns = "epic_obstacle_labels"
+            label.id = 200 + idx
+            label.type = Marker.TEXT_VIEW_FACING
+            label.action = Marker.ADD
+            label.pose.position.x = x
+            label.pose.position.y = y
+            label.pose.position.z = 2.2
+            label.pose.orientation.w = 1.0
+            label.scale.z = 0.58
+            label.color = ColorRGBA(
+                r=min(color.r + 0.18, 1.0),
+                g=min(color.g + 0.18, 1.0),
+                b=min(color.b + 0.18, 1.0),
+                a=1.0,
+            )
+            label.text = self.epic_obstacle_label(obstacle_type)
+            label.lifetime = Duration(seconds=0.0).to_msg()
+            markers.append(label)
+
+        return markers
 
     def build_basecamp_markers(self) -> MarkerArray:
         markers: List[Marker] = []
@@ -332,14 +464,35 @@ class TerrainMapPublisher(Node):
         marker.action = Marker.ADD
         marker.pose.position.x = float(center.get("x", 0.0))
         marker.pose.position.y = float(center.get("y", 0.0))
-        marker.pose.position.z = 0.03
+        marker.pose.position.z = 0.25
         marker.pose.orientation.w = 1.0
         marker.scale.x = radius * 2.0
         marker.scale.y = radius * 2.0
-        marker.scale.z = 0.06
-        marker.color = ColorRGBA(r=0.1, g=0.8, b=1.0, a=0.35)
+        marker.scale.z = 0.5
+        marker.color = ColorRGBA(r=1.0, g=0.68, b=0.0, a=0.88)
         marker.lifetime = Duration(seconds=0.0).to_msg()
         markers.append(marker)
+
+        ring = Marker()
+        ring.header.frame_id = self.frame_id
+        ring.ns = "basecamp_outline"
+        ring.id = 3
+        ring.type = Marker.LINE_STRIP
+        ring.action = Marker.ADD
+        ring.pose.orientation.w = 1.0
+        ring.scale.x = 0.16
+        ring.color = ColorRGBA(r=1.0, g=0.95, b=0.15, a=1.0)
+        for i in range(65):
+            theta = 2.0 * math.pi * i / 64.0
+            ring.points.append(
+                Point(
+                    x=marker.pose.position.x + radius * math.cos(theta),
+                    y=marker.pose.position.y + radius * math.sin(theta),
+                    z=0.7,
+                )
+            )
+        ring.lifetime = Duration(seconds=0.0).to_msg()
+        markers.append(ring)
 
         label = Marker()
         label.header.frame_id = self.frame_id
@@ -349,11 +502,11 @@ class TerrainMapPublisher(Node):
         label.action = Marker.ADD
         label.pose.position.x = marker.pose.position.x
         label.pose.position.y = marker.pose.position.y
-        label.pose.position.z = 1.0
+        label.pose.position.z = 3.2
         label.pose.orientation.w = 1.0
-        label.scale.z = 0.45
-        label.color = ColorRGBA(r=0.7, g=1.0, b=1.0, a=1.0)
-        label.text = "BASE"
+        label.scale.z = 1.15
+        label.color = ColorRGBA(r=1.0, g=0.95, b=0.2, a=1.0)
+        label.text = "BASE CAMP"
         label.lifetime = Duration(seconds=0.0).to_msg()
         markers.append(label)
 
@@ -361,19 +514,10 @@ class TerrainMapPublisher(Node):
 
     def _on_estimated_odom(self, msg: Odometry) -> None:
         self.latest_odom = msg
-        self.update_trail(msg)
-
-    def update_trail(self, odom: Odometry) -> None:
-        p = odom.pose.pose.position
-        point = Point(x=float(p.x), y=float(p.y), z=0.12)
-        if self.trail_points:
-            last = self.trail_points[-1]
-            distance = math.hypot(point.x - last.x, point.y - last.y)
-            if distance < self.trail_min_distance_m:
-                return
-        self.trail_points.append(point)
-        if len(self.trail_points) > self.trail_max_points:
-            self.trail_points = self.trail_points[-self.trail_max_points :]
+        self.reveal_coverage_at(
+            float(msg.pose.pose.position.x),
+            float(msg.pose.pose.position.y),
+        )
 
     def publish_static(self) -> None:
         stamp = self.get_clock().now().to_msg()
@@ -385,13 +529,60 @@ class TerrainMapPublisher(Node):
         self.safety_map_pub.publish(self.safety_map_msg)
         self.stamp_markers(self.mineral_markers, stamp)
         self.stamp_markers(self.basecamp_markers, stamp)
+        self.stamp_markers(self.obstacle_markers, stamp)
         self.mineral_pub.publish(self.mineral_markers)
         self.basecamp_pub.publish(self.basecamp_markers)
+        self.obstacle_marker_pub.publish(self.obstacle_markers)
 
     def _publish_live_markers(self) -> None:
         if self.latest_odom is None:
             return
+        self.coverage_trail_pub.publish(self.build_coverage_trail_marker())
         self.rover_marker_pub.publish(self.build_rover_marker(self.latest_odom))
+
+    def reveal_coverage_at(self, x: float, y: float) -> None:
+        res = self.coverage_trail_resolution_m
+        cx = int(math.floor((x - self.origin_x) / res))
+        cy = int(math.floor((y - self.origin_y) / res))
+        cell = (cx, cy)
+        if cell == self.last_coverage_cell:
+            return
+        self.last_coverage_cell = cell
+
+        radius_cells = int(math.ceil(self.coverage_trail_radius_m / res))
+        radius_sq = self.coverage_trail_radius_m * self.coverage_trail_radius_m
+        for dy in range(-radius_cells, radius_cells + 1):
+            for dx in range(-radius_cells, radius_cells + 1):
+                wx = self.origin_x + (cx + dx + 0.5) * res
+                wy = self.origin_y + (cy + dy + 0.5) * res
+                if (wx - x) * (wx - x) + (wy - y) * (wy - y) <= radius_sq:
+                    self.coverage_cells.add((cx + dx, cy + dy))
+
+    def build_coverage_trail_marker(self) -> MarkerArray:
+        marker = Marker()
+        marker.header.frame_id = self.frame_id
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "coverage_trail"
+        marker.id = 1
+        marker.type = Marker.CUBE_LIST
+        marker.action = Marker.ADD
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = self.coverage_trail_resolution_m * 0.96
+        marker.scale.y = self.coverage_trail_resolution_m * 0.96
+        marker.scale.z = 0.04
+        marker.color = ColorRGBA(r=1.0, g=1.0, b=1.0, a=0.78)
+        marker.lifetime = Duration(seconds=0.0).to_msg()
+
+        for cx, cy in sorted(self.coverage_cells):
+            marker.points.append(
+                Point(
+                    x=self.origin_x + (cx + 0.5) * self.coverage_trail_resolution_m,
+                    y=self.origin_y + (cy + 0.5) * self.coverage_trail_resolution_m,
+                    z=0.12,
+                )
+            )
+
+        return MarkerArray(markers=[marker])
 
     def build_rover_marker(self, odom: Odometry) -> MarkerArray:
         pose = odom.pose.pose
@@ -429,18 +620,7 @@ class TerrainMapPublisher(Node):
             f"y={pose.position.y:.2f}, yaw={yaw:.2f}"
         )
 
-        trail = Marker()
-        trail.header = body.header
-        trail.ns = "estimated_rover_trail"
-        trail.id = 3
-        trail.type = Marker.LINE_STRIP
-        trail.action = Marker.ADD
-        trail.pose.orientation.w = 1.0
-        trail.scale.x = 0.08
-        trail.color = ColorRGBA(r=0.05, g=1.0, b=0.55, a=0.85)
-        trail.points = list(self.trail_points)
-
-        return MarkerArray(markers=[trail, body, text])
+        return MarkerArray(markers=[body, text])
 
     @staticmethod
     def stamp_markers(markers: MarkerArray, stamp) -> None:
@@ -449,13 +629,46 @@ class TerrainMapPublisher(Node):
 
     @staticmethod
     def mineral_color(mineral_type: str) -> ColorRGBA:
-        if mineral_type == "blue":
-            return ColorRGBA(r=0.15, g=0.45, b=1.0, a=1.0)
-        if mineral_type == "red":
+        mineral_type = mineral_type.lower()
+        if "blue" in mineral_type:
+            return ColorRGBA(r=0.0, g=0.75, b=1.0, a=1.0)
+        if "green" in mineral_type:
+            return ColorRGBA(r=0.05, g=1.0, b=0.25, a=1.0)
+        if "red" in mineral_type:
             return ColorRGBA(r=1.0, g=0.15, b=0.05, a=1.0)
-        if mineral_type == "yellow":
+        if "yellow" in mineral_type:
             return ColorRGBA(r=1.0, g=0.85, b=0.05, a=1.0)
         return ColorRGBA(r=0.8, g=0.8, b=0.8, a=1.0)
+
+    @staticmethod
+    def epic_obstacle_label(obstacle_type: str) -> str:
+        labels = {
+            "barracks": "Barracks",
+            "battlecruiser": "Battlecruiser",
+            "goliath": "Goliath",
+            "scv": "SCV",
+        }
+        return labels.get(obstacle_type.lower(), obstacle_type.title())
+
+    @staticmethod
+    def epic_obstacle_color(obstacle_type: str) -> ColorRGBA:
+        obstacle_type = obstacle_type.lower()
+        if "battlecruiser" in obstacle_type:
+            return ColorRGBA(r=0.20, g=0.45, b=1.0, a=0.82)
+        if "barracks" in obstacle_type:
+            return ColorRGBA(r=1.0, g=0.45, b=0.08, a=0.82)
+        if "goliath" in obstacle_type:
+            return ColorRGBA(r=0.95, g=0.18, b=0.95, a=0.82)
+        if "scv" in obstacle_type:
+            return ColorRGBA(r=0.0, g=0.90, b=0.78, a=0.82)
+        return ColorRGBA(r=0.7, g=0.7, b=0.7, a=0.82)
+
+    @staticmethod
+    def set_marker_yaw(marker: Marker, yaw: float) -> None:
+        marker.pose.orientation.x = 0.0
+        marker.pose.orientation.y = 0.0
+        marker.pose.orientation.z = math.sin(yaw * 0.5)
+        marker.pose.orientation.w = math.cos(yaw * 0.5)
 
     @staticmethod
     def yaw_from_quaternion(q) -> float:

@@ -19,14 +19,22 @@ Visualization Manager:
       Enabled: true
       Name: Terrain Height
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /terrain/height_map
     - Alpha: 0.58
       Class: rviz_default_plugins/Map
-      Color Scheme: map
+      Color Scheme: costmap
       Draw Behind: false
       Enabled: true
       Name: Obstacles
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /map
     - Alpha: 0.28
       Class: rviz_default_plugins/Map
@@ -35,15 +43,20 @@ Visualization Manager:
       Enabled: true
       Name: Safety Margin
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /terrain/safety_map
-    - Alpha: 0.45
-      Class: rviz_default_plugins/Map
-      Color Scheme: map
-      Draw Behind: false
+    - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: Coverage Fog
+      Name: Coverage Trail
       Topic:
-        Value: /mission/minimap
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /terrain/coverage_trail
     - Class: rviz_default_plugins/Path
       Color: 0; 210; 255
       Enabled: true
@@ -54,27 +67,43 @@ Visualization Manager:
         Value: /mission/path
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: Mission Markers
+      Name: Collision Obstacles
       Topic:
-        Value: /mission/markers
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /terrain/obstacle_markers
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Minerals
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /terrain/mineral_markers
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Basecamp
       Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /terrain/basecamp_marker
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Estimated Rover
       Topic:
+        Depth: 10
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
         Value: /rover/estimated_marker
   Enabled: true
   Global Options:
-    Background Color: 18; 18; 18
+    Background Color: 55; 55; 55
     Fixed Frame: map
     Frame Rate: 30
   Name: root
@@ -84,6 +113,7 @@ Visualization Manager:
     - Class: rviz_default_plugins/Select
   Views:
     Current:
+      Angle: -1.5707963267948966
       Class: rviz_default_plugins/TopDownOrtho
       Distance: 55
       Name: Top Down

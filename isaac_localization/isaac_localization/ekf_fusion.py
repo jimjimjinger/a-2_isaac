@@ -74,6 +74,7 @@ class EKFFusionNode(Node):
         self.declare_parameter("default_trn_x_cov", 0.10)
         self.declare_parameter("default_trn_y_cov", 0.10)
         self.declare_parameter("default_trn_z_cov", 0.20)
+        self.declare_parameter("max_trn_innovation_m", 1.0)
         self.declare_parameter("default_sun_yaw_cov", 1.50)
         self.declare_parameter("min_sun_yaw_cov", 0.25)
         self.declare_parameter("max_sun_yaw_innovation", 1.20)
@@ -133,6 +134,9 @@ class EKFFusionNode(Node):
         )
         self.default_trn_z_cov = float(
             self.get_parameter("default_trn_z_cov").value
+        )
+        self.max_trn_innovation_m = float(
+            self.get_parameter("max_trn_innovation_m").value
         )
         self.default_sun_yaw_cov = float(
             self.get_parameter("default_sun_yaw_cov").value
@@ -368,6 +372,20 @@ class EKFFusionNode(Node):
             )
             self.last_stamp = stamp
             self.publish_estimate(stamp)
+            return
+
+        trn_xy_innovation = math.hypot(
+            trn_x - self.x[self.IDX_X, 0],
+            trn_y - self.x[self.IDX_Y, 0],
+        )
+        if (
+            self.max_trn_innovation_m > 0.0
+            and trn_xy_innovation > self.max_trn_innovation_m
+        ):
+            self.get_logger().warn(
+                f"TRN rejected: innovation={trn_xy_innovation:.3f} m "
+                f"(measurement x={trn_x:.2f}, y={trn_y:.2f})"
+            )
             return
 
         z = np.array([[trn_x], [trn_y], [trn_z]], dtype=np.float64)
