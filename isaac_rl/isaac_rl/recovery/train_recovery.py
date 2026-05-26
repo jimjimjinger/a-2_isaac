@@ -54,15 +54,18 @@ print(f"[train] rsl-rl-lib version: {RSL_RL_VERSION}")
 
 
 # ── PPO 에이전트 설정 (deprecated policy 형식 — handle_deprecated_rsl_rl_cfg 로 변환) ─
+RESUME_LR = 1e-4   # fixed LR: adaptive가 1e-5로 고착되는 문제 방지
+
+
 @configclass
 class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
-    seed            = 42
-    num_steps_per_env = 24
-    max_iterations  = 3000
-    save_interval   = 200
-    experiment_name = "rover_recovery"
-    empirical_normalization = False
-    obs_groups      = {}          # 빈 dict → rsl-rl 이 "policy" 그룹을 actor/critic 모두에 사용
+    seed              = 42
+    num_steps_per_env = 128    # 96→128: 1000스텝 에피소드(20s) 대비 더 긴 horizon
+    max_iterations    = 3000
+    save_interval     = 200
+    experiment_name   = "rover_recovery"
+    empirical_normalization = True
+    obs_groups        = {}
 
     policy = RslRlPpoActorCriticCfg(
         init_noise_std          = 1.0,
@@ -76,14 +79,14 @@ class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef       = 1.0,
         use_clipped_value_loss = True,
         clip_param            = 0.2,
-        entropy_coef          = 0.005,
+        entropy_coef          = 0.008,
         num_learning_epochs   = 5,
-        num_mini_batches      = 4,
-        learning_rate         = 1e-3,
-        schedule              = "adaptive",
+        num_mini_batches      = 8,
+        learning_rate         = RESUME_LR,
+        schedule              = "fixed",   # adaptive→fixed: LR 1e-5 고착 방지
         gamma                 = 0.99,
         lam                   = 0.95,
-        desired_kl            = 0.01,
+        desired_kl            = 0.02,      # 0.01→0.02: KL tolerance 완화
         max_grad_norm         = 1.0,
     )
 
@@ -113,7 +116,11 @@ runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device="cuda:
 
 if args.checkpoint:
     runner.load(args.checkpoint)
+    # 저장된 optimizer LR(1e-5 수준)을 리셋해서 학습이 다시 진행되도록 함
+    for pg in runner.alg.optimizer.param_groups:
+        pg["lr"] = RESUME_LR
     print(f"[train] 체크포인트 로드: {args.checkpoint}")
+    print(f"[train] optimizer LR 리셋: {RESUME_LR}")
 
 print(f"\n{'='*60}")
 print(f"  Rover Recovery RL 학습 시작")
@@ -133,7 +140,9 @@ policy_out = os.path.join(
     os.path.dirname(__file__), "..", "..", "policies", "recovery_policy.pt"
 )
 os.makedirs(os.path.dirname(policy_out), exist_ok=True)
-torch.save(runner.alg.actor_critic.state_dict(), policy_out)
+torch.save(runner.alg.actor_critic.state_dict() if hasattr(runner.alg, "actor_critic")
+           else {"actor_state_dict": runner.alg.actor.state_dict(),
+                 "critic_state_dict": runner.alg.critic.state_dict()}, policy_out)
 print(f"\n[train] 정책 저장 완료: {policy_out}")
 
 env.close()

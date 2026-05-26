@@ -40,15 +40,48 @@ from rsl_rl.runners import OnPolicyRunner
 import importlib.metadata as metadata
 
 from recovery_env_cfg import RoverRecoveryEnvCfg
+from isaaclab.utils import configclass
 
 RSL_RL_VERSION = metadata.version("rsl-rl-lib")
 
 
-from train_recovery import RoverRecoveryAgentCfg
+# train_recovery를 import하면 최상위 코드(AppLauncher 등)가 재실행되므로 여기서 직접 정의
+@configclass
+class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
+    seed              = 42
+    num_steps_per_env = 128  # obs dim=37, action dim=16
+    max_iterations    = 3000
+    save_interval     = 200
+    experiment_name   = "rover_recovery"
+    empirical_normalization = True
+    obs_groups        = {}
+
+    policy = RslRlPpoActorCriticCfg(
+        init_noise_std           = 1.0,
+        actor_obs_normalization  = False,
+        critic_obs_normalization = False,
+        actor_hidden_dims        = [256, 128, 64],
+        critic_hidden_dims       = [256, 128, 64],
+        activation               = "elu",
+    )
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef        = 1.0,
+        use_clipped_value_loss = True,
+        clip_param             = 0.2,
+        entropy_coef           = 0.008,
+        num_learning_epochs    = 5,
+        num_mini_batches       = 8,
+        learning_rate          = 1e-4,
+        schedule               = "fixed",
+        gamma                  = 0.99,
+        lam                    = 0.95,
+        desired_kl             = 0.02,
+        max_grad_norm          = 1.0,
+    )
 
 env_cfg = RoverRecoveryEnvCfg()
 env_cfg.scene.num_envs = args.num_envs
-env_cfg.episode_length_s = 15.0
+env_cfg.episode_length_s = 20.0
 
 env = ManagerBasedRLEnv(cfg=env_cfg)
 env = RslRlVecEnvWrapper(env)
@@ -63,7 +96,7 @@ print(f"[play] {args.num_envs}개 환경, {args.num_steps} step 실행\n")
 
 policy = runner.get_inference_policy(device="cuda:0")
 
-obs, _ = env.get_observations()
+obs = env.get_observations()
 for step in range(args.num_steps):
     with torch.no_grad():
         actions = policy(obs)
