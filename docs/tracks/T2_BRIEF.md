@@ -85,11 +85,13 @@ T2 (최진우) = Vision (인식) + M0609 (조작)
 
 광물을 **명확한 단색 USD**로 만들면 detection 매우 쉬워짐:
 
-| 광물 타입 | RGB | HSV hue 범위 | 가치 점수 |
-|---------|-----|------------|:---:|
-| **mineral_blue** | (50, 100, 240) | hue 210~230° | 10 |
-| **mineral_red** | (230, 60, 60) | hue 0~10° (or 350~360°) | 25 |
-| **mineral_yellow** | (240, 220, 50) | hue 50~70° | 50 |
+| 광물 타입 | 실제 시각 | mesh 형태 | 가치 점수 |
+|---|---|---|:-:|
+| **blue_mineral** | cyan/teal 결정 클러스터 | 비정형 polytope | 10 |
+| **yellow_mineral** | 밝은 노랑 spike 결정 클러스터 | spike polytope | 50 |
+| **green_gas** | 진녹색 가스 박스 | 정육면체 | 25 |
+
+> 본 문서의 HSV 색기반 detection 은 초기 stub 단계. 실제 운영 = YOLOv8n (`models/mineral_yolo_best.pt`, 3-class).
 
 → T1에 요청: 광물 USD를 위 색으로 생성.
 
@@ -113,9 +115,9 @@ def detect_minerals(rgb_image, estimated_pose):
     
     # 2. 각 광물 타입별 detection
     color_configs = [
-        {"name": "mineral_blue",   "hue_range": (105, 120), "value": 10},
-        {"name": "mineral_red",    "hue_range": (0, 10),    "value": 25},
-        {"name": "mineral_yellow", "hue_range": (25, 35),   "value": 50},
+        {"name": "blue_mineral",   "hue_range": (105, 120), "value": 10},
+        {"name": "green_gas",      "hue_range": (45,  75),  "value": 25},
+        {"name": "yellow_mineral", "hue_range": (25,  35),  "value": 50},
     ]
     
     for cfg in color_configs:

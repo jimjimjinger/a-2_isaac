@@ -18,7 +18,7 @@ USD prim 의 이름 prefix 와 **실제 시각 색상 + 형태** 가 다름. 클
 
 **⚠️ 중요**: USD prim 이름이 "Cube" 라도 실제 mesh 는 cube 가 아닐 수 있음. blue/yellow 는 결정 클러스터, red 만 진짜 cube. → bbox 추정 시 fixed-size cube 가정 X. **실제 mesh 의 axis-aligned bounding box** 사용.
 
-`dataset.yaml` 의 `names:` 순서: `[blue_mineral, green_gas, yellow_mineral]`
+`dataset.yaml` 의 `names:` 순서: `[blue_mineral, yellow_mineral, green_gas]` (YOLO model.names 와 동일 = 단일 컨벤션)
 
 ---
 
@@ -346,7 +346,7 @@ class YoloMineralDetector:
     def __init__(self, model_path: str, conf_threshold: float = 0.5):
         self.model = YOLO(model_path)
         self.conf = conf_threshold
-        self.names = ["blue_mineral", "green_gas", "yellow_mineral"]
+        self.names = ["blue_mineral", "yellow_mineral", "green_gas"]  # = model.names
 
     def detect(self, bgr: np.ndarray) -> List[Detection]:
         results = self.model(bgr, conf=self.conf, verbose=False)

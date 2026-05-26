@@ -21,7 +21,7 @@ T1 김현중 — Environment (5060, 시니어)
       ├─ worlds/                       USD 월드 파일
       ├─ assets/generated_terrains/    절차생성 batch 출력
       └─ scripts/                      ⭐ 우리가 채워야 함
-         ├─ procedural_terrain_generator.py
+         ├─ mars_terrain_generator_v2.py
          ├─ basecamp_visual_builder.py
          └─ mars_physics_config.py
    

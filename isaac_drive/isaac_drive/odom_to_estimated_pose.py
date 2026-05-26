@@ -1,13 +1,17 @@
-"""odom_to_estimated_pose — Isaac Sim 의 /odom 을 I5 인터페이스로 변환하는 어댑터.
+"""odom_to_estimated_pose — Isaac Sim 의 GT odom 을 I5 인터페이스로 변환하는 어댑터.
 
-Isaac Sim 의 ROS2 Bridge 확장은 로버 pose 를 nav_msgs/Odometry(/odom)로
-발행한다. 그런데 coverage_node 와 I5 인터페이스 계약은
+vehicle_v3 는 내장 그래프로 nav_msgs/Odometry 를 /ground_truth/odom 으로
+발행한다 (isaac_ros_topics.md). coverage_node 와 I5 인터페이스 계약은
 geometry_msgs/PoseWithCovarianceStamped (/rover/estimated_pose)를 쓴다.
 이 노드가 그 사이를 메운다 — Odometry.pose 는 PoseWithCovariance 로
 PoseWithCovarianceStamped.pose 와 동일 타입이라 그대로 옮긴다.
 
 실제 시스템에서는 T5 localization 이 /rover/estimated_pose 를 직접
 발행하므로, 이 노드는 그 자리의 시뮬레이션용 placeholder 다.
+
+default odom_topic 은 vehicle_v3 표준 (/ground_truth/odom). 옛 vehicle_v1/
+sim_ros2_bridge 가 /odom 으로 발행하던 시절의 호환은 parameter override
+(`-p odom_topic:=/odom`) 로 가능.
 """
 from __future__ import annotations
 
@@ -22,7 +26,7 @@ class OdomToEstimatedPose(Node):
 
     def __init__(self) -> None:
         super().__init__("odom_to_estimated_pose")
-        self.declare_parameter("odom_topic", "/odom")
+        self.declare_parameter("odom_topic", "/ground_truth/odom")
         self.declare_parameter("pose_topic", "/rover/estimated_pose")
         odom_topic = str(self.get_parameter("odom_topic").value)
         pose_topic = str(self.get_parameter("pose_topic").value)

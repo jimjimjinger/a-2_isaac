@@ -1,669 +1,515 @@
-"""Mission manager node that follows the rover node architecture diagram."""
+"""Mission manager — supervisor level FSM.
 
+Pattern: cmd_vel mux that never touches coverage_node source.
+- EXPLORE: pass-through from /coverage/cmd_vel_raw to /cmd_vel
+- APPROACH: A* way-point pursuit toward best target (mineral or gas).
+  Uses isaac_drive's ObstacleGrid + astar (no source modification — just
+  imports the same algorithm coverage_node uses).
+- PICK_READY: stop within stop_distance (Phase 3 hooks arm trigger here)
+  hysteresis: APPROACH->PICK_READY at stop_dist, PICK_READY->APPROACH at
+  stop_dist + resume_buffer to prevent flapping.
+
+Coverage_node must be launched with topic remap:
+  ros2 run isaac_drive coverage_node --ros-args -r /cmd_vel:=/coverage/cmd_vel_raw
+
+On shutdown the node publishes zero twist a few times so the rover does
+not keep the last angular velocity.
+"""
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from enum import Enum
-from typing import Any
+import math
+import os
+from typing import List, Optional, Tuple
 
 import rclpy
-from action_msgs.msg import GoalStatus
-from isaac_interfaces.action import ExecuteArmTask, NavigateTask
-from isaac_interfaces.msg import (
-    BatteryState,
-    MissionState as MissionStateMsg,
-    PerceptionResult,
-)
-from isaac_interfaces.srv import CheckSystemReady, ResetSimulation, SaveExplorationMap
+from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from rclpy.action import ActionClient
 from rclpy.node import Node
-from rclpy.parameter import Parameter
-from std_msgs.msg import String
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
+from std_msgs.msg import Empty, String
+
+from isaac_interfaces.action import ExecuteArmTask
+from isaac_interfaces.msg import Detection, DetectionArray
+from isaac_drive.navigation.path_planner import astar, simplify_path
+from isaac_drive.navigation.terrain_loader import load_terrain
 
 
-class MissionState(str, Enum):
-    IDLE = "idle"
-    EXPLORING = "exploring"
-    NAVIGATING_TO_MINERAL = "navigating_to_mineral"
-    COLLECTING = "collecting"
-    LOADING_CARGO = "loading_cargo"
-    RETURNING_TO_BASE = "returning_to_base"
-    UNLOADING = "unloading"
-    CHARGING = "charging"
-    COMPLETED = "completed"
-    PAUSED = "paused"
-    ABORTED = "aborted"
-    ERROR = "error"
+def _default_terrain_dir() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.normpath(os.path.join(here, "..", "..", "..", "..", "src",
+                                      "a2_isaac", "isaac_sim", "assets",
+                                      "generated_terrains", "terrain_00004")),
+        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/"
+                           "generated_terrains/terrain_00004"),
+    ]
+    for p in candidates:
+        if os.path.isdir(p):
+            return p
+    return candidates[-1]
 
 
-@dataclass
-class PendingAction:
-    kind: str
-    command: str
-    started_sec: float
-    timeout_sec: float
+SENSOR_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.BEST_EFFORT,
+    durability=DurabilityPolicy.VOLATILE,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=5,
+)
+
+
+VALUE_PRIORITY = {"yellow_mineral": 50.0, "green_gas": 25.0, "blue_mineral": 10.0}
+
+# Per-class stop distance — balanced for wrist cam visibility (max depth ~1.1m)
+# and rover P-control overshoot. T2 standalone uses tighter values (0.25 blue,
+# 0.75 yellow/green) but assumes precise rover positioning; we widen here.
+CLASS_STOP_DIST_M = {
+    "blue_mineral":   0.55,
+    "yellow_mineral": 0.70,
+    "green_gas":      0.70,
+}
+
+
+def _score(det: Detection) -> float:
+    return float(det.value_score) + 0.1 * float(det.confidence)
+
+
+def _stop_dist_for(class_name: str, default_m: float) -> float:
+    return float(CLASS_STOP_DIST_M.get(class_name, default_m))
 
 
 class MissionManagerNode(Node):
-    """Coordinates topics, actions, and services for the whole mission."""
-
-    ACTIVE_STATES = {
-        MissionState.EXPLORING,
-        MissionState.NAVIGATING_TO_MINERAL,
-        MissionState.COLLECTING,
-        MissionState.LOADING_CARGO,
-        MissionState.RETURNING_TO_BASE,
-        MissionState.UNLOADING,
-    }
-
     def __init__(self) -> None:
         super().__init__("mission_manager_node")
-        self._declare_parameters()
 
-        self.state = MissionState.IDLE
-        self.previous_state = MissionState.IDLE
-        self.cargo_count = 0
-        self.collected_count = 0
-        self.current_waypoint_index = 0
-        self.current_target: PerceptionResult | None = None
-        self.pending_action: PendingAction | None = None
-        self.navigation_goal_handle: Any | None = None
-        self.arm_goal_handle: Any | None = None
-        self.paused_from_state = MissionState.IDLE
-        self.last_error = ""
+        self.declare_parameter("approach_engage_dist_m", 8.0)
+        self.declare_parameter("approach_stop_dist_m", 0.75)   # default fallback
+        self.declare_parameter("approach_resume_buffer_m", 0.3)
+        self.declare_parameter("coverage_cmd_stale_sec", 1.0)
+        self.declare_parameter("post_pick_cooldown_sec", 8.0)
+        self.declare_parameter("post_pick_skip_radius_m", 1.0)
+        self.declare_parameter("arm_action_name", "/execute_arm_task")
+        self.declare_parameter("enable_arm_action", True)
+        self.declare_parameter("approach_lin_speed", 0.6)
+        self.declare_parameter("approach_creep_speed", 0.25)
+        self.declare_parameter("steer_gain", 1.5)
+        self.declare_parameter("detection_stale_sec", 1.5)
+        self.declare_parameter("approach_lock_timeout_sec", 8.0)
+        self.declare_parameter("explore_resume_delay_sec", 2.0)
+        self.declare_parameter("phase_log_period_sec", 1.0)
+        self.declare_parameter("coverage_cmd_topic", "/coverage/cmd_vel_raw")
+        self.declare_parameter("cmd_vel_topic", "/cmd_vel")
+        self.declare_parameter("detections_topic", "/perception/detections")
+        self.declare_parameter("odom_topic", "/ground_truth/odom")
+        self.declare_parameter("phase_topic", "/mission/phase")
+        self.declare_parameter("min_confidence", 0.6)
+        self.declare_parameter("terrain_dir", _default_terrain_dir())
+        self.declare_parameter("path_cell_size", 0.2)
+        self.declare_parameter("path_robot_radius", 0.7)
+        self.declare_parameter("path_replan_target_delta_m", 0.4)
+        self.declare_parameter("waypoint_reach_dist_m", 0.4)
 
-        self.battery_percent = 100.0
-        self.low_battery = False
-        self.critical_battery = False
-        self.system_ready = False
+        self.phase = "EXPLORE"
+        self.target: Optional[Detection] = None
+        self.last_det_stamp_ns: int = 0
+        self.last_coverage_cmd: Optional[Twist] = None
+        self.last_coverage_cmd_ns: int = 0
+        self.last_odom: Optional[Odometry] = None
+        # A* planning state
+        self.ogrid = None
+        self.waypoints: List[Tuple[float, float]] = []
+        self.wp_idx: int = 0
+        self.last_plan_target: Optional[Tuple[float, float]] = None
+        # Arm action state
+        self.arm_in_flight: bool = False
+        self.arm_client: Optional[ActionClient] = None
+        # Post-pick cooldown
+        self.last_pick_world: Optional[Tuple[float, float]] = None
+        self.last_pick_done_ns: int = 0
+        # Target lock-on (kept while APPROACH, even if detection briefly lost)
+        self.lock_target: Optional[Detection] = None
+        self.lock_started_ns: int = 0
+        # EXPLORE resume cooldown — force stop briefly after any APPROACH/PICK
+        # exit so coverage_node can replan from the rover's new position.
+        self.explore_entry_ns: int = 0
 
-        self.mission_state_pub = self.create_publisher(MissionStateMsg, "/mission_state", 10)
-        self.mission_event_pub = self.create_publisher(String, "/mission_event", 10)
+        terrain_dir = str(self.get_parameter("terrain_dir").value)
+        try:
+            _meta, self.ogrid, _fog = load_terrain(
+                terrain_dir,
+                cell_size=float(self.get_parameter("path_cell_size").value),
+                robot_radius=float(self.get_parameter("path_robot_radius").value),
+            )
+            self.get_logger().info(
+                f"obstacle_grid loaded from {terrain_dir} "
+                f"({self.ogrid.rows}x{self.ogrid.cols} @ {self.ogrid.cell_size:.2f}m)")
+        except Exception as e:
+            self.get_logger().error(
+                f"terrain load FAILED ({e}) — APPROACH will fall back to straight-line P-control")
 
-        self.create_subscription(String, "/mission_command", self._on_mission_command, 10)
-        self.create_subscription(BatteryState, "/battery_state", self._on_battery_state, 10)
-        self.create_subscription(PerceptionResult, "/perception_result", self._on_perception_result, 10)
+        if bool(self.get_parameter("enable_arm_action").value):
+            self.arm_client = ActionClient(
+                self, ExecuteArmTask, str(self.get_parameter("arm_action_name").value))
 
-        self.navigation_action_client = ActionClient(self, NavigateTask, "/navigate_task")
-        self.arm_action_client = ActionClient(self, ExecuteArmTask, "/execute_arm_task")
+        self.cmd_pub = self.create_publisher(
+            Twist, str(self.get_parameter("cmd_vel_topic").value), 10)
+        self.phase_pub = self.create_publisher(
+            String, str(self.get_parameter("phase_topic").value), 10)
+        # Tell coverage_node to drop its stale DRIVE path and replan from
+        # the rover's new post-APPROACH/PICK position.
+        self.replan_pub = self.create_publisher(
+            Empty, "/coverage/replan_request", 10)
 
-        self.reset_simulation_client = self.create_client(ResetSimulation, "/reset_simulation")
-        self.check_system_ready_client = self.create_client(CheckSystemReady, "/check_system_ready")
-        self.save_exploration_map_client = self.create_client(SaveExplorationMap, "/save_exploration_map")
+        self.create_subscription(
+            DetectionArray, str(self.get_parameter("detections_topic").value),
+            self._on_detections, SENSOR_QOS)
+        self.create_subscription(
+            Twist, str(self.get_parameter("coverage_cmd_topic").value),
+            self._on_coverage_cmd, 10)
+        self.create_subscription(
+            Odometry, str(self.get_parameter("odom_topic").value),
+            self._on_odom, SENSOR_QOS)
 
-        tick_hz = float(self.get_parameter("tick_hz").value)
-        self.create_timer(1.0 / max(tick_hz, 0.1), self._mission_loop)
+        self.create_timer(0.05, self._tick)
+        self.create_timer(
+            float(self.get_parameter("phase_log_period_sec").value), self._log_phase)
+        self.get_logger().info(
+            "mission_manager_node ready. EXPLORE pass-through active.")
 
-        self._publish_event("mission_manager_ready")
-        self._publish_state()
+    def _on_detections(self, msg: DetectionArray) -> None:
+        # While the arm is executing a pick, ignore new detections so the
+        # current target/phase does not get swapped mid-action.
+        if self.arm_in_flight:
+            return
+        min_conf = float(self.get_parameter("min_confidence").value)
+        cooldown_ns = int(float(self.get_parameter("post_pick_cooldown_sec").value) * 1e9)
+        skip_r = float(self.get_parameter("post_pick_skip_radius_m").value)
+        now_ns = self.get_clock().now().nanoseconds
 
-    def _declare_parameters(self) -> None:
-        self.declare_parameter("tick_hz", 2.0)
-        self.declare_parameter("auto_start", False)
-        self.declare_parameter("cargo_capacity", 3)
-        self.declare_parameter("collection_goal", 3)
-        self.declare_parameter("low_battery_threshold", 25.0)
-        self.declare_parameter("critical_battery_threshold", 10.0)
-        self.declare_parameter("resume_battery_threshold", 80.0)
-        self.declare_parameter("navigation_action_timeout_sec", 120.0)
-        self.declare_parameter("arm_action_timeout_sec", 45.0)
-        self.declare_parameter("base_pose", '{"x": 0.0, "y": 0.0, "yaw": 0.0}')
-        self.declare_parameter(
-            "exploration_waypoints",
-            (
-                '[{"x": 4.0, "y": 0.0, "yaw": 0.0}, '
-                '{"x": 4.0, "y": 4.0, "yaw": 1.57}, '
-                '{"x": 0.0, "y": 4.0, "yaw": 3.14}]'
-            ),
-        )
+        def in_cooldown(d: Detection) -> bool:
+            if self.last_pick_world is None:
+                return False
+            if now_ns - self.last_pick_done_ns >= cooldown_ns:
+                return False
+            dx = d.world_position.x - self.last_pick_world[0]
+            dy = d.world_position.y - self.last_pick_world[1]
+            return (dx * dx + dy * dy) <= (skip_r * skip_r)
 
-    # Periodically evaluates mission progress, battery policy, and automatic next steps.
-    def _mission_loop(self) -> None:
-        if bool(self.get_parameter("auto_start").value) and self.state == MissionState.IDLE:
-            self._check_ready_then_start()
+        candidates = [
+            d for d in msg.detections
+            if d.confidence >= min_conf
+            and not (d.world_position.x == 0.0
+                     and d.world_position.y == 0.0
+                     and d.world_position.z == 0.0)
+            and not in_cooldown(d)
+        ]
+        if not candidates:
+            return
 
-        self._update_battery_flags()
-        self._handle_battery_policy()
-        self._handle_action_timeout()
+        if self.lock_target is not None:
+            # Lock 중 — 같은 mineral 의 detection 만 받아 좌표 + lock timer 갱신.
+            # 다른 mineral 은 무시 (lock 핵심). 같은 mineral 판정 =
+            # class_name 일치 + 좌표 2m 이내.
+            lx = self.lock_target.world_position.x
+            ly = self.lock_target.world_position.y
+            match_r2 = 2.0 * 2.0
+            same = [
+                d for d in candidates
+                if d.class_name == self.lock_target.class_name
+                and (d.world_position.x - lx) ** 2
+                    + (d.world_position.y - ly) ** 2 < match_r2
+            ]
+            if same:
+                # Pick the candidate closest to the locked coordinate, not the
+                # most confident one — prevents lock swap when a different
+                # mineral of the same class happens to land within the match
+                # radius with higher confidence.
+                best = min(
+                    same,
+                    key=lambda d: (d.world_position.x - lx) ** 2
+                                  + (d.world_position.y - ly) ** 2,
+                )
+                self.target = best
+                self.last_det_stamp_ns = now_ns
+                self.lock_target = best
+                self.lock_started_ns = now_ns  # 갱신: 시야 안 들어오면 timeout reset
+            # 같은 mineral 없으면 lock 유지 (timeout 자연 흐름)
+            return
 
-        if self.state == MissionState.EXPLORING and self.pending_action is None:
-            self._dispatch_next_exploration_goal()
+        # Lock 없음 — best target 자유 선택
+        best = max(candidates, key=_score)
+        self.target = best
+        self.last_det_stamp_ns = now_ns
 
-        if self.state == MissionState.CHARGING and self.battery_percent >= self._resume_battery_threshold:
-            self._publish_event("battery_recovered", battery_percent=self.battery_percent)
-            if self.cargo_count > 0:
-                self._return_to_base()
+    def _on_coverage_cmd(self, msg: Twist) -> None:
+        self.last_coverage_cmd = msg
+        self.last_coverage_cmd_ns = self.get_clock().now().nanoseconds
+
+    def _on_odom(self, msg: Odometry) -> None:
+        self.last_odom = msg
+
+    def _tick(self) -> None:
+        # During arm action, hold rover stopped and freeze FSM transitions.
+        if self.arm_in_flight:
+            self.cmd_pub.publish(Twist())
+            return
+
+        now_ns = self.get_clock().now().nanoseconds
+        stale_ns = int(float(self.get_parameter("detection_stale_sec").value) * 1e9)
+        det_fresh = (self.target is not None) and (now_ns - self.last_det_stamp_ns < stale_ns)
+
+        # Target lock-on: keep approaching cached target if detection briefly
+        # lost, until approach_lock_timeout_sec elapses.
+        lock_timeout_ns = int(float(self.get_parameter("approach_lock_timeout_sec").value) * 1e9)
+        if not det_fresh and self.lock_target is not None:
+            if now_ns - self.lock_started_ns < lock_timeout_ns:
+                # use lock as virtual target
+                self.target = self.lock_target
+                det_fresh = True
             else:
-                self._transition(MissionState.EXPLORING)
+                self.lock_target = None
+                self.lock_started_ns = 0
 
-        self._publish_state()
+        engage_d = float(self.get_parameter("approach_engage_dist_m").value)
+        default_stop_d = float(self.get_parameter("approach_stop_dist_m").value)
+        target_cls = self.target.class_name if self.target is not None else ""
+        stop_d = _stop_dist_for(target_cls, default_stop_d)
+        resume_d = stop_d + float(self.get_parameter("approach_resume_buffer_m").value)
 
-    def _on_mission_command(self, msg: String) -> None:
-        command = self._parse_command(msg.data)
-        name = str(command.get("command", command.get("type", msg.data))).strip().lower()
+        dist = self._distance_to_target() if det_fresh else float("inf")
 
-        if name == "start":
-            self._check_ready_then_start()
-        elif name == "pause":
-            self._pause_mission()
-        elif name == "resume":
-            self._resume_mission()
-        elif name == "abort":
-            self._abort_mission("abort_command")
-        elif name == "reset":
-            self._request_reset_simulation(command)
-        elif name == "return_to_base":
-            self._return_to_base()
-        elif name == "save_map":
-            self._request_save_exploration_map(command)
-        elif name == "check_ready":
-            self._request_check_system_ready(start_after_ready=False)
-        elif name == "set_waypoints":
-            waypoints = command.get("waypoints")
-            if isinstance(waypoints, list) and waypoints:
-                self.set_parameters([Parameter("exploration_waypoints", value=json.dumps(waypoints))])
-                self.current_waypoint_index = 0
-                self._publish_event("waypoints_updated", count=len(waypoints))
+        prev_phase = self.phase
+        if not det_fresh:
+            self.phase = "EXPLORE"
+        elif prev_phase == "PICK_READY":
+            # Hysteresis: stay PICK_READY until rover drifts past resume_d
+            self.phase = "PICK_READY" if dist <= resume_d else "APPROACH"
+        else:
+            if dist <= stop_d:
+                self.phase = "PICK_READY"
+            elif dist <= engage_d:
+                self.phase = "APPROACH"
             else:
-                self._set_error("set_waypoints requires a non-empty waypoints list")
+                self.phase = "EXPLORE"
+
+        if self.phase != prev_phase:
+            self.get_logger().info(
+                f"phase: {prev_phase} -> {self.phase}"
+                + (f" (target {self.target.class_name} world=("
+                   f"{self.target.world_position.x:.2f},"
+                   f"{self.target.world_position.y:.2f}), dist={dist:.2f}m, "
+                   f"stop_d={stop_d:.2f}m)"
+                   if det_fresh else ""))
+            if self.phase != "APPROACH":
+                self.waypoints = []
+                self.wp_idx = 0
+                self.last_plan_target = None
+            if self.phase == "APPROACH" and prev_phase != "APPROACH":
+                # Lock onto this target's coordinates for the duration of APPROACH
+                self.lock_target = self.target
+                self.lock_started_ns = now_ns
+            if self.phase != "APPROACH" and self.phase != "PICK_READY":
+                self.lock_target = None
+                self.lock_started_ns = 0
+            if self.phase == "PICK_READY" and prev_phase != "PICK_READY":
+                self._send_arm_goal()
+            if self.phase == "EXPLORE" and prev_phase != "EXPLORE":
+                # Drop stale coverage cmd, ask coverage to replan from the new
+                # rover position, and start a brief cooldown so the replan can
+                # complete before we start passing through its cmd_vel.
+                self.last_coverage_cmd = None
+                self.last_coverage_cmd_ns = 0
+                self.explore_entry_ns = now_ns
+                self.replan_pub.publish(Empty())
+
+        if self.phase == "EXPLORE":
+            # Hold zero twist briefly so coverage can publish a fresh path
+            # for the post-APPROACH/PICK rover position.
+            resume_delay_ns = int(
+                float(self.get_parameter("explore_resume_delay_sec").value) * 1e9)
+            in_resume_cooldown = (
+                self.explore_entry_ns > 0
+                and (now_ns - self.explore_entry_ns) < resume_delay_ns)
+            stale_sec = float(self.get_parameter("coverage_cmd_stale_sec").value)
+            cmd_age = (now_ns - self.last_coverage_cmd_ns) / 1e9 \
+                if self.last_coverage_cmd_ns else float("inf")
+            if in_resume_cooldown:
+                self.cmd_pub.publish(Twist())
+            elif self.last_coverage_cmd is not None and cmd_age < stale_sec:
+                self.cmd_pub.publish(self.last_coverage_cmd)
+            else:
+                self.cmd_pub.publish(Twist())
+        elif self.phase == "APPROACH":
+            self.cmd_pub.publish(self._approach_twist(dist))
+        else:  # PICK_READY
+            self.cmd_pub.publish(Twist())
+
+    def _distance_to_target(self) -> float:
+        if self.target is None or self.last_odom is None:
+            return float("inf")
+        rx = self.last_odom.pose.pose.position.x
+        ry = self.last_odom.pose.pose.position.y
+        tx = self.target.world_position.x
+        ty = self.target.world_position.y
+        return math.hypot(tx - rx, ty - ry)
+
+    def _approach_twist(self, dist: float) -> Twist:
+        t = Twist()
+        if self.target is None or self.last_odom is None:
+            return t
+
+        rx = self.last_odom.pose.pose.position.x
+        ry = self.last_odom.pose.pose.position.y
+        tx = self.target.world_position.x
+        ty = self.target.world_position.y
+
+        self._maybe_replan(rx, ry, tx, ty)
+
+        if self.waypoints:
+            wp_reach = float(self.get_parameter("waypoint_reach_dist_m").value)
+            while self.wp_idx < len(self.waypoints) - 1:
+                wx, wy = self.waypoints[self.wp_idx]
+                if math.hypot(wx - rx, wy - ry) < wp_reach:
+                    self.wp_idx += 1
+                else:
+                    break
+            goal_x, goal_y = self.waypoints[self.wp_idx]
         else:
-            self._set_error(f"unknown mission command: {name}")
+            goal_x, goal_y = tx, ty
 
-    def _on_battery_state(self, msg: BatteryState) -> None:
-        self.battery_percent = self._clamp(float(msg.percentage), 0.0, 100.0)
-        self.low_battery = bool(msg.is_low) or self.battery_percent <= self._low_battery_threshold
-        self.critical_battery = bool(msg.is_critical) or self.battery_percent <= self._critical_battery_threshold
-        if self.battery_percent >= self._resume_battery_threshold:
-            self.low_battery = False
-            self.critical_battery = False
+        q = self.last_odom.pose.pose.orientation
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        bearing = math.atan2(goal_y - ry, goal_x - rx)
+        heading_err = math.atan2(math.sin(bearing - yaw), math.cos(bearing - yaw))
 
-    def _on_perception_result(self, msg: PerceptionResult) -> None:
-        if not msg.mineral_detected or self.state != MissionState.EXPLORING:
-            return
-
-        self.current_target = msg
-        self._publish_event(
-            "mineral_detected",
-            object_id=msg.object_id,
-            x=msg.x,
-            y=msg.y,
-            z=msg.z,
-            confidence=msg.confidence,
-        )
-        self._cancel_active_navigation_goal()
-        self.pending_action = None
-        self._dispatch_navigation_task(
-            MissionState.NAVIGATING_TO_MINERAL,
-            "drive_to_mineral",
-            msg.x,
-            msg.y,
-            0.0,
-            target_id=msg.object_id,
-            metadata={"source": "perception_result", "confidence": msg.confidence},
-        )
-
-    def _check_ready_then_start(self) -> None:
-        if self.state in self.ACTIVE_STATES:
-            return
-        self._request_check_system_ready(start_after_ready=True)
-
-    def _start_mission(self) -> None:
-        self._clear_runtime_state()
-        self._transition(MissionState.EXPLORING)
-        self._publish_event("mission_started")
-
-    def _pause_mission(self) -> None:
-        if self.state not in self.ACTIVE_STATES:
-            return
-        self.paused_from_state = self.state
-        self._cancel_active_navigation_goal()
-        self._cancel_active_arm_goal()
-        self.pending_action = None
-        self._transition(MissionState.PAUSED)
-        self._publish_event("mission_paused")
-
-    def _resume_mission(self) -> None:
-        if self.state != MissionState.PAUSED:
-            return
-        self._publish_event("mission_resumed")
-        if self.paused_from_state == MissionState.RETURNING_TO_BASE or self.low_battery:
-            self._return_to_base()
-        elif self.cargo_count > 0 and self._cargo_full():
-            self._return_to_base()
+        creep_d = float(self.get_parameter("approach_stop_dist_m").value) * 2.0
+        if dist < creep_d:
+            lin = float(self.get_parameter("approach_creep_speed").value)
         else:
-            self._transition(MissionState.EXPLORING)
+            lin = float(self.get_parameter("approach_lin_speed").value)
+        if abs(heading_err) > 0.4:
+            lin *= 0.3
+        t.linear.x = lin
+        t.angular.z = float(self.get_parameter("steer_gain").value) * heading_err
+        max_ang = 1.2
+        if t.angular.z > max_ang:
+            t.angular.z = max_ang
+        elif t.angular.z < -max_ang:
+            t.angular.z = -max_ang
+        return t
 
-    def _abort_mission(self, reason: str) -> None:
-        self._cancel_active_navigation_goal()
-        self._cancel_active_arm_goal()
-        self.pending_action = None
-        self._transition(MissionState.ABORTED)
-        self._publish_event("mission_aborted", reason=reason)
-
-    def _return_to_base(self) -> None:
-        base_pose = self._load_json_parameter("base_pose", {"x": 0.0, "y": 0.0, "yaw": 0.0})
-        if not self._valid_pose(base_pose):
-            self._set_error("base_pose parameter must include x and y")
+    def _maybe_replan(self, rx: float, ry: float, tx: float, ty: float) -> None:
+        if self.ogrid is None:
             return
-        self._dispatch_navigation_task(
-            MissionState.RETURNING_TO_BASE,
-            "return_to_base",
-            float(base_pose["x"]),
-            float(base_pose["y"]),
-            float(base_pose.get("yaw", 0.0)),
-            metadata={"source": "mission_manager"},
+        need_replan = (
+            not self.waypoints
+            or self.last_plan_target is None
+            or math.hypot(tx - self.last_plan_target[0],
+                          ty - self.last_plan_target[1])
+                > float(self.get_parameter("path_replan_target_delta_m").value)
         )
-
-    def _dispatch_next_exploration_goal(self) -> None:
-        waypoints = self._load_json_parameter("exploration_waypoints", [])
-        if not waypoints:
-            self._set_error("exploration_waypoints parameter is empty")
+        if not need_replan:
             return
 
-        waypoint = waypoints[self.current_waypoint_index % len(waypoints)]
-        self.current_waypoint_index += 1
-        if not self._valid_pose(waypoint):
-            self._set_error("exploration waypoint must include x and y")
+        start = self.ogrid.world_to_cell(rx, ry, clip=True)
+        goal = self.ogrid.world_to_cell(tx, ty, clip=True)
+        # If the start or goal cell itself is blocked (mineral sitting on
+        # an inflated obstacle, or rover anchored on edge), nudge to the
+        # nearest free cell for a best-effort plan.
+        if self.ogrid.grid[start] == 1:
+            start = self._nearest_free(start)
+        if goal is not None and self.ogrid.grid[goal] == 1:
+            goal = self._nearest_free(goal)
+
+        path = astar(self.ogrid.grid, start, goal) if start and goal else None
+        if not path:
+            self.get_logger().warn(
+                f"A* no path: start={start} goal={goal} target=({tx:.2f},{ty:.2f}) "
+                f"— falling back to straight-line",
+                throttle_duration_sec=2.0)
+            self.waypoints = []
+            self.last_plan_target = (tx, ty)
             return
 
-        self._dispatch_navigation_task(
-            MissionState.EXPLORING,
-            "explore_waypoint",
-            float(waypoint["x"]),
-            float(waypoint["y"]),
-            float(waypoint.get("yaw", 0.0)),
-            metadata={"source": "mission_waypoint"},
-        )
+        path = simplify_path(self.ogrid.grid, path)
+        self.waypoints = [self.ogrid.cell_to_world(i, j) for (i, j) in path]
+        self.wp_idx = 1 if len(self.waypoints) > 1 else 0
+        self.last_plan_target = (tx, ty)
+        self.get_logger().info(
+            f"A* replanned: {len(self.waypoints)} waypoints "
+            f"to ({tx:.2f},{ty:.2f})")
 
-    def _dispatch_navigation_task(
-        self,
-        next_state: MissionState,
-        command: str,
-        target_x: float,
-        target_y: float,
-        target_yaw: float,
-        target_id: str = "",
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if self.pending_action is not None:
+    def _send_arm_goal(self) -> None:
+        if self.arm_client is None or self.target is None or self.arm_in_flight:
             return
-        if not self.navigation_action_client.server_is_ready():
-            self._set_error("/navigate_task action server is not ready")
+        if not self.arm_client.wait_for_server(timeout_sec=1.0):
+            self.get_logger().warn(
+                "arm action server not available — skipping pick. Will retry on next PICK_READY.",
+                throttle_duration_sec=5.0)
             return
-
-        goal = NavigateTask.Goal()
-        goal.command = command
-        goal.target_x = float(target_x)
-        goal.target_y = float(target_y)
-        goal.target_yaw = float(target_yaw)
-        goal.target_id = target_id
-        goal.metadata = json.dumps(metadata or {})
-
-        self._transition(next_state)
-        self.pending_action = PendingAction(
-            kind="navigation",
-            command=command,
-            started_sec=self.get_clock().now().nanoseconds / 1e9,
-            timeout_sec=float(self.get_parameter("navigation_action_timeout_sec").value),
-        )
-        send_future = self.navigation_action_client.send_goal_async(goal, feedback_callback=self._on_navigation_feedback)
-        send_future.add_done_callback(self._on_navigation_goal_response)
-        self._publish_event("navigation_task_sent", command=command, target_id=target_id)
-
-    def _dispatch_arm_task(
-        self,
-        next_state: MissionState,
-        command: str,
-        target: PerceptionResult | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> None:
-        if self.pending_action is not None:
-            return
-        if not self.arm_action_client.server_is_ready():
-            self._set_error("/execute_arm_task action server is not ready")
-            return
-
         goal = ExecuteArmTask.Goal()
-        goal.command = command
-        goal.target_id = target.object_id if target else ""
-        goal.target_x = float(target.x) if target else 0.0
-        goal.target_y = float(target.y) if target else 0.0
-        goal.target_z = float(target.z) if target else 0.0
-        goal.metadata = json.dumps(metadata or {})
+        goal.command = "pick_mineral"
+        goal.target_id = str(self.target.mineral_id)
+        goal.target_x = float(self.target.world_position.x)
+        goal.target_y = float(self.target.world_position.y)
+        goal.target_z = float(self.target.world_position.z)
+        goal.metadata = self.target.class_name
+        self.arm_in_flight = True
+        self._pending_pick_world = (goal.target_x, goal.target_y)
+        future = self.arm_client.send_goal_async(goal)
+        future.add_done_callback(self._on_arm_goal_accepted)
+        self.get_logger().info(
+            f"arm action sent: pick_mineral target_id={goal.target_id} "
+            f"class={goal.metadata} xyz=({goal.target_x:.2f},{goal.target_y:.2f},"
+            f"{goal.target_z:.2f})")
 
-        self._transition(next_state)
-        self.pending_action = PendingAction(
-            kind="arm",
-            command=command,
-            started_sec=self.get_clock().now().nanoseconds / 1e9,
-            timeout_sec=float(self.get_parameter("arm_action_timeout_sec").value),
-        )
-        send_future = self.arm_action_client.send_goal_async(goal, feedback_callback=self._on_arm_feedback)
-        send_future.add_done_callback(self._on_arm_goal_response)
-        self._publish_event("arm_task_sent", command=command, target_id=goal.target_id)
-
-    def _on_navigation_goal_response(self, future: Any) -> None:
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.pending_action = None
-            self._set_error("navigation task goal rejected")
-            return
-        self.navigation_goal_handle = goal_handle
-        goal_handle.get_result_async().add_done_callback(
-            lambda done, handle=goal_handle: self._on_navigation_result(done, handle)
-        )
-
-    def _on_navigation_feedback(self, feedback_msg: Any) -> None:
-        feedback = feedback_msg.feedback
-        self._publish_event(
-            "navigation_task_feedback",
-            task_state=feedback.state,
-            progress=feedback.progress,
-            message=feedback.message,
-        )
-
-    def _on_navigation_result(self, future: Any, goal_handle: Any) -> None:
-        if goal_handle is not self.navigation_goal_handle:
-            self._publish_event("stale_navigation_result_ignored")
-            return
-        result_msg = future.result()
-        result = result_msg.result
-        status = result_msg.status
-        command = self.pending_action.command if self.pending_action else ""
-        self.pending_action = None
-        self.navigation_goal_handle = None
-
-        if status != GoalStatus.STATUS_SUCCEEDED or not result.success:
-            self._set_error(f"navigation task {command} failed: {result.message}")
-            return
-
-        self._publish_event("navigation_task_completed", command=command, message=result.message)
-        if command == "drive_to_mineral":
-            self._dispatch_arm_task(MissionState.COLLECTING, "pick_mineral", self.current_target)
-        elif command == "return_to_base":
-            self._dispatch_arm_task(MissionState.UNLOADING, "unload_to_base")
-        else:
-            self._transition(MissionState.EXPLORING)
-
-    def _on_arm_goal_response(self, future: Any) -> None:
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.pending_action = None
-            self._set_error("arm task goal rejected")
-            return
-        self.arm_goal_handle = goal_handle
-        goal_handle.get_result_async().add_done_callback(
-            lambda done, handle=goal_handle: self._on_arm_result(done, handle)
-        )
-
-    def _on_arm_feedback(self, feedback_msg: Any) -> None:
-        feedback = feedback_msg.feedback
-        self._publish_event(
-            "arm_task_feedback",
-            task_state=feedback.state,
-            progress=feedback.progress,
-            message=feedback.message,
-        )
-
-    def _on_arm_result(self, future: Any, goal_handle: Any) -> None:
-        if goal_handle is not self.arm_goal_handle:
-            self._publish_event("stale_arm_result_ignored")
-            return
-        result_msg = future.result()
-        result = result_msg.result
-        status = result_msg.status
-        command = self.pending_action.command if self.pending_action else ""
-        self.pending_action = None
-        self.arm_goal_handle = None
-
-        if status != GoalStatus.STATUS_SUCCEEDED or not result.success:
-            self._set_error(f"arm task {command} failed: {result.message}")
-            return
-
-        self._publish_event("arm_task_completed", command=command, message=result.message)
-        if command == "pick_mineral":
-            self._dispatch_arm_task(MissionState.LOADING_CARGO, "place_to_cargo", self.current_target)
-        elif command == "place_to_cargo":
-            self.cargo_count += 1
-            self.collected_count += 1
-            self.current_target = None
-            self._publish_event("mineral_loaded", cargo_count=self.cargo_count, collected_count=self.collected_count)
-            if self._mission_goal_reached() or self._cargo_full() or self.low_battery:
-                self._return_to_base()
-            else:
-                self._transition(MissionState.EXPLORING)
-        elif command == "unload_to_base":
-            unloaded_count = self.cargo_count
-            self.cargo_count = 0
-            self._publish_event("cargo_unloaded", unloaded_count=unloaded_count)
-            if self._mission_goal_reached():
-                self._transition(MissionState.COMPLETED)
-                self._publish_event("mission_completed", collected_count=self.collected_count)
-            elif self.low_battery:
-                self._transition(MissionState.CHARGING)
-            else:
-                self._transition(MissionState.EXPLORING)
-        elif command == "deploy_solar_panel":
-            self._transition(MissionState.CHARGING)
-
-    def _request_check_system_ready(self, start_after_ready: bool) -> None:
-        if not self.check_system_ready_client.service_is_ready():
-            self._publish_event("check_system_ready_unavailable")
-            if start_after_ready:
-                self._set_error("/check_system_ready service is not ready")
-            return
-        request = CheckSystemReady.Request()
-        request.requester = self.get_name()
-        future = self.check_system_ready_client.call_async(request)
-        future.add_done_callback(lambda done: self._on_check_system_ready(done, start_after_ready))
-
-    def _on_check_system_ready(self, future: Any, start_after_ready: bool) -> None:
-        response = future.result()
-        self.system_ready = bool(response.ready)
-        self._publish_event(
-            "check_system_ready_result",
-            ready=response.ready,
-            missing_nodes=list(response.missing_nodes),
-            message=response.message,
-        )
-        if start_after_ready:
-            if response.ready:
-                self._start_mission()
-            else:
-                self._set_error(f"system is not ready: {response.message}")
-
-    def _request_reset_simulation(self, command: dict[str, Any]) -> None:
-        if not self.reset_simulation_client.service_is_ready():
-            self._set_error("/reset_simulation service is not ready")
-            return
-        request = ResetSimulation.Request()
-        request.reset_world = bool(command.get("reset_world", True))
-        request.reset_robot = bool(command.get("reset_robot", True))
-        request.reset_mission = bool(command.get("reset_mission", True))
-        request.reason = str(command.get("reason", "mission_command"))
-        future = self.reset_simulation_client.call_async(request)
-        future.add_done_callback(self._on_reset_simulation)
-
-    def _on_reset_simulation(self, future: Any) -> None:
-        response = future.result()
-        self._publish_event("reset_simulation_result", success=response.success, message=response.message)
-        if response.success:
-            self._cancel_active_navigation_goal()
-            self._cancel_active_arm_goal()
-            self._clear_runtime_state()
-            self._transition(MissionState.IDLE)
-        else:
-            self._set_error(f"reset_simulation failed: {response.message}")
-
-    def _request_save_exploration_map(self, command: dict[str, Any]) -> None:
-        if not self.save_exploration_map_client.service_is_ready():
-            self._set_error("/save_exploration_map service is not ready")
-            return
-        request = SaveExplorationMap.Request()
-        request.map_name = str(command.get("map_name", "mars_exploration_map"))
-        request.target_path = str(command.get("target_path", ""))
-        future = self.save_exploration_map_client.call_async(request)
-        future.add_done_callback(self._on_save_exploration_map)
-
-    def _on_save_exploration_map(self, future: Any) -> None:
-        response = future.result()
-        self._publish_event(
-            "save_exploration_map_result",
-            success=response.success,
-            saved_path=response.saved_path,
-            message=response.message,
-        )
-        if not response.success:
-            self._set_error(f"save_exploration_map failed: {response.message}")
-
-    def _handle_battery_policy(self) -> None:
-        if self.state not in self.ACTIVE_STATES:
-            return
-
-        if self.critical_battery:
-            self._publish_event("critical_battery", battery_percent=self.battery_percent)
-            self._cancel_active_navigation_goal()
-            self.pending_action = None
-            self._dispatch_arm_task(MissionState.CHARGING, "deploy_solar_panel")
-            return
-
-        if self.state in {MissionState.COLLECTING, MissionState.LOADING_CARGO, MissionState.UNLOADING}:
-            return
-
-        if self.low_battery and self.state != MissionState.RETURNING_TO_BASE:
-            self._publish_event("low_battery_returning_to_base", battery_percent=self.battery_percent)
-            self._return_to_base()
-
-    def _handle_action_timeout(self) -> None:
-        if self.pending_action is None:
-            return
-        now_sec = self.get_clock().now().nanoseconds / 1e9
-        if now_sec - self.pending_action.started_sec <= self.pending_action.timeout_sec:
-            return
-        timed_out = self.pending_action
-        self.pending_action = None
-        if timed_out.kind == "navigation":
-            self._cancel_active_navigation_goal()
-        elif timed_out.kind == "arm":
-            self._cancel_active_arm_goal()
-        self._set_error(f"{timed_out.kind} action {timed_out.command} timed out")
-
-    def _cancel_active_navigation_goal(self) -> None:
-        if self.navigation_goal_handle is not None:
-            self.navigation_goal_handle.cancel_goal_async()
-            self.navigation_goal_handle = None
-
-    def _cancel_active_arm_goal(self) -> None:
-        if self.arm_goal_handle is not None:
-            self.arm_goal_handle.cancel_goal_async()
-            self.arm_goal_handle = None
-
-    def _transition(self, state: MissionState) -> None:
-        if self.state == state:
-            return
-        self.previous_state = self.state
-        self.state = state
-        self._publish_event("state_changed", previous=self.previous_state.value, current=self.state.value)
-
-    def _publish_state(self) -> None:
-        msg = MissionStateMsg()
-        msg.state = self.state.value
-        msg.previous_state = self.previous_state.value
-        msg.battery_percent = float(self.battery_percent)
-        msg.low_battery = bool(self.low_battery)
-        msg.critical_battery = bool(self.critical_battery)
-        msg.cargo_count = int(self.cargo_count)
-        msg.cargo_capacity = int(self.get_parameter("cargo_capacity").value)
-        msg.collected_count = int(self.collected_count)
-        msg.collection_goal = int(self.get_parameter("collection_goal").value)
-        msg.active_task = self.pending_action.command if self.pending_action else ""
-        msg.last_error = self.last_error
-        self.mission_state_pub.publish(msg)
-
-    def _publish_event(self, event: str, **fields: Any) -> None:
-        payload = {"event": event, "state": self.state.value, **fields}
-        self.mission_event_pub.publish(String(data=json.dumps(payload)))
-
-    def _clear_runtime_state(self) -> None:
-        self.cargo_count = 0
-        self.collected_count = 0
-        self.current_waypoint_index = 0
-        self.current_target = None
-        self.pending_action = None
-        self.navigation_goal_handle = None
-        self.arm_goal_handle = None
-        self.last_error = ""
-
-    def _set_error(self, message: str) -> None:
-        self.last_error = message
-        self._cancel_active_navigation_goal()
-        self._cancel_active_arm_goal()
-        self.pending_action = None
-        self._transition(MissionState.ERROR)
-        self._publish_event("mission_error", message=message)
-        self.get_logger().error(message)
-
-    def _update_battery_flags(self) -> None:
-        self.low_battery = self.low_battery or self.battery_percent <= self._low_battery_threshold
-        self.critical_battery = self.critical_battery or self.battery_percent <= self._critical_battery_threshold
-        if self.battery_percent >= self._resume_battery_threshold:
-            self.low_battery = False
-            self.critical_battery = False
-
-    def _mission_goal_reached(self) -> bool:
-        return self.collected_count >= int(self.get_parameter("collection_goal").value)
-
-    def _cargo_full(self) -> bool:
-        return self.cargo_count >= int(self.get_parameter("cargo_capacity").value)
-
-    @property
-    def _low_battery_threshold(self) -> float:
-        return float(self.get_parameter("low_battery_threshold").value)
-
-    @property
-    def _critical_battery_threshold(self) -> float:
-        return float(self.get_parameter("critical_battery_threshold").value)
-
-    @property
-    def _resume_battery_threshold(self) -> float:
-        return float(self.get_parameter("resume_battery_threshold").value)
-
-    def _load_json_parameter(self, name: str, fallback: Any) -> Any:
-        value = self.get_parameter(name).value
-        if isinstance(value, str):
-            try:
-                return json.loads(value)
-            except json.JSONDecodeError:
-                self._set_error(f"{name} parameter is not valid JSON")
-                return fallback
-        return value
-
-    @staticmethod
-    def _parse_command(data: str) -> dict[str, Any]:
-        text = data.strip()
-        if not text:
-            return {}
+    def _on_arm_goal_accepted(self, future) -> None:
         try:
-            payload = json.loads(text)
-            return payload if isinstance(payload, dict) else {"value": payload}
-        except json.JSONDecodeError:
-            return {"command": text}
+            handle = future.result()
+        except Exception as e:
+            self.get_logger().error(f"arm goal future failed: {e}")
+            self.arm_in_flight = False
+            return
+        if not handle.accepted:
+            self.get_logger().warn("arm goal rejected by server")
+            self.arm_in_flight = False
+            return
+        handle.get_result_async().add_done_callback(self._on_arm_result)
 
-    @staticmethod
-    def _valid_pose(value: Any) -> bool:
-        if not isinstance(value, dict):
-            return False
+    def _on_arm_result(self, future) -> None:
         try:
-            float(value["x"])
-            float(value["y"])
-        except (KeyError, TypeError, ValueError):
-            return False
-        return True
+            result = future.result().result
+            ok = bool(result.success)
+            msg_text = result.message
+        except Exception as e:
+            ok, msg_text = False, f"exception: {e}"
+        self.arm_in_flight = False
+        self.last_pick_done_ns = self.get_clock().now().nanoseconds
+        self.last_pick_world = getattr(self, "_pending_pick_world", None)
+        # Drop the current target so PICK_READY exits and EXPLORE resumes.
+        self.target = None
+        self.last_det_stamp_ns = 0
+        self.get_logger().info(
+            f"arm action done success={ok} message={msg_text!r} — cooldown engaged")
 
-    @staticmethod
-    def _clamp(value: float, minimum: float, maximum: float) -> float:
-        return max(minimum, min(value, maximum))
+    def _nearest_free(self, cell: Tuple[int, int]) -> Tuple[int, int]:
+        i0, j0 = cell
+        for r in range(1, 12):
+            for di in range(-r, r + 1):
+                for dj in range(-r, r + 1):
+                    if max(abs(di), abs(dj)) != r:
+                        continue
+                    ni, nj = i0 + di, j0 + dj
+                    if self.ogrid.in_bounds(ni, nj) and self.ogrid.grid[ni, nj] == 0:
+                        return (ni, nj)
+        return cell
+
+    def _log_phase(self) -> None:
+        s = String()
+        s.data = self.phase
+        self.phase_pub.publish(s)
 
 
 def main(args: list[str] | None = None) -> None:
@@ -674,6 +520,14 @@ def main(args: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        # Publish zero twist a few times so the rover does not keep moving
+        # after shutdown. Wrap in try/except: under SIGINT the publisher's
+        # context may already be invalid by the time we get here.
+        for _ in range(5):
+            try:
+                node.cmd_pub.publish(Twist())
+            except Exception:
+                break
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

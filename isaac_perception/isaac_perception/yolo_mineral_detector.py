@@ -16,12 +16,12 @@ from typing import List, Optional
 import numpy as np
 
 
-CLASS_NAMES = ["blue_mineral", "green_gas", "yellow_mineral"]
-CLASS_COLORS = {
-    0: (255, 100, 100),     # blue
-    1: (100, 255, 100),     # green
-    2: (50, 220, 255),      # yellow
+CLASS_COLORS_BY_NAME = {
+    "blue_mineral":   (255, 100, 100),   # BGR — blue/cyan tint
+    "yellow_mineral": (50, 220, 255),    # BGR — yellow
+    "green_gas":      (100, 255, 100),   # BGR — green
 }
+_DEFAULT_COLOR = (200, 200, 200)
 
 
 @dataclass
@@ -51,7 +51,11 @@ class YoloMineralDetector:
         self.conf = conf
         self.iou = iou
         self.device = device
-        self.names = CLASS_NAMES
+        raw_names = self.model.names
+        if isinstance(raw_names, dict):
+            self.names = [raw_names[i] for i in sorted(raw_names.keys())]
+        else:
+            self.names = list(raw_names)
 
     def detect(self, bgr: np.ndarray) -> List[Detection]:
         """BGR 이미지 → Detection 리스트."""
@@ -85,7 +89,7 @@ class YoloMineralDetector:
         out = bgr.copy()
         for d in dets:
             x1, y1, x2, y2 = [int(v) for v in d.bbox]
-            color = CLASS_COLORS.get(d.cls_id, (200, 200, 200))
+            color = CLASS_COLORS_BY_NAME.get(d.cls_name, _DEFAULT_COLOR)
             cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
             label = f"{d.cls_name} {d.conf:.2f}"
             (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
@@ -96,4 +100,4 @@ class YoloMineralDetector:
         return out
 
 
-__all__ = ["YoloMineralDetector", "Detection", "CLASS_NAMES", "CLASS_COLORS"]
+__all__ = ["YoloMineralDetector", "Detection", "CLASS_COLORS_BY_NAME"]

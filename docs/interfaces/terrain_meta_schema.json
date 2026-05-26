@@ -200,7 +200,7 @@
         "required": ["id", "type", "position", "value"],
         "properties": {
           "id": {"type": "integer", "minimum": 1},
-          "type": {"type": "string", "enum": ["blue", "red", "yellow"]},
+          "type": {"type": "string", "enum": ["blue_mineral", "yellow_mineral", "green_gas"]},
           "position": {
             "type": "object",
             "required": ["x", "y", "z"],

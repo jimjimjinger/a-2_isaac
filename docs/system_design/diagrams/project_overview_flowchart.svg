@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1500 2050"
+     font-family="'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
+
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L11,6 z" fill="#444"/>
+    </marker>
+    <marker id="arrow-loop" markerWidth="12" markerHeight="12" refX="11" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L11,6 z" fill="#9C27B0"/>
+    </marker>
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1500" height="2050" fill="#FAFAFA"/>
+
+  <!-- ════════════ TITLE ════════════ -->
+  <rect x="0" y="0" width="1500" height="120" fill="url(#title-grad)" opacity="0.95"/>
+  <text x="750" y="55" font-size="34" font-weight="bold" text-anchor="middle" fill="white">
+    🚀 화성 광물 수집 자율 탐사 로버
+  </text>
+  <text x="750" y="85" font-size="16" text-anchor="middle" fill="#FFF59D">
+    Procedural Mars Terrain × Vision-driven Autonomy × RL Locomotion × Manipulation
+  </text>
+  <text x="750" y="108" font-size="13" text-anchor="middle" fill="#E1F5FE">
+    6기 프로젝트 — 5인 팀 / 8일 / Isaac Sim 5.1 + IsaacLab 2.3 + ROS2 Humble
+  </text>
+
+  <!-- ════════════ INPUT BLOCK ════════════ -->
+  <g transform="translate(80, 150)">
+    <rect width="1340" height="160" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="12"/>
+    <text x="670" y="35" font-size="20" font-weight="bold" text-anchor="middle" fill="#BF360C">
+      📥 INPUT — 절차생성된 화성 환경 (매 미션 다름)
+    </text>
+
+    <g transform="translate(40, 60)">
+      <rect width="280" height="80" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="140" y="25" font-size="13" font-weight="bold" text-anchor="middle">🗺️ Procedural Terrain</text>
+      <text x="140" y="44" font-size="11" text-anchor="middle" fill="#555">Perlin noise heightmap</text>
+      <text x="140" y="60" font-size="11" text-anchor="middle" fill="#555">암석 분포 + 광물 배치</text>
+      <text x="140" y="72" font-size="10" text-anchor="middle" fill="#888">매 미션 seed별 변경</text>
+    </g>
+
+    <g transform="translate(360, 60)">
+      <rect width="280" height="80" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="140" y="25" font-size="13" font-weight="bold" text-anchor="middle">🌡️ Mars 물리</text>
+      <text x="140" y="44" font-size="11" text-anchor="middle" fill="#555">중력 3.72 m/s² (지구 1/3)</text>
+      <text x="140" y="60" font-size="11" text-anchor="middle" fill="#555">Regolith 마찰 + 모래/암반 zone</text>
+      <text x="140" y="72" font-size="10" text-anchor="middle" fill="#888">"진짜 화성"의 본질</text>
+    </g>
+
+    <g transform="translate(680, 60)">
+      <rect width="280" height="80" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="140" y="25" font-size="13" font-weight="bold" text-anchor="middle">🏠 베이스캠프 (Tier 1)</text>
+      <text x="140" y="44" font-size="11" text-anchor="middle" fill="#555">착륙대 + 돔 + 안테나</text>
+      <text x="140" y="60" font-size="11" text-anchor="middle" fill="#555">시각 형상 (충돌 X)</text>
+      <text x="140" y="72" font-size="10" text-anchor="middle" fill="#888">미션 시작·종료 지점</text>
+    </g>
+
+    <g transform="translate(1000, 60)">
+      <rect width="280" height="80" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="140" y="25" font-size="13" font-weight="bold" text-anchor="middle">💎 광물 (3종)</text>
+      <text x="140" y="44" font-size="11" text-anchor="middle" fill="#555">파랑 10점 / 빨강 25점 / 노랑 50점</text>
+      <text x="140" y="60" font-size="11" text-anchor="middle" fill="#555">확률적 분포 + 무작위 위치</text>
+      <text x="140" y="72" font-size="10" text-anchor="middle" fill="#888">과학적 우선순위 수집</text>
+    </g>
+  </g>
+
+  <!-- Arrow to mission start -->
+  <line x1="750" y1="315" x2="750" y2="365" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="775" y="345" font-size="12" fill="#555">시뮬레이션 시작</text>
+
+  <!-- ════════════ MISSION START ════════════ -->
+  <g transform="translate(610, 370)">
+    <rect width="280" height="60" fill="#212121" rx="30"/>
+    <text x="140" y="38" font-size="18" font-weight="bold" text-anchor="middle" fill="white">🚀 MISSION START</text>
+  </g>
+
+  <line x1="750" y1="430" x2="750" y2="480" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- ════════════ PHASE 1: EXPLORE ════════════ -->
+  <g transform="translate(80, 490)">
+    <rect width="1340" height="190" fill="#E3F2FD" stroke="#1976D2" stroke-width="3" rx="12"/>
+    <rect width="1340" height="36" fill="#1976D2" rx="12"/>
+    <rect width="1340" height="20" y="16" fill="#1976D2"/>
+    <text x="40" y="26" font-size="18" font-weight="bold" fill="white">📍 PHASE 1: EXPLORE — 미지의 화성을 자율 탐사</text>
+    <text x="1300" y="26" font-size="13" text-anchor="end" fill="#BBDEFB">FSM: EXPLORE</text>
+
+    <g transform="translate(30, 55)">
+      <rect width="290" height="115" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="145" y="25" font-size="13" font-weight="bold" text-anchor="middle">🗺️ Coverage Planner</text>
+      <text x="145" y="48" font-size="11" text-anchor="middle" fill="#555">미니맵 25×25 셀</text>
+      <text x="145" y="64" font-size="11" text-anchor="middle" fill="#555">미방문 셀 → 다음 goal</text>
+      <text x="145" y="80" font-size="11" text-anchor="middle" fill="#555">Greedy frontier 알고리즘</text>
+      <text x="145" y="102" font-size="10" fill="#1976D2" text-anchor="middle">▶ "어디로 갈까"</text>
+    </g>
+
+    <g transform="translate(340, 55)">
+      <rect width="290" height="115" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="145" y="25" font-size="13" font-weight="bold" text-anchor="middle">🛣️ A* Path Planner</text>
+      <text x="145" y="48" font-size="11" text-anchor="middle" fill="#555">heightmap + 장애물 그리드</text>
+      <text x="145" y="64" font-size="11" text-anchor="middle" fill="#555">큰 바위·절벽 회피</text>
+      <text x="145" y="80" font-size="11" text-anchor="middle" fill="#555">waypoint 리스트 생성</text>
+      <text x="145" y="102" font-size="10" fill="#1976D2" text-anchor="middle">▶ "어떻게 갈까"</text>
+    </g>
+
+    <g transform="translate(650, 55)">
+      <rect width="290" height="115" fill="#1976D2" stroke="#0D47A1" stroke-width="2" rx="6"/>
+      <text x="145" y="25" font-size="13" font-weight="bold" text-anchor="middle" fill="white">🤖 PPO Driver ★ML</text>
+      <text x="145" y="48" font-size="11" text-anchor="middle" fill="#E3F2FD">클론 정책 재사용</text>
+      <text x="145" y="64" font-size="11" text-anchor="middle" fill="#E3F2FD">height_scan으로 미세 회피</text>
+      <text x="145" y="80" font-size="11" text-anchor="middle" fill="#E3F2FD">슬립·슬로프 지형 적응</text>
+      <text x="145" y="102" font-size="10" fill="#FFF59D" text-anchor="middle">▶ "실제 핸들 조작"</text>
+    </g>
+
+    <g transform="translate(960, 55)">
+      <rect width="350" height="115" fill="#C8E6C9" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="175" y="25" font-size="13" font-weight="bold" text-anchor="middle">📷 Vision Detection</text>
+      <text x="175" y="48" font-size="11" text-anchor="middle" fill="#555">카메라 → HSV threshold</text>
+      <text x="175" y="64" font-size="11" text-anchor="middle" fill="#555">광물 종류·좌표·가치점수</text>
+      <text x="175" y="80" font-size="11" text-anchor="middle" fill="#555">10Hz publish</text>
+      <text x="175" y="102" font-size="10" fill="#2E7D32" text-anchor="middle">▶ "광물 발견 시 인터럽트"</text>
+    </g>
+  </g>
+
+  <!-- branching arrow -->
+  <line x1="750" y1="680" x2="750" y2="730" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="775" y="710" font-size="12" font-weight="bold" fill="#2E7D32">광물 발견!</text>
+
+  <!-- ════════════ PHASE 2: APPROACH ════════════ -->
+  <g transform="translate(80, 740)">
+    <rect width="1340" height="170" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
+    <rect width="1340" height="36" fill="#2E7D32" rx="12"/>
+    <rect width="1340" height="20" y="16" fill="#2E7D32"/>
+    <text x="40" y="26" font-size="18" font-weight="bold" fill="white">🎯 PHASE 2: APPROACH — 발견한 광물로 접근</text>
+    <text x="1300" y="26" font-size="13" text-anchor="end" fill="#C8E6C9">FSM: APPROACH_MINERAL</text>
+
+    <g transform="translate(30, 55)">
+      <rect width="400" height="95" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="200" y="25" font-size="13" font-weight="bold" text-anchor="middle">🎯 가치 기반 우선순위</text>
+      <text x="200" y="48" font-size="11" text-anchor="middle" fill="#555">동시에 여러 광물 보이면</text>
+      <text x="200" y="64" font-size="11" text-anchor="middle" fill="#555">value_score 가장 높은 광물 선택</text>
+      <text x="200" y="82" font-size="10" fill="#2E7D32" text-anchor="middle">→ 노랑(50점) &gt; 빨강(25점) &gt; 파랑(10점)</text>
+    </g>
+
+    <g transform="translate(450, 55)">
+      <rect width="400" height="95" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="200" y="25" font-size="13" font-weight="bold" text-anchor="middle">🛣️ A* 재계획</text>
+      <text x="200" y="48" font-size="11" text-anchor="middle" fill="#555">현재 위치 → 광물 좌표</text>
+      <text x="200" y="64" font-size="11" text-anchor="middle" fill="#555">PPO가 다시 waypoint 따라감</text>
+      <text x="200" y="82" font-size="10" fill="#1976D2" text-anchor="middle">→ 광물 0.3m 이내 도달까지</text>
+    </g>
+
+    <g transform="translate(870, 55)">
+      <rect width="440" height="95" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="220" y="25" font-size="13" font-weight="bold" text-anchor="middle">📍 Mock V-SLAM 위치 추정</text>
+      <text x="220" y="48" font-size="11" text-anchor="middle" fill="#555">GT + 노이즈 + 시간 비례 드리프트</text>
+      <text x="220" y="64" font-size="11" text-anchor="middle" fill="#555">공분산 타원 시각화 (UI)</text>
+      <text x="220" y="82" font-size="10" fill="#C62828" text-anchor="middle">→ "GPS 없는 화성에서 어떻게 위치를?"</text>
+    </g>
+  </g>
+
+  <line x1="750" y1="910" x2="750" y2="960" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="775" y="940" font-size="12" font-weight="bold" fill="#2E7D32">광물 근처 도달</text>
+
+  <!-- ════════════ PHASE 3: PICK ════════════ -->
+  <g transform="translate(80, 970)">
+    <rect width="1340" height="160" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
+    <rect width="1340" height="36" fill="#2E7D32" rx="12"/>
+    <rect width="1340" height="20" y="16" fill="#2E7D32"/>
+    <text x="40" y="26" font-size="18" font-weight="bold" fill="white">🦾 PHASE 3: PICK &amp; PLACE — 광물 채취 및 적재</text>
+    <text x="1300" y="26" font-size="13" text-anchor="end" fill="#C8E6C9">FSM: PICK</text>
+
+    <g transform="translate(30, 55)">
+      <rect width="420" height="85" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="210" y="25" font-size="13" font-weight="bold" text-anchor="middle">🦾 M0609 Manipulator (Tier 1.5)</text>
+      <text x="210" y="48" font-size="11" text-anchor="middle" fill="#555">Scripted joint trajectory</text>
+      <text x="210" y="64" font-size="11" text-anchor="middle" fill="#555">접근 → hover → grasp → 들어올림</text>
+      <text x="210" y="80" font-size="10" fill="#2E7D32" text-anchor="middle">실제 두산 6축 로봇팔 USD</text>
+    </g>
+
+    <g transform="translate(470, 55)">
+      <rect width="420" height="85" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="210" y="25" font-size="13" font-weight="bold" text-anchor="middle">📦 카고 적재</text>
+      <text x="210" y="48" font-size="11" text-anchor="middle" fill="#555">광물 → cargo bin 텔레포트</text>
+      <text x="210" y="64" font-size="11" text-anchor="middle" fill="#555">cargo_count++ , value_total += score</text>
+      <text x="210" y="80" font-size="10" fill="#2E7D32" text-anchor="middle">미니맵에 ✓ 표시</text>
+    </g>
+
+    <g transform="translate(910, 55)">
+      <rect width="400" height="85" fill="white" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="4,4" rx="6"/>
+      <text x="200" y="25" font-size="13" font-weight="bold" text-anchor="middle">🔌 ROS2 Event Publish</text>
+      <text x="200" y="48" font-size="11" text-anchor="middle" fill="#555">/mission/cargo_event</text>
+      <text x="200" y="64" font-size="11" text-anchor="middle" fill="#555">UI에 "💎 광물 #N 수집!" 알림</text>
+      <text x="200" y="80" font-size="10" fill="#6A1B9A" text-anchor="middle">발표 데모용 시각 효과</text>
+    </g>
+  </g>
+
+  <!-- branch: cargo full? -->
+  <line x1="750" y1="1130" x2="750" y2="1180" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(610, 1185)">
+    <polygon points="140,0 280,40 140,80 0,40" fill="#FFF9C4" stroke="#F57F17" stroke-width="2"/>
+    <text x="140" y="35" font-size="14" font-weight="bold" text-anchor="middle">카고 풀?</text>
+    <text x="140" y="55" font-size="11" text-anchor="middle">또는 시간 만료?</text>
+  </g>
+
+  <!-- "No" loop back to EXPLORE -->
+  <path d="M 610 1225 Q 30 1225 30 588 L 80 588" fill="none" stroke="#9C27B0" stroke-width="3" stroke-dasharray="6,3" marker-end="url(#arrow-loop)"/>
+  <text x="50" y="900" font-size="13" font-weight="bold" fill="#9C27B0" transform="rotate(-90, 50, 900)">NO → PHASE 1 (탐사 계속)</text>
+
+  <!-- "Yes" continue down -->
+  <line x1="750" y1="1265" x2="750" y2="1310" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="775" y="1295" font-size="12" font-weight="bold" fill="#C62828">YES</text>
+
+  <!-- ════════════ PHASE 4: RETURN ════════════ -->
+  <g transform="translate(80, 1320)">
+    <rect width="1340" height="150" fill="#FFEBEE" stroke="#C62828" stroke-width="3" rx="12"/>
+    <rect width="1340" height="36" fill="#C62828" rx="12"/>
+    <rect width="1340" height="20" y="16" fill="#C62828"/>
+    <text x="40" y="26" font-size="18" font-weight="bold" fill="white">🏠 PHASE 4: RETURN — 베이스캠프로 자율 복귀</text>
+    <text x="1300" y="26" font-size="13" text-anchor="end" fill="#FFCDD2">FSM: RETURN_BASE</text>
+
+    <g transform="translate(30, 55)">
+      <rect width="420" height="75" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="210" y="25" font-size="13" font-weight="bold" text-anchor="middle">🎯 Goal = 베이스캠프 중심</text>
+      <text x="210" y="48" font-size="11" text-anchor="middle" fill="#555">T1 meta.json에서 좌표 받음</text>
+      <text x="210" y="64" font-size="10" fill="#C62828" text-anchor="middle">미래(Tier 2): entry_point 정밀 진입</text>
+    </g>
+
+    <g transform="translate(470, 55)">
+      <rect width="420" height="75" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="210" y="25" font-size="13" font-weight="bold" text-anchor="middle">🛣️ A* + 🤖 PPO 복귀 주행</text>
+      <text x="210" y="48" font-size="11" text-anchor="middle" fill="#555">같은 알고리즘, 다른 목적지</text>
+      <text x="210" y="64" font-size="10" fill="#1976D2" text-anchor="middle">탐사 때와 동일한 RL 정책</text>
+    </g>
+
+    <g transform="translate(910, 55)">
+      <rect width="400" height="75" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="200" y="25" font-size="13" font-weight="bold" text-anchor="middle">✅ 도착 판정</text>
+      <text x="200" y="48" font-size="11" text-anchor="middle" fill="#555">dist(rover, basecamp) &lt; radius</text>
+      <text x="200" y="64" font-size="10" fill="#2E7D32" text-anchor="middle">FSM: DONE</text>
+    </g>
+  </g>
+
+  <line x1="750" y1="1470" x2="750" y2="1520" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- ════════════ MISSION COMPLETE ════════════ -->
+  <g transform="translate(530, 1525)">
+    <rect width="440" height="80" fill="#2E7D32" rx="40"/>
+    <text x="220" y="38" font-size="20" font-weight="bold" text-anchor="middle" fill="white">✅ MISSION COMPLETE</text>
+    <text x="220" y="62" font-size="13" text-anchor="middle" fill="#C8E6C9">최종 카고 개수 / 가치 점수 / 미션 시간 기록</text>
+  </g>
+
+  <!-- ════════════ TEAM ALLOCATION ════════════ -->
+  <g transform="translate(80, 1640)">
+    <rect width="1340" height="200" fill="white" stroke="#666" stroke-width="1.5" rx="12"/>
+    <text x="670" y="32" font-size="18" font-weight="bold" text-anchor="middle">👥 팀 구성 (5명, 8일)</text>
+
+    <g transform="translate(30, 55)">
+      <rect width="250" height="125" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="6"/>
+      <text x="125" y="22" font-size="13" font-weight="bold" text-anchor="middle">🗺️ T1 Environment</text>
+      <text x="125" y="42" font-size="11" text-anchor="middle">5060 (8GB)</text>
+      <text x="125" y="62" font-size="11" text-anchor="middle" fill="#555">절차생성 terrain</text>
+      <text x="125" y="78" font-size="11" text-anchor="middle" fill="#555">+ Mars Physics Tier 1</text>
+      <text x="125" y="94" font-size="11" text-anchor="middle" fill="#555">+ basecamp visual</text>
+      <text x="125" y="115" font-size="11" font-weight="bold" text-anchor="middle">55h</text>
+    </g>
+
+    <g transform="translate(295, 55)">
+      <rect width="250" height="125" fill="#C8E6C9" stroke="#2E7D32" stroke-width="2" rx="6"/>
+      <text x="125" y="22" font-size="13" font-weight="bold" text-anchor="middle">👁️🦾 T2 Perception+Manip</text>
+      <text x="125" y="42" font-size="11" text-anchor="middle">5080 (16GB)</text>
+      <text x="125" y="62" font-size="11" text-anchor="middle" fill="#555">Vision (HSV 색기반)</text>
+      <text x="125" y="78" font-size="11" text-anchor="middle" fill="#555">M0609 pick&amp;place</text>
+      <text x="125" y="94" font-size="11" text-anchor="middle" fill="#555">+ T1/T4 보조</text>
+      <text x="125" y="115" font-size="11" font-weight="bold" text-anchor="middle">70h</text>
+    </g>
+
+    <g transform="translate(560, 55)">
+      <rect width="250" height="125" fill="#BBDEFB" stroke="#1976D2" stroke-width="2" rx="6"/>
+      <text x="125" y="22" font-size="13" font-weight="bold" text-anchor="middle">🚗 T3 Driving</text>
+      <text x="125" y="42" font-size="11" text-anchor="middle">5080 (16GB)</text>
+      <text x="125" y="62" font-size="11" text-anchor="middle" fill="#555">Mission FSM</text>
+      <text x="125" y="78" font-size="11" text-anchor="middle" fill="#555">Coverage + A*</text>
+      <text x="125" y="94" font-size="11" text-anchor="middle" fill="#555">PPO Wrapper ★ML</text>
+      <text x="125" y="115" font-size="11" font-weight="bold" text-anchor="middle">60h</text>
+    </g>
+
+    <g transform="translate(825, 55)">
+      <rect width="250" height="125" fill="#E1BEE7" stroke="#6A1B9A" stroke-width="2" rx="6"/>
+      <text x="125" y="22" font-size="13" font-weight="bold" text-anchor="middle">🔌 T4 Integration+PM</text>
+      <text x="125" y="42" font-size="11" text-anchor="middle">5070 Ti (12GB)</text>
+      <text x="125" y="62" font-size="11" text-anchor="middle" fill="#555">ROS2 + Mission UI</text>
+      <text x="125" y="78" font-size="11" text-anchor="middle" fill="#555">데모 + 발표</text>
+      <text x="125" y="94" font-size="11" text-anchor="middle" fill="#555">PM 역할</text>
+      <text x="125" y="115" font-size="11" font-weight="bold" text-anchor="middle">75h</text>
+    </g>
+
+    <g transform="translate(1090, 55)">
+      <rect width="250" height="125" fill="#FFCDD2" stroke="#C62828" stroke-width="2" rx="6"/>
+      <text x="125" y="22" font-size="13" font-weight="bold" text-anchor="middle">📍 T5 Localization+Infra</text>
+      <text x="125" y="42" font-size="11" text-anchor="middle">5080 (16GB)</text>
+      <text x="125" y="62" font-size="11" text-anchor="middle" fill="#555">Mock V-SLAM</text>
+      <text x="125" y="78" font-size="11" text-anchor="middle" fill="#555">ROS2 Infra + Eval</text>
+      <text x="125" y="94" font-size="11" text-anchor="middle" fill="#555">Mars Tier 2</text>
+      <text x="125" y="115" font-size="11" font-weight="bold" text-anchor="middle">65h</text>
+    </g>
+  </g>
+
+  <!-- ════════════ DIFFERENTIATORS ════════════ -->
+  <g transform="translate(80, 1870)">
+    <rect width="1340" height="155" fill="#FFF3E0" stroke="#E65100" stroke-width="2" rx="12"/>
+    <text x="670" y="30" font-size="17" font-weight="bold" text-anchor="middle" fill="#BF360C">
+      ⭐ 차별화 포인트 — 클론 프로젝트와 물류창고 팀 대비
+    </text>
+
+    <g transform="translate(30, 50)">
+      <text x="0" y="15" font-size="12" font-weight="bold" fill="#444">vs. 클론 (RLRoverLab)</text>
+      <text x="0" y="35" font-size="11" fill="#555">❌ GT 좌표 cheat → ✅ Vision 기반 자율 발견</text>
+      <text x="0" y="52" font-size="11" fill="#555">❌ 단일 고정 지형 → ✅ 절차생성 다지형</text>
+      <text x="0" y="69" font-size="11" fill="#555">❌ 시각만 화성 → ✅ 진짜 화성 물리 (gravity 3.72, 마찰)</text>
+      <text x="0" y="86" font-size="11" fill="#555">❌ 매니퓰레이터 X → ✅ M0609 pick &amp; place</text>
+    </g>
+
+    <g transform="translate(450, 50)">
+      <text x="0" y="15" font-size="12" font-weight="bold" fill="#444">vs. 물류창고 팀</text>
+      <text x="0" y="35" font-size="11" fill="#555">동종 협업 → 단일 로봇 풀 자율 스택</text>
+      <text x="0" y="52" font-size="11" fill="#555">정형 환경 → 미지·다양한 화성 지형</text>
+      <text x="0" y="69" font-size="11" fill="#555">시각적 데모 → 정량 평가 + 시각 데모</text>
+      <text x="0" y="86" font-size="11" fill="#555">("Isaac Sim의 시뮬레이션 본질" 더 충실)</text>
+    </g>
+
+    <g transform="translate(880, 50)">
+      <text x="0" y="15" font-size="12" font-weight="bold" fill="#444">기술 스택 통합</text>
+      <text x="0" y="35" font-size="11" fill="#555">Isaac Sim 5.1 + IsaacLab 2.3 (최신)</text>
+      <text x="0" y="52" font-size="11" fill="#555">skrl PPO (클론 정책 재사용)</text>
+      <text x="0" y="69" font-size="11" fill="#555">ROS2 Humble (decoupled 통신)</text>
+      <text x="0" y="86" font-size="11" fill="#555">classical planning + ML 하이브리드 ★</text>
+    </g>
+  </g>
+
+</svg>

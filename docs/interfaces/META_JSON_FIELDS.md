@@ -83,14 +83,14 @@
 
   "minerals": [
     {
-      "id": 1,                         // [김현중 T1 발급, 1부터 순차]      [최진우 T2] detection 매칭 key
-      "type": "blue",                  // [최진우 T2]      markers/mineral_{type}.usd 모양 자동 매핑
+      "id": 1,                                  // [김현중 T1 발급, 1부터 순차]   [최진우 T2] detection 매칭 key
+      "type": "blue_mineral",                   // [최진우 T2]   markers/tier2_mineral/{type}.usd 자동 매핑
       "position": {"x": 17.3, "y": -1.99, "z": -0.33},  // [이찬휘 T3] I3 target_position. z = heightmap + 0.10
-      "value": 10                      // [이찬휘 T3] value/distance 우선순위.  [성선규 T4 UI] 미니맵 라벨
+      "value": 10                               // [이찬휘 T3] value/distance 우선순위.  [성선규 T4 UI] 미니맵 라벨
     },
-    {"id": 2, "type": "yellow", "position": {"x": 11.63, "y": -19.4, "z": -0.7}, "value": 50},
-    {"id": 3, "type": "red",    "position": {"x": -21.41, "y": 4.46, "z": 0.07}, "value": 25}
-    // ... 총 12개
+    {"id": 2, "type": "yellow_mineral", "position": {"x": 11.63, "y": -19.4, "z": -0.7}, "value": 50},
+    {"id": 3, "type": "green_gas",      "position": {"x": -21.41, "y":  4.46, "z":  0.07}, "value": 25}
+    // ... 총 12개. type ∈ {"blue_mineral", "yellow_mineral", "green_gas"} (YOLO model.names 와 동일)
   ],
 
   // [이지민 T5 Mars Tier 2]  영역별 PhysX RigidBodyMaterialCfg 적용 대상

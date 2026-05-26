@@ -24,6 +24,7 @@ setup(
     entry_points={
         "console_scripts": [
             "perception_node = isaac_perception.perception_node:main",
+            "yolo_perception_node = isaac_perception.yolo_perception_node:main",
         ],
     },
 )

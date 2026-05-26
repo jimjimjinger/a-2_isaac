@@ -2,6 +2,8 @@
 
 > 8일 프로젝트 동안 자주 칠 명령어 95%를 alias로 등록 + ROS2 source 자동화 + 팀원 간 ROS_DOMAIN_ID 충돌 방지.
 > 본인 트랙에 맞게 §4 추가 사항 함께 적용 권장.
+>
+> **Isaac Sim 5.1 환경**은 별도 가이드 [SETUP_ISAAC_PYPI.md](SETUP_ISAAC_PYPI.md) 참조 (팀 표준 = PyPI binary).
 
 ---
 
@@ -37,8 +39,8 @@ source /opt/ros/humble/setup.bash                                    # ROS2 dist
 
 # ─── ROS_DOMAIN_ID 충돌 방지 (같은 LAN에 팀원 있으면 필수) ────
 # 같은 LAN에서 같은 ID면 서로 노드 발견함 → 각자 다른 값
-# 합의: 김현중=11, 최진우=22, 이찬휘=33, 성선규=44, 이지민=55
-export ROS_DOMAIN_ID=44                                              # ← 본인 값으로 수정
+# 합의 (2026-05-26 갱신): 김현중=111, 이찬휘=112, 성선규=113, 최진우=114, 이지민=115
+export ROS_DOMAIN_ID=113                                             # ← 본인 값으로 수정
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp                         # (또는 rmw_fastrtps_cpp)
 ```
 
@@ -75,7 +77,7 @@ alias isaac-python='~/dev_ws/isaac_sim/isaacsim/_build/linux-x86_64/release/pyth
 
 # ─── 우리 프로젝트 자주 쓰는 명령 ─────────────────────────────
 alias mars-world='isaac ~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/worlds/mars_exploration_world.usd'
-alias gen-terrain='cdpkg && python3 isaac_sim/scripts/procedural_terrain_generator.py'
+alias gen-terrain='cdpkg && python3 isaac_sim/scripts/mars_terrain_generator_v2.py'
 # 사용 예: gen-terrain --seed 99 --terrain-id terrain_00002
 
 # ─── DIST (Daily Integration Smoke Test) ──────────────────────
@@ -125,7 +127,7 @@ alias check-gen-deps='python3 -c "from noise import pnoise2; from pxr import Usd
 
 # medium 난이도 새 terrain 빠르게
 gen-medium() {
-    cdpkg && python3 isaac_sim/scripts/procedural_terrain_generator.py \
+    cdpkg && python3 isaac_sim/scripts/mars_terrain_generator_v2.py \
         --seed "$1" --terrain-id "terrain_$(printf '%05d' $1)"
 }
 # 사용 예: gen-medium 42
@@ -261,7 +263,7 @@ alias cdpkg='cd ~/dev_ws/rover_ws/src/a2_isaac'
 alias cb='cd ~/dev_ws/rover_ws && colcon build --symlink-install && source install/setup.bash'
 alias isaac='~/dev_ws/isaac_sim/isaacsim/_build/linux-x86_64/release/isaac-sim.sh'
 alias mars-world='isaac ~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/worlds/mars_exploration_world.usd'
-alias gen-terrain='cdpkg && python3 isaac_sim/scripts/procedural_terrain_generator.py'
+alias gen-terrain='cdpkg && python3 isaac_sim/scripts/mars_terrain_generator_v2.py'
 ```
 
 적용:

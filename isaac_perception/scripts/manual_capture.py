@@ -58,9 +58,9 @@ VEHICLE_USD = Path("/home/rokey/dev_ws/rover_ws/src/Vehicle.usd")
 MINERAL_ASSETS_DIR = PKG_ROOT / "isaac_sim/assets/markers/tier2_mineral"
 
 MINERAL_PLACEMENTS = [
-    (0, "blue_mineral",   MINERAL_ASSETS_DIR / "mineral_blue.usd",   (4.5, -1.0, 1.0)),
-    (1, "green_gas",      MINERAL_ASSETS_DIR / "mineral_red.usd",    (4.5,  0.0, 1.0)),
-    (2, "yellow_mineral", MINERAL_ASSETS_DIR / "mineral_yellow.usd", (4.5,  1.0, 1.0)),
+    (0, "blue_mineral",   MINERAL_ASSETS_DIR / "blue_mineral.usd",   (4.5, -1.0, 1.0)),
+    (1, "green_gas",      MINERAL_ASSETS_DIR / "green_gas.usd",      (4.5,  0.0, 1.0)),
+    (2, "yellow_mineral", MINERAL_ASSETS_DIR / "yellow_mineral.usd", (4.5,  1.0, 1.0)),
 ]
 
 

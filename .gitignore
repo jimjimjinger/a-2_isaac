@@ -1,6 +1,7 @@
 build/
 install/
 log/
+temp/
 *.pyc
 __pycache__/
 *.zip
@@ -9,6 +10,7 @@ __pycache__/
 .colcon/
 *.pt
 !isaac_perception/models/mineral_detector.pt
+!isaac_perception/models/mineral_yolo_best.pt
 !isaac_rl/policies/driving_policy.pt
 
 .agents/

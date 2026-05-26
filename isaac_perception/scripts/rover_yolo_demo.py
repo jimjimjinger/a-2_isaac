@@ -64,7 +64,7 @@ import cv2
 import numpy as np
 import omni.appwindow
 import omni.usd
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics
 
 from isaacsim.core.api import World
 from isaacsim.core.prims import SingleArticulation
@@ -94,28 +94,12 @@ ANG_SPEED   = 0.8    # rad/s 회전
 # ── Mineral spawn 정의 (manual_capture.py 와 동일 좌표) ───────────────
 MINERAL_PLACEMENTS = [
     # (cls_id, label, usd_filename, world_xyz, color RGBA)
-    (0, "blue_mineral",   "mineral_blue.usd",   (4.5, -1.0, 1.0)),
-    (1, "yellow_mineral", "mineral_yellow.usd", (4.5,  1.0, 1.0)),
-    (2, "green_gas",      "mineral_red.usd",    (4.5,  0.0, 1.0)),
+    (0, "blue_mineral",   "blue_mineral.usd",   (4.5, -1.0, 1.0)),
+    (1, "yellow_mineral", "yellow_mineral.usd", (4.5,  1.0, 1.0)),
+    (2, "green_gas",      "green_gas.usd",      (4.5,  0.0, 1.0)),
 ]
 MINERAL_MASS   = 0.01   # kg
 MINERAL_RADIUS = 0.05   # m (geom 자체는 sphere; collision approximation 용)
-
-# Terrain 내장 mineral prim 의 런타임 scale (terrain_00022.usd 원본 미수정)
-MINERAL_SCALE_PER_CLASS = {
-    "blue_mineral":   1.0,
-    "yellow_mineral": 1.0,
-    "green_gas":      0.5,   # green cube 가 너무 커서 grasp 어려움 → 절반 축소
-}
-
-# Invisible Cube sub-prim 만 별도 scale (visible mesh 는 그대로, collision/grasp surface 만 키움)
-# blue/yellow 의 cube 가 visible mesh 보다 작아 finger 가 못 잡는 경우 → cube 만 확대해서 grasp 면적 확보.
-# 시각적으로는 finger 가 mesh 옆 빈 공간을 잡는 모양이 될 수 있음 (cube > mesh).
-CUBE_SCALE_PER_CLASS = {
-    "blue_mineral":   1.0,    # original 크기
-    "yellow_mineral": 1.0,
-    "green_gas":      1.5,
-}
 
 # ── Manipulator 파라미터 (pickplace_visual_rover.py 와 동일) ─────────
 HOME_JOINT_NAMES = ["joint_1", "joint_2", "joint_3", "joint_4", "joint_5", "joint_6"]
@@ -133,9 +117,8 @@ IK_ALPHA = 0.4
 IK_DAMPING = 0.10
 IK_NULLSPACE_GAIN = 0.6
 IK_ORIENTATION_WEIGHT = 1.0
-IK_NULL_GAIN_PER_JOINT = np.array([0.0, 0.05, 0.05, 0.2, 0.2, 0.2])   # wrist 의 home bias 약화 → down-reach 자유
-IK_JOINT_LIMITS_DEG = [(-360, 360), (-125, 125), (-150, 150),
-                       (-360, 360), (-135, 135), (-360, 360)]         # M0609 spec 로 확장 (down-reach 위해 joint 5 범위 ↑)
+IK_NULL_GAIN_PER_JOINT = np.array([0.0, 0.1, 0.1, 1.5, 1.5, 1.5])
+IK_JOINT_LIMITS_DEG = [(-120, 120), (-60, 120), (-30, 180), (-120, 120), (-10, 170), (-120, 120)]
 IK_POS_TOL = 0.04
 IK_MAX_STEPS_PER_PHASE = 400
 IK_GRASP_REACH_THRESHOLD = 0.10
@@ -144,12 +127,7 @@ IK_GRASP_REACH_THRESHOLD = 0.10
 # IK 가 TCP 를 target 에 위치시키도록 자동 보정함 (TCP_OFFSET_LOCAL 사용).
 APPROACH_HEIGHT      = 0.30   # (legacy, unused)
 GRASP_HEIGHT         = 0.20   # (legacy, unused — HOVER_ABOVE_MINERAL 로 대체)
-HOVER_ABOVE_MINERAL  = 0.10   # default — class_hint 없거나 lookup 실패 시
-HOVER_ABOVE_MINERAL_PER_CLASS = {
-    "blue_mineral":   0.05,   # cube 위 4cm — friction grasp 위해 finger 가 cube 안 깊이 들어가게
-    "yellow_mineral": 0.05,
-    "green_gas":      0.10,   # green cube 는 더 큰 hover 필요 (0.10 이면 finger 가 옆면을 쳐서 튕김)
-}
+HOVER_ABOVE_MINERAL  = 0.04   # mineral 위 4cm 에 finger 중심 위치 — grasp 직전 hover
 LIFT_HEIGHT          = 0.45   # grasp 후 finger 중심을 mineral 위 45cm 까지 들어올림
 
 # RearBasket release — basket world top 기준 z offset (user 가 0.2 추천)
@@ -162,7 +140,7 @@ GRIP_JOINT_PATH = "/World/grip_fixed_joint"
 PLACE_TRAJ_PRE_DEG = [
     [  0.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # HOME (lift 후 정렬)
     [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # joint_1: 0 → 180 (베이스 뒤)
-    [180.0, 12.5, 90.0, 0.0, 60.0, 0.0],   # joint_2 + joint_5 동시 (어깨 굽힘 + 손목 dump)
+    [180.0, 25.0, 90.0, 0.0, 55.0, 0.0],   # joint_2 + joint_5 동시 (어깨 굽힘 + 손목 dump)
 ]
 PLACE_TRAJ_POST_DEG = [
     [180.0,  0.0, 90.0, 0.0, 90.0, 0.0],   # 어깨 + 손목 동시 복귀
@@ -171,40 +149,6 @@ PLACE_TRAJ_POST_DEG = [
 WAYPOINT_TOL_DEG = 2.5     # 다음 waypoint 진입 조건 (max joint err ≤ 2.5°)
 WAYPOINT_TIMEOUT = 250     # ~4초. 못 도달해도 다음으로
 WAYPOINT_INTERP_FRAMES = 120  # waypoint 간 선형 보간 frame 수 (60fps 기준 ~2초). 시각적 관찰 가능
-
-# Friction grasp PhysicsMaterial 값 (m0609_pick_place_fixed_target.py 와 동일)
-MINERAL_FRICTION = (1.2, 1.0, 0.0)   # static, dynamic, restitution (m0609_pick_place_fixed_target.py default)
-FINGER_FRICTION  = (1.8, 1.4, 0.0)
-
-
-def _create_physics_material(stage, mat_path, sf, df, rest=0.0):
-    """USD physics material 생성 (static / dynamic friction + restitution)."""
-    mat_prim = stage.DefinePrim(mat_path, "Material")
-    phys = UsdPhysics.MaterialAPI.Apply(mat_prim)
-    phys.CreateStaticFrictionAttr().Set(float(sf))
-    phys.CreateDynamicFrictionAttr().Set(float(df))
-    phys.CreateRestitutionAttr().Set(float(rest))
-    return UsdShade.Material(mat_prim)
-
-
-def _bind_physics_material_to_subtree(stage, root_path, mat):
-    """root 이하 모든 Mesh prim 에 physics material bind (purpose='physics')."""
-    root = stage.GetPrimAtPath(root_path)
-    if not root.IsValid():
-        return 0
-    n = 0
-    for prim in Usd.PrimRange(root):
-        if prim.GetTypeName() != "Mesh":
-            continue
-        try:
-            binding = UsdShade.MaterialBindingAPI.Apply(prim)
-            binding.Bind(mat,
-                         bindingStrength=UsdShade.Tokens.weakerThanDescendants,
-                         materialPurpose="physics")
-            n += 1
-        except Exception:
-            pass
-    return n
 
 
 def build_scene(stage):
@@ -218,87 +162,6 @@ def build_scene(stage):
     # (/World/Terrain/Minerals/blue_* 등). manipulation target 은 nav cam YOLO+depth 로 deproject.
     print("[2/4] mineral 은 terrain 내장 prim 사용 (별도 spawn 안 함)")
     mineral_paths = []  # 미사용 — autopilot 의 nav cam det 만으로 target 결정
-
-    # ── class 별 런타임 scale 적용 (USD 원본 수정 없이 prim xformOp:scale 만 변경) ──
-    # prim name prefix → class 매핑 (terrain_00022.usd 의 명명 규칙):
-    #   blue_*   → blue_mineral
-    #   yellow_* → yellow_mineral
-    #   red_*    → green_gas (시각 클래스는 green 이지만 prim 이름은 red)
-    _name_to_class = {"blue": "blue_mineral", "yellow": "yellow_mineral", "red": "green_gas"}
-    _minerals_root = stage.GetPrimAtPath("/World/Terrain/Minerals")
-    _scale_counts = {"blue_mineral": 0, "yellow_mineral": 0, "green_gas": 0}
-    if _minerals_root.IsValid():
-        for _child in _minerals_root.GetChildren():
-            _nm = _child.GetName().lower()
-            _cls = None
-            for _pref, _c in _name_to_class.items():
-                if _nm.startswith(_pref):
-                    _cls = _c
-                    break
-            if _cls is None:
-                continue
-            _s = float(MINERAL_SCALE_PER_CLASS.get(_cls, 1.0))
-            if abs(_s - 1.0) < 1e-6:
-                continue   # scale=1 이면 skip
-            _xf = UsdGeom.Xformable(_child)
-            _ops = list(_xf.GetOrderedXformOps())
-            _scale_op = next((o for o in _ops if o.GetOpType() == UsdGeom.XformOp.TypeScale), None)
-            if _scale_op is None:
-                _scale_op = _xf.AddScaleOp(UsdGeom.XformOp.PrecisionFloat)
-                # 새로 추가했으면 op order 재구성 (translate/rotate 뒤에 scale 위치)
-                _xf.SetXformOpOrder(list(_xf.GetOrderedXformOps()))
-            _scale_op.Set(Gf.Vec3f(_s, _s, _s))
-            _scale_counts[_cls] += 1
-    print(f"  [mineral scale] applied: {_scale_counts} "
-          f"(per_class={MINERAL_SCALE_PER_CLASS})")
-
-    # ── invisible Cube sub-prim 만 별도 scale (visible mesh 그대로, collision/grasp surface 만) ──
-    _cube_scale_counts = {"blue_mineral": 0, "yellow_mineral": 0, "green_gas": 0}
-    _cube_skipped = 0
-    if _minerals_root.IsValid():
-        for _child in _minerals_root.GetChildren():
-            _nm = _child.GetName().lower()
-            _cls = None
-            for _pref, _c in _name_to_class.items():
-                if _nm.startswith(_pref):
-                    _cls = _c
-                    break
-            if _cls is None:
-                continue
-            _cs = float(CUBE_SCALE_PER_CLASS.get(_cls, 1.0))
-            if abs(_cs - 1.0) < 1e-6:
-                continue
-            # 하위 트리에서 Cube sub-prim 찾기 (첫 번째 매칭만)
-            for _sub in Usd.PrimRange(_child):
-                if _sub == _child:
-                    continue
-                if _sub.GetName().lower() != "cube":
-                    continue
-                try:
-                    _xfsub = UsdGeom.Xformable(_sub)
-                    _ops_sub = list(_xfsub.GetOrderedXformOps())
-                    _ssub_op = next((o for o in _ops_sub
-                                     if o.GetOpType() == UsdGeom.XformOp.TypeScale), None)
-                    if _ssub_op is None:
-                        _ssub_op = _xfsub.AddScaleOp(UsdGeom.XformOp.PrecisionFloat)
-                        _xfsub.SetXformOpOrder(list(_xfsub.GetOrderedXformOps()))
-                    _ssub_op.Set(Gf.Vec3f(_cs, _cs, _cs))
-                    _cube_scale_counts[_cls] += 1
-                except Exception as _e:
-                    _cube_skipped += 1
-                    print(f"  [cube scale SKIP] {_sub.GetPath()}: "
-                          f"{_e.__class__.__name__}: {_e}")
-                break
-    print(f"  [cube scale] applied: {_cube_scale_counts} "
-          f"(per_class={CUBE_SCALE_PER_CLASS}, skipped={_cube_skipped})")
-
-    # ── Friction grasp 용 PhysicsMaterial — mineral 들에 강한 마찰력 부여 ──
-    _mineral_mat = _create_physics_material(
-        stage, "/World/PhysicsMaterials/mineral_mat",
-        sf=MINERAL_FRICTION[0], df=MINERAL_FRICTION[1], rest=MINERAL_FRICTION[2])
-    _n_mat = _bind_physics_material_to_subtree(stage, "/World/Terrain/Minerals", _mineral_mat)
-    print(f"  [friction] mineral PhysicsMaterial sf={MINERAL_FRICTION[0]} "
-          f"df={MINERAL_FRICTION[1]} bound to {_n_mat} Mesh prims")
 
     print("[3/4] vehicle_v2 로드 …")
     veh_prim_path = "/World/Vehicle"
@@ -429,15 +292,6 @@ def build_scene(stage):
     print(f"  angle bracket→ {ab_path}")
     print(f"  rear basket  → {basket_path}")
     print(f"  rover body   → {rover_body}")
-
-    # ── Friction grasp 용 PhysicsMaterial — finger 양쪽에 강한 마찰력 부여 ──
-    _finger_mat = _create_physics_material(
-        stage, "/World/PhysicsMaterials/finger_mat",
-        sf=FINGER_FRICTION[0], df=FINGER_FRICTION[1], rest=FINGER_FRICTION[2])
-    _n_fl = _bind_physics_material_to_subtree(stage, left_finger, _finger_mat)
-    _n_fr = _bind_physics_material_to_subtree(stage, right_finger, _finger_mat)
-    print(f"  [friction] finger PhysicsMaterial sf={FINGER_FRICTION[0]} "
-          f"df={FINGER_FRICTION[1]} bound to L:{_n_fl} R:{_n_fr} Mesh prims")
 
     paths = {
         "nav_cam":       cam_path,
@@ -1059,12 +913,7 @@ class PickPlaceStateMachine:
             # 30 frame 안에 검출되면 즉시 진행, 못 잡으면 nav XYZ 그대로 진행.
             _drive_joints_rad(self.art, self.joint_idx, self.q_home[self.joint_idx])
             self._drive_gripper(GRIPPER_OPEN_RAD)
-            # green_gas: wrist refresh 결과가 visible mesh 시각 중심과 부정확 → terrain GT XY 그대로 사용
-            if self.mineral_class_hint == "green_gas":
-                print(f"[manip] WRIST_SERVO → APPROACH_DESCEND (green_gas — wrist refresh skip, terrain GT XY 사용)")
-                self.state = "APPROACH_DESCEND"
-                self.step_count = 0
-            elif self._refresh_from_wrist():
+            if self._refresh_from_wrist():
                 print(f"[manip] WRIST_SERVO → APPROACH_DESCEND (wrist refreshed)")
                 self.state = "APPROACH_DESCEND"
                 self.step_count = 0
@@ -1075,11 +924,9 @@ class PickPlaceStateMachine:
                 self.step_count = 0
 
         elif s == "APPROACH_DESCEND":
-            # TCP(finger midpoint) 가 mineral 위 HOVER_ABOVE_MINERAL 에 오도록 IK — class 별 lookup
-            hover_h = HOVER_ABOVE_MINERAL_PER_CLASS.get(
-                self.mineral_class_hint, HOVER_ABOVE_MINERAL)
+            # TCP(finger midpoint) 가 mineral 위 HOVER_ABOVE_MINERAL 에 오도록 IK
             target = np.array([self.mineral_xyz[0], self.mineral_xyz[1],
-                               self.mineral_xyz[2] + hover_h])
+                               self.mineral_xyz[2] + HOVER_ABOVE_MINERAL])
             pos_err = self._ik_to(target)
             self._drive_gripper(GRIPPER_OPEN_RAD)
             if pos_err < IK_POS_TOL:
@@ -1102,31 +949,11 @@ class PickPlaceStateMachine:
                     self.step_count = 0
 
         elif s == "GRASP_CLOSE":
-            # 진단: finger midpoint world XYZ 와 cube center 의 차이 (첫 진입 step 에만)
-            if self.gripper_close_counter == 0:
-                try:
-                    import os.path as _osp
-                    _parent = _osp.dirname(self.angle_bracket_path)
-                    _left = _read_world_xyz(f"{_parent}/left_inner_finger")
-                    _right = _read_world_xyz(f"{_parent}/right_inner_finger")
-                    if _left is not None and _right is not None:
-                        _mid = ((_left[0]+_right[0])/2.0,
-                                (_left[1]+_right[1])/2.0,
-                                (_left[2]+_right[2])/2.0)
-                        _cx, _cy, _cz = (float(self.mineral_xyz[0]),
-                                         float(self.mineral_xyz[1]),
-                                         float(self.mineral_xyz[2]))
-                        _dx, _dy, _dz = (_mid[0]-_cx, _mid[1]-_cy, _mid[2]-_cz)
-                        print(f"  [grasp diag] finger mid @ ({_mid[0]:+.3f},{_mid[1]:+.3f},{_mid[2]:+.3f})")
-                        print(f"  [grasp diag] cube center @ ({_cx:+.3f},{_cy:+.3f},{_cz:+.3f})")
-                        print(f"  [grasp diag] Δ (finger - cube) = "
-                              f"({_dx*1000:+.0f},{_dy*1000:+.0f},{_dz*1000:+.0f}) mm")
-                except Exception as _e:
-                    print(f"  [grasp diag] failed: {_e}")
             self._drive_gripper(GRIPPER_CLOSED_RAD)
             self.gripper_close_counter += 1
             if self.gripper_close_counter > GRIPPER_CLOSE_SETTLE_FRAMES:
-                # B 롤백: M0609 down-reach 한계로 friction grasp 불가능 → FixedJoint magic grasp 복귀.
+                # mineral_path 가 있으면 FixedJoint 로 실제 부착, 없으면 (terrain 내장 mineral)
+                # animation 만 진행
                 if self.mineral_path is not None:
                     _attach_object_to_link(self.stage, GRIP_JOINT_PATH,
                                            self.angle_bracket_path, self.mineral_path)
@@ -1165,12 +992,13 @@ class PickPlaceStateMachine:
                 self.step_count = 0
 
         elif s == "RELEASE":
-            # B 롤백: FixedJoint 제거 + gripper 열기. 자세는 마지막 PRE waypoint 유지.
+            # FixedJoint 제거 + 그리퍼 열기. 자세는 마지막 PRE waypoint (dump 자세) 유지.
             if self.step_count == 1 and self.mineral_path is not None:
                 _detach_grip_joint(self.stage, GRIP_JOINT_PATH)
             self._drive_gripper(GRIPPER_OPEN_RAD)
+            # 자세 유지 (마지막 PRE waypoint 의 각도)
             self._drive_to_waypoint_deg(PLACE_TRAJ_PRE_DEG[-1])
-            # mineral 시각적으로 숨김 (basket 수납 표현)
+            # 0.1초 (~6 frame @ 60fps) 후 mineral 시각적으로 숨김 — "basket 에 수납됨" 표현
             if self.step_count == 6 and self.mineral_path is not None:
                 if _hide_prim(self.stage, self.mineral_path):
                     print(f"[manip] mineral 수납 완료 — visibility=invisible ({self.mineral_path})")
@@ -1257,9 +1085,7 @@ def main():
     # omni.ui 윈도: nav cam + bbox 오버레이
     import omni.ui as ui
     yolo_window = ui.Window("YOLO — Nav Cam (rover body)",
-                            width=720, height=420,
-                            position_x=20, position_y=40,
-                            dockPreference=ui.DockPreference.DISABLED)
+                            width=720, height=420)
     img_provider = ui.ByteImageProvider()
     with yolo_window.frame:
         with ui.VStack():
@@ -1270,9 +1096,7 @@ def main():
 
     # 2nd 윈도: wrist cam (D455 RGB) + bbox 오버레이
     yolo_wrist_window = ui.Window("YOLO — Wrist Cam (D455 RGB)",
-                                   width=720, height=420,
-                                   position_x=760, position_y=40,
-                                   dockPreference=ui.DockPreference.DISABLED)
+                                   width=720, height=420)
     img_provider_wrist = ui.ByteImageProvider()
     with yolo_wrist_window.frame:
         with ui.VStack():
@@ -1559,22 +1383,18 @@ def main():
     fps_disp   = 0.0
 
     # autopilot 파라미터
-    ENGAGE_DISTANCE = 0.9      # m 이내면 forward 축으로 ENGAGE_X_PUSH 만큼 부드럽게 push 후 manipulation 진입
-    ENGAGE_X_PUSH   = 0.3      # default — class_hint lookup 실패 시
-    ENGAGE_X_PUSH_PER_CLASS = {
-        "blue_mineral":   0.5,    # M0609 reach 안에 들어오도록 더 가까이 (이전 0.3 은 reach 한계)
-        "yellow_mineral": 0.5,    # M0609 reach 안에 들어오도록 더 가까이
-        "green_gas":      0.25,   # green 은 stop 위치 더 멀리 (충돌/푸시 회피)
+    ENGAGE_DISTANCE = 0.9      # m 이내면 creep 속도로 감속 (manip 진입 준비)
+    # mineral 별 stop distance (m) — class name 으로 lookup, 없는 클래스는 default 사용
+    STOP_DISTANCE_PER_CLASS = {
+        "blue_mineral":   0.25,
+        "yellow_mineral": 0.25,
+        "green_gas":      0.25,
     }
-    ENGAGE_PUSH_FRAMES = 60    # ENGAGE_X_PUSH 를 몇 frame 에 나눠 적용할지 (60fps 기준 60 = 1초)
+    STOP_DISTANCE_DEFAULT = 0.75
     AUTO_LIN_SPEED  = 1.0      # autopilot 직진 속도 (engage 전)
+    CREEP_LIN_SPEED = 0.25     # engage 후 grip 거리까지 천천히 접근
     STEER_GAIN = 1.2           # 이미지 중앙 정렬 P-control 게인
     last_target = [None]       # 마지막으로 본 (cx_norm, dist) — 잠시 사라져도 추적 유지
-    engage_pushing = [False]   # ENGAGE push 진행 중 flag
-    engage_push_class = [None] # push 시작 시 캡쳐된 target class (lookup 키)
-    engage_push_target = [None]  # push 시작 시 캡쳐된 target snapshot (det 빠져도 deproject 가능)
-    engage_push_frame = [0]    # push 시작 후 경과 frame
-    engage_push_yaw = [0.0]    # push 시작 시점 yaw 캡쳐 (push 중에는 steering 정지, 직진)
 
     # Manipulation 상태 추적 ─────────────────────────────────────────
     picked_set = set()           # 시도한 mineral prim path (또는 cell_key) dedup
@@ -1582,9 +1402,8 @@ def main():
     manip_lock_yaw = [None]
     nav_cam_intrinsics = [None]
 
-    # Terrain 내장 mineral prim 스캔 — top-level 의 Cube sub-prim 위치 우선 사용.
-    # (visible mesh origin 과 collision/grasp 대상인 Cube 위치가 다를 수 있어서)
-    # mineral_path 는 그대로 top-level (FixedJoint 부착용), xyz 만 cube 좌표로 대체.
+    # Terrain 내장 mineral prim 스캔 — top-level (Reference 자식 제외) 만 추출.
+    # 각 prim 의 world XYZ 를 캐싱해 deproject 결과와 역매칭에 사용.
     def _scan_terrain_minerals():
         result = []
         root = stage.GetPrimAtPath("/World/Terrain/Minerals")
@@ -1600,103 +1419,44 @@ def main():
                 color = "green_gas"
             else:
                 continue
-            # Cube sub-prim world XYZ 우선 (visible mesh 와 다른 위치 가능)
-            cube_xyz = None
-            cube_path = None
-            for sub in Usd.PrimRange(child):
-                if sub == child:
-                    continue
-                if sub.GetName().lower() == "cube":
-                    cxyz = _read_world_xyz(str(sub.GetPath()))
-                    if cxyz is not None:
-                        cube_xyz = cxyz
-                        cube_path = str(sub.GetPath())
-                        break
-            top_xyz = _read_world_xyz(str(child.GetPath()))
-            # green_gas: visible mesh XY 가 cube XY 와 어긋남 (XY 는 top, Z 는 cube 유지)
-            if color == "green_gas" and cube_xyz is not None and top_xyz is not None:
-                chosen = (top_xyz[0], top_xyz[1], cube_xyz[2])
-                src = "green_gas: top XY + cube Z"
-            elif cube_xyz is not None:
-                chosen = cube_xyz
-                src = "cube"
-            elif top_xyz is not None:
-                chosen = top_xyz
-                src = "top-level (no Cube sub-prim)"
-            else:
+            xyz = _read_world_xyz(str(child.GetPath()))
+            if xyz is None:
                 continue
-            # top ↔ cube offset 진단 (>5mm 면 출력)
-            if cube_xyz is not None and top_xyz is not None:
-                dx = cube_xyz[0] - top_xyz[0]
-                dy = cube_xyz[1] - top_xyz[1]
-                dz = cube_xyz[2] - top_xyz[2]
-                if max(abs(dx), abs(dy), abs(dz)) > 0.005:
-                    print(f"  [cube-offset] {child.GetName():12s} top→cube ΔXYZ = "
-                          f"({dx*1000:+.0f},{dy*1000:+.0f},{dz*1000:+.0f}) mm")
             result.append({"path": str(child.GetPath()),
-                           "xyz": np.array(chosen, dtype=np.float64),
-                           "color": color,
-                           "xyz_src": src,
-                           "cube_path": cube_path})
+                           "xyz": np.array(xyz, dtype=np.float64),
+                           "color": color})
         return result
 
     terrain_minerals = _scan_terrain_minerals()
     print(f"\n[terrain minerals] discovered {len(terrain_minerals)} prims:")
     for m in terrain_minerals:
-        print(f"  {m['color']:14s} @ ({m['xyz'][0]:+.2f},{m['xyz'][1]:+.2f},{m['xyz'][2]:+.2f}) "
-              f"src={m.get('xyz_src','?')}  {m['path']}")
+        print(f"  {m['color']:14s} @ ({m['xyz'][0]:+.2f},{m['xyz'][1]:+.2f},{m['xyz'][2]:+.2f})  {m['path']}")
     print()
 
     MINERAL_MATCH_RADIUS = 1.5   # m — deproject 결과와 prim 간 거리 허용치
 
-    def _start_manipulation_if_possible(snapshot=None):
-        """nav cam YOLO + depth 로 target XYZ 계산 → 가장 가까운 terrain mineral prim 매칭.
-
-        snapshot: push 시작 시점에 캡쳐된 dict {name, cx, cy, dist, cam_pos, cam_rot}.
-                  주어지면 현재 det_summary 무시하고 snapshot 으로 deproject (push 끝 시점에 det 가
-                  conf drop 으로 빠진 경우에도 manipulation 진입 가능)."""
-        if sm is None:
-            print(f"  [manip-start FAIL] sm is None")
-            return False
-        if sm.busy:
-            print(f"  [manip-start FAIL] sm busy (state={sm.state})")
+    def _start_manipulation_if_possible():
+        """nav cam YOLO + depth 로 target XYZ 계산 → 가장 가까운 terrain mineral prim 매칭."""
+        if sm is None or sm.busy:
             return False
         try:
-            nearest = None
-            cam_pos, cam_rot = None, None
-            if snapshot is not None and snapshot.get('cam_pos') is not None:
-                nearest = {
-                    'name': snapshot['name'],
-                    'cx':   snapshot['cx'],
-                    'cy':   snapshot['cy'],
-                    'dist': snapshot['dist'],
-                }
-                cam_pos = snapshot['cam_pos']
-                cam_rot = snapshot['cam_rot']
-                print(f"  [manip-start] using push snapshot: {nearest['name']} "
-                      f"bbox=({nearest['cx']},{nearest['cy']}) dist={nearest['dist']:.2f}m")
-            else:
-                try:
-                    valid = [d for d in det_summary if np.isfinite(d['dist'])]
-                except NameError:
-                    print(f"  [manip-start FAIL] det_summary NameError")
-                    return False
-                if not valid:
-                    print(f"  [manip-start FAIL] no valid det (with finite dist) and no snapshot")
-                    return False
-                nearest = min(valid, key=lambda d: d['dist'])
-                cam_pos, cam_rot = _read_world_pose_mat(paths["nav_cam"])
-                if cam_pos is None:
-                    print(f"  [manip-start FAIL] cam_pos None")
-                    return False
+            try:
+                valid = [d for d in det_summary if np.isfinite(d['dist'])]
+            except NameError:
+                return False
+            if not valid:
+                return False
+            nearest = min(valid, key=lambda d: d['dist'])
 
             if nav_cam_intrinsics[0] is None:
                 nav_cam_intrinsics[0] = _get_camera_intrinsics(camera, (res_w, res_h))
+            cam_pos, cam_rot = _read_world_pose_mat(paths["nav_cam"])
+            if cam_pos is None:
+                return False
 
             px, py = int(round(nearest['cx'])), int(round(nearest['cy']))
             d = float(nearest['dist'])
             if not (np.isfinite(d) and d > 0.05):
-                print(f"  [manip-start FAIL] invalid depth d={d}")
                 return False
             target_xyz = _deproject_pixel_to_world(
                 px, py, d, nav_cam_intrinsics[0], cam_pos, cam_rot)
@@ -1704,31 +1464,22 @@ def main():
             # Terrain mineral prim 역매칭 — XY 평면 거리 기준 (z 는 노이즈 큼)
             mineral_path = None
             mineral_actual_xyz = target_xyz
-            closest_info = None
             if terrain_minerals:
                 def _xy_dist(m):
                     return float(np.hypot(m['xyz'][0] - target_xyz[0],
                                           m['xyz'][1] - target_xyz[1]))
                 closest = min(terrain_minerals, key=_xy_dist)
                 dist_xy = _xy_dist(closest)
-                closest_info = (closest['path'], closest['color'], dist_xy)
                 if dist_xy < MINERAL_MATCH_RADIUS and closest['path'] not in picked_set:
                     mineral_path = closest['path']
                     mineral_actual_xyz = closest['xyz'].copy()  # ground-truth XYZ 사용
                     print(f"  [match] {closest['color']} prim ({dist_xy:.2f}m away from deproject)")
-                elif closest['path'] in picked_set:
-                    print(f"  [match SKIP] closest prim {closest['path']} 이미 picked_set 에 있음 (dist_xy={dist_xy:.2f}m)")
-                else:
-                    print(f"  [match MISS] closest {closest['color']} dist_xy={dist_xy:.2f}m > {MINERAL_MATCH_RADIUS}m radius")
 
             # picked dedup — prim path 있으면 path 로, 없으면 위치 cell 로
             key = mineral_path or (round(target_xyz[0]/0.5),
                                     round(target_xyz[1]/0.5),
                                     round(target_xyz[2]/0.5))
             if key in picked_set:
-                print(f"  [manip-start FAIL] key {key} already in picked_set "
-                      f"({len(picked_set)} entries). deproject=({target_xyz[0]:+.2f},"
-                      f"{target_xyz[1]:+.2f},{target_xyz[2]:+.2f}) class={nearest.get('name')}")
                 return False
             picked_set.add(key)
             manip_lock_pos[0] = pos.copy()
@@ -1790,62 +1541,27 @@ def main():
                 except NameError:
                     pass
 
-                # ── 최우선: ENGAGE push 진행 중이면 target 무시하고 push 직진 계속 ──
-                if engage_pushing[0]:
-                    push_dist = ENGAGE_X_PUSH_PER_CLASS.get(
-                        engage_push_class[0], ENGAGE_X_PUSH)
-                    step_amt = push_dist / float(ENGAGE_PUSH_FRAMES)
-                    cy_ = np.cos(engage_push_yaw[0])
-                    sy_ = np.sin(engage_push_yaw[0])
-                    pos[0] += step_amt * cy_
-                    pos[1] += step_amt * sy_
-                    engage_push_frame[0] += 1
-                    if engage_push_frame[0] >= ENGAGE_PUSH_FRAMES:
-                        # push 완료 → manipulation 시도 (snapshot 우선)
-                        started = _start_manipulation_if_possible(
-                            snapshot=engage_push_target[0])
-                        print(f"  [engage] X push +{push_dist:.2f}m done "
-                              f"(class={engage_push_class[0]}) → manip "
-                              f"{'OK' if started else 'FAIL'}")
-                        engage_pushing[0] = False
-                        engage_push_frame[0] = 0
-                        engage_push_class[0] = None
-                        engage_push_target[0] = None
+                if target is not None:
+                    cx_norm = (target["cx"] - res_w / 2.0) / (res_w / 2.0)
+                    last_target[0] = (cx_norm, target["dist"])
+                    stop_dist = STOP_DISTANCE_PER_CLASS.get(
+                        target.get("name", ""), STOP_DISTANCE_DEFAULT)
+                    if target["dist"] > stop_dist:
+                        # ENGAGE_DISTANCE(0.9m) 이내면 creep 속도로 감속해 grip 거리까지 천천히 접근
+                        lin_speed = (CREEP_LIN_SPEED
+                                     if target["dist"] <= ENGAGE_DISTANCE
+                                     else AUTO_LIN_SPEED)
+                        yaw -= STEER_GAIN * cx_norm * dt
+                        pos[0] += lin_speed * dt * np.cos(yaw)
+                        pos[1] += lin_speed * dt * np.sin(yaw)
+                    else:
+                        # stop_dist 이내 — manipulation 시작 시도
+                        started = _start_manipulation_if_possible()
                         if not started:
-                            # 실패 (이미 picked or target 사라짐) — yaw 비틀고 다음 탐색
+                            # 이 mineral 은 이미 picked — yaw 살짝 비틀고 직진해 다음 탐색
                             yaw += 0.3 * dt
                             pos[0] += AUTO_LIN_SPEED * dt * np.cos(yaw)
                             pos[1] += AUTO_LIN_SPEED * dt * np.sin(yaw)
-                elif target is not None:
-                    cx_norm = (target["cx"] - res_w / 2.0) / (res_w / 2.0)
-                    last_target[0] = (cx_norm, target["dist"])
-                    if target["dist"] > ENGAGE_DISTANCE:
-                        # ENGAGE 밖 — full speed 직진 + 중앙 정렬 steering
-                        yaw -= STEER_GAIN * cx_norm * dt
-                        pos[0] += AUTO_LIN_SPEED * dt * np.cos(yaw)
-                        pos[1] += AUTO_LIN_SPEED * dt * np.sin(yaw)
-                    else:
-                        # ENGAGE 진입 — target snapshot + push 시작 (yaw freeze + frame counter)
-                        if sm is not None and not sm.busy:
-                            # push 시작 시점 카메라 pose 캡쳐 (conf drop 대비 snapshot)
-                            snap_cam_pos, snap_cam_rot = _read_world_pose_mat(paths["nav_cam"])
-                            engage_push_target[0] = {
-                                'name': target.get("name"),
-                                'cx':   target["cx"],
-                                'cy':   target["cy"],
-                                'dist': target["dist"],
-                                'cam_pos': snap_cam_pos.copy() if snap_cam_pos is not None else None,
-                                'cam_rot': snap_cam_rot.copy() if snap_cam_rot is not None else None,
-                            }
-                            engage_pushing[0] = True
-                            engage_push_frame[0] = 0
-                            engage_push_yaw[0] = float(yaw)
-                            engage_push_class[0] = target.get("name")
-                            push_dist = ENGAGE_X_PUSH_PER_CLASS.get(
-                                engage_push_class[0], ENGAGE_X_PUSH)
-                            print(f"  [engage] start X push +{push_dist:.2f}m forward "
-                                  f"over {ENGAGE_PUSH_FRAMES} frames "
-                                  f"(class={engage_push_class[0]}, yaw={np.rad2deg(yaw):+.1f}°)")
                 else:
                     last_target[0] = None
                     pos[0] += AUTO_LIN_SPEED * dt * np.cos(yaw)

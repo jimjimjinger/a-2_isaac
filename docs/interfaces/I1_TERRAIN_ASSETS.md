@@ -21,18 +21,19 @@ isaac_sim/
 │  │     └─ meta.json                 # 모두 — 광물/베이스캠프/스폰/난이도
 │  │
 │  └─ markers/                        ← 모든 terrain이 공유하는 USD
-│     ├─ mineral_blue.usd             # [최진우 T2] HSV detection target
-│     ├─ mineral_red.usd
-│     ├─ mineral_yellow.usd
+│     ├─ blue_mineral.usd             # [최진우 T2] HSV detection target
+│     ├─ green_gas.usd
+│     ├─ yellow_mineral.usd
 │     └─ basecamp_dome.usd            # [이찬휘 T3 FSM] "is rover home?" 시각
 │
 └─ worlds/
-   └─ mars_exploration_world.usd      ← master scene (Isaac Sim이 열어주는 파일)
+   ├─ terrain_NNNNN.usd               ← terrain별 master scene (보존, 덮어쓰기 X)
+   └─ mars_exploration_world.usd      ← 최신 terrain alias (Isaac Sim 기본 entry point)
 ```
 
 **구분이 중요**:
 - `generated_terrains/terrain_NNNNN/` = **terrain별 데이터**. terrain 1000개 만들면 1000개 디렉터리
-- `markers/` = **모든 terrain이 공유하는 USD**. 1000개 terrain이 같은 mineral_blue.usd를 reference
+- `markers/` = **모든 terrain이 공유하는 USD**. 1000개 terrain이 같은 blue_mineral.usd를 reference
 - `worlds/mars_exploration_world.usd` = **master scene**. 위 두 디렉터리의 USD를 reference로 묶은 entry point
 
 ---
@@ -68,9 +69,9 @@ isaac_sim/
                   │  ├─ /World/Rocks         ──ref──→ ../assets/generated_terrains/terrain_00001/rocks_merged.usd
                   │  ├─ /World/Basecamp      ──ref──→ ../assets/markers/basecamp_dome.usd
                   │  ├─ /World/Minerals/
-                  │  │   ├─ mineral_01_blue   ──ref──→ ../assets/markers/mineral_blue.usd     (translate id=1 위치)
-                  │  │   ├─ mineral_02_yellow ──ref──→ ../assets/markers/mineral_yellow.usd   (translate id=2 위치)
-                  │  │   ├─ mineral_03_red    ──ref──→ ../assets/markers/mineral_red.usd      (...)
+                  │  │   ├─ mineral_01_blue   ──ref──→ ../assets/markers/blue_mineral.usd     (translate id=1 위치)
+                  │  │   ├─ mineral_02_yellow ──ref──→ ../assets/markers/yellow_mineral.usd   (translate id=2 위치)
+                  │  │   ├─ mineral_03_red    ──ref──→ ../assets/markers/green_gas.usd      (...)
                   │  │   └─ ... (12개 instance)
                   │  └─ /World/Lights/
                   │      ├─ Sun (DistantLight)         ← reference 아님, master 안에 직접 정의
@@ -81,9 +82,9 @@ isaac_sim/
 
 | Mineral USD | 사용 횟수 | 광물 id |
 |---|:---:|---|
-| `mineral_blue.usd` | 4번 | id 1, 7, 9, 11 |
-| `mineral_red.usd` | 2번 | id 3, 5 |
-| `mineral_yellow.usd` | 6번 | id 2, 4, 6, 8, 10, 12 |
+| `blue_mineral.usd` | 4번 | id 1, 7, 9, 11 |
+| `green_gas.usd` | 2번 | id 3, 5 |
+| `yellow_mineral.usd` | 6번 | id 2, 4, 6, 8, 10, 12 |
 | **합계** | **12** | — |
 
 3종류의 USD를 12번 reference (instance 효과). 위치는 각 reference 위에 `translate` 메타로 덮어씀.
@@ -98,9 +99,9 @@ mars_exploration_world.usd 열기 (2.5 KB)
   ├─ terrain_only.usd (1.4 MB)   로드 → /World/Terrain 자리에 mesh 합성
   ├─ rocks_merged.usd (5.8 KB)   로드 → /World/Rocks 자리에 80 sphere 합성
   ├─ basecamp_dome.usd (1.3 KB)  로드 → /World/Basecamp 자리에 pad+dome+antenna 합성
-  ├─ mineral_blue.usd (931 B)    로드 → 4개 instance 합성 (translate 적용)
-  ├─ mineral_red.usd (930 B)     로드 → 2개 instance
-  └─ mineral_yellow.usd (933 B)  로드 → 6개 instance
+  ├─ blue_mineral.usd (931 B)    로드 → 4개 instance 합성 (translate 적용)
+  ├─ green_gas.usd (930 B)     로드 → 2개 instance
+  └─ yellow_mineral.usd (933 B)  로드 → 6개 instance
   
   + 자체 조명 2개 (Sun + Sky)
   = Isaac Sim viewport에 완전한 화성 scene 렌더링
@@ -112,7 +113,7 @@ mars_exploration_world.usd 열기 (2.5 KB)
 
 | 장점 | 설명 |
 |------|-----|
-| **markers/ 1개만 바꾸면 모든 terrain 자동 갱신** | 김현중이 mineral_blue.usd를 멋진 모형으로 교체 → 1000개 terrain × 평균 12광물 = 12000번 reference가 모두 새 모양. master scene/generator 코드 수정 불필요 |
+| **markers/ 1개만 바꾸면 모든 terrain 자동 갱신** | 김현중이 blue_mineral.usd를 멋진 모형으로 교체 → 1000개 terrain × 평균 12광물 = 12000번 reference가 모두 새 모양. master scene/generator 코드 수정 불필요 |
 | **terrain별 독립** | terrain_00002의 generated_terrains/에 USD를 다시 생성 — markers/는 그대로 공유 |
 | **master scene 가벼움** | 2.5 KB라 git diff에서 변경사항 파악 쉬움 (큰 binary 안 들고 있음) |
 | **Isaac Sim composition 강력함** | reference만 바꾸면 시각 즉시 갱신, reload만 하면 됨 |
@@ -149,7 +150,7 @@ mars_exploration_world.usd 열기 (2.5 KB)
 
 ⚠️ **npy는 항상 풀해상도 1000×1000 유지**. mesh는 시각/충돌용 다운샘플일 뿐.
 
-### 생성 알고리즘 ([procedural_terrain_generator.py:213-264](../../isaac_sim/scripts/procedural_terrain_generator.py#L213-L264))
+### 생성 알고리즘 ([world_composer.py](../../isaac_sim/scripts/world_composer.py))
 heightmap[i, j]를 stride 간격으로 샘플링 → vertex 배열 → 각 quad(4 vertex)를 2개 triangle로 분할 → per-face normal 계산.
 
 ### 디버깅 히스토리 (왜 이 구조인지)
@@ -182,7 +183,7 @@ heightmap[i, j]를 stride 간격으로 샘플링 → vertex 배열 → 각 quad(
 - 우리 generator는 sphere라 size/2가 반지름
 
 ### 향후 (김현중)
-[generator의 export_rocks_usd()](../../isaac_sim/scripts/procedural_terrain_generator.py#L271-L283)를 reference 방식으로 한 줄 수정:
+[world_composer.py의 export_rocks_usd()](../../isaac_sim/scripts/world_composer.py)를 reference 방식으로 수정:
 ```python
 # 지금:  UsdGeom.Sphere.Define(stage, ...) → 직접 sphere prim
 # 후행:  markers/rock_default.usd를 reference (mineral과 같은 패턴)
@@ -330,16 +331,17 @@ estimated_pos, confidence = trn.localize(local, prior_pos, global_heightmap)
 ## terrain 새로 생성 시 흐름
 
 ```bash
-python3 isaac_sim/scripts/procedural_terrain_generator.py \
-    --seed 99 --terrain-id terrain_00002
+python3 isaac_sim/scripts/mars_terrain_generator_v2.py \
+    --seed 23456 --terrain-id terrain_00002
 ```
 
 생성되는 것:
 1. `generated_terrains/terrain_00002/{terrain_only.usd, rocks_merged.usd, obstacle_grid.npy, heightmap.npy, meta.json}` 5개 ✅
-2. `generated_terrains/index.json` (기존 entry + 새 terrain 추가) ✅
-3. `worlds/mars_exploration_world.usd` ← terrain_00002로 갱신 ✅
+2. `generated_terrains/index.json` (기존 entry + 새 terrain 추가, I1 포맷) ✅
+3. `worlds/terrain_00002.usd` ← 이 terrain 전용 master scene (terrain별 보존) ✅
+4. `worlds/mars_exploration_world.usd` ← 최신 terrain alias로 갱신 ✅
 
-> 현재는 master scene이 1개 terrain만 가리킴 (가장 최근 생성). 만약 동시에 여러 terrain을 시각화하고 싶다면 generator에 `--no-compose` 옵션 사용 + 별도 master scene 작성.
+> master scene 정책 (v2): terrain마다 `worlds/<terrain_id>.usd`를 보존하고, `worlds/mars_exploration_world.usd`는 항상 최신 terrain의 alias. 특정 terrain은 `worlds/<terrain_id>.usd`로, 최신은 `mars_exploration_world.usd`로 연다.
 
 생성 안 되는 것 (이미 존재 시 보호):
 - `markers/mineral_*.usd`, `markers/basecamp_dome.usd` — 김현중이 멋진 모형으로 교체해뒀을 수도 있어서 보호. 다시 만들고 싶으면 `rm` 후 generator 재실행.
@@ -351,7 +353,7 @@ python3 isaac_sim/scripts/procedural_terrain_generator.py \
 **Q1. mars_exploration_world.usd 만 git에 올리면 다른 사람도 볼 수 있나?**
 ❌ 안 됨. reference만 들어있어서 `terrain_only.usd`/`rocks_merged.usd`/`markers/*.usd` 다 같이 있어야 함. git LFS 또는 별도 asset 저장소 권장.
 
-**Q2. markers/의 mineral_blue.usd를 멋진 모형으로 교체하면?**
+**Q2. markers/의 blue_mineral.usd를 멋진 모형으로 교체하면?**
 ✅ 1000개 terrain × 평균 12광물 = 12000개가 동시에 자동 갱신. master scene/generator 코드 수정 불필요. Isaac Sim에서 Reload만 하면 됨.
 
 **Q3. terrain_only.usd 만 별도로 Isaac Sim에 열어볼 수 있나?**

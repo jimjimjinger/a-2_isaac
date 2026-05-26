@@ -165,8 +165,8 @@ sim: SimCfg = SimCfg(
     "collision_usd_path": null
   },
   "minerals": [
-    {"id": 1, "type": "blue", "position": {"x": 8.0, "y": 4.0, "z": 0.1}, "value": 10},
-    {"id": 2, "type": "red",  "position": {"x": -5.2, "y": 7.3, "z": 0.1}, "value": 25}
+    {"id": 1, "type": "blue_mineral", "position": {"x": 8.0, "y": 4.0, "z": 0.1}, "value": 10},
+    {"id": 2, "type": "green_gas",    "position": {"x": -5.2, "y": 7.3, "z": 0.1}, "value": 25}
   ],
   "physics_zones": [
     {
@@ -314,10 +314,11 @@ yellow (20%, 50점)  ← 희귀
 #### minerals (출력)
 generation_params로부터 알고리즘이 산출한 결과:
 ```json
-{"id": 1, "type": "blue", "position": {...}, "value": 10}
+{"id": 1, "type": "blue_mineral", "position": {...}, "value": 10}
 ```
 - **id는 김현중 (T1)이 1부터 순차 발급** (최진우 (T2)가 이 ID로 detection 매칭)
-- 광물 USD는 별도 디렉터리에 색별 (mineral_blue.usd 등) 미리 준비
+- 광물 USD는 별도 디렉터리에 종류별 ({type}.usd: `blue_mineral.usd` / `yellow_mineral.usd` / `green_gas.usd`) 미리 준비
+- type ∈ {`blue_mineral`, `yellow_mineral`, `green_gas`} — YOLO model.names 와 동일
 
 #### physics_zones (출력)
 generation_params의 noise로부터 추출한 폴리곤 리스트. 이지민 (T5)이 이걸 받아서 PhysX에 적용.

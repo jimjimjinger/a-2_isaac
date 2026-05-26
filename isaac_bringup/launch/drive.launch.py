@@ -1,4 +1,4 @@
-"""Launch drive nodes (drive manager + mobile base executor)."""
+"""Launch the driving node (coverage_node — 단일 주행 브레인)."""
 
 from launch import LaunchDescription
 from launch_ros.actions import Node
@@ -9,14 +9,8 @@ def generate_launch_description() -> LaunchDescription:
         [
             Node(
                 package="isaac_drive",
-                executable="drive_manager_node",
-                name="drive_manager_node",
-                output="screen",
-            ),
-            Node(
-                package="isaac_drive",
-                executable="mobile_base_executor_node",
-                name="mobile_base_executor_node",
+                executable="coverage_node",
+                name="coverage_node",
                 output="screen",
             ),
         ]

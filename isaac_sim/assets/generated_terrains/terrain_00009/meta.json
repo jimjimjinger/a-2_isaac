@@ -2,7 +2,7 @@
   "terrain_id": "terrain_00009",
   "version": "1.0",
   "seed": 92736,
-  "generated_at": "2026-05-21T11:44:37+00:00",
+  "generated_at": "2026-05-25T08:47:35+00:00",
   "size_m": [
     50.0,
     50.0
@@ -36,15 +36,15 @@
       "min_spacing_m": 3.0,
       "exclude_basecamp_radius_m": 6.0,
       "value_distribution": {
-        "blue": {
+        "blue_mineral": {
           "prob": 0.5,
           "score": 10
         },
-        "red": {
+        "green_gas": {
           "prob": 0.3,
           "score": 25
         },
-        "yellow": {
+        "yellow_mineral": {
           "prob": 0.2,
           "score": 50
         }
@@ -422,7 +422,7 @@
   "minerals": [
     {
       "id": 1,
-      "type": "red",
+      "type": "green_gas",
       "position": {
         "x": 6.65,
         "y": 8.98,
@@ -432,7 +432,7 @@
     },
     {
       "id": 2,
-      "type": "blue",
+      "type": "blue_mineral",
       "position": {
         "x": -12.82,
         "y": -3.24,
@@ -442,7 +442,7 @@
     },
     {
       "id": 3,
-      "type": "red",
+      "type": "green_gas",
       "position": {
         "x": 12.75,
         "y": 1.24,
@@ -452,7 +452,7 @@
     },
     {
       "id": 4,
-      "type": "blue",
+      "type": "blue_mineral",
       "position": {
         "x": -0.43,
         "y": -18.45,
@@ -462,7 +462,7 @@
     },
     {
       "id": 5,
-      "type": "yellow",
+      "type": "yellow_mineral",
       "position": {
         "x": -5.58,
         "y": 19.48,
@@ -472,7 +472,7 @@
     },
     {
       "id": 6,
-      "type": "yellow",
+      "type": "yellow_mineral",
       "position": {
         "x": 5.53,
         "y": -19.61,
@@ -482,7 +482,7 @@
     },
     {
       "id": 7,
-      "type": "yellow",
+      "type": "yellow_mineral",
       "position": {
         "x": -12.46,
         "y": 0.93,
@@ -492,7 +492,7 @@
     },
     {
       "id": 8,
-      "type": "yellow",
+      "type": "yellow_mineral",
       "position": {
         "x": -7.65,
         "y": -3.31,
@@ -502,7 +502,7 @@
     },
     {
       "id": 9,
-      "type": "yellow",
+      "type": "yellow_mineral",
       "position": {
         "x": -15.07,
         "y": -21.88,
@@ -512,7 +512,7 @@
     },
     {
       "id": 10,
-      "type": "blue",
+      "type": "blue_mineral",
       "position": {
         "x": 20.81,
         "y": -15.93,
@@ -522,7 +522,7 @@
     },
     {
       "id": 11,
-      "type": "red",
+      "type": "green_gas",
       "position": {
         "x": 20.71,
         "y": 22.5,
@@ -532,7 +532,7 @@
     },
     {
       "id": 12,
-      "type": "blue",
+      "type": "blue_mineral",
       "position": {
         "x": 2.63,
         "y": -22.84,
