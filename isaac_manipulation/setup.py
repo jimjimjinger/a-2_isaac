@@ -7,7 +7,6 @@ setup(
     version="0.0.1",
     packages=[
         package_name,
-        f"{package_name}.primitives",
     ],
     data_files=[
         ("share/ament_index/resource_index/packages", [f"resource/{package_name}"]),
@@ -17,7 +16,7 @@ setup(
     zip_safe=True,
     maintainer="jimjimjinger",
     maintainer_email="jimjimjinger@users.noreply.github.com",
-    description="Manipulation package: M0609 arm executor + primitives.",
+    description="Manipulation package: M0609 DLS-IK arm executor + /grasp/command snap.",
     license="MIT",
     entry_points={
         "console_scripts": [

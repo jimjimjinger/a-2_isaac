@@ -7,5 +7,8 @@ int32 cargo_count
 int32 cargo_capacity
 int32 collected_count
 int32 collection_goal
+int32 collected_blue
+int32 collected_yellow
+int32 collected_green
 string active_task
 string last_error

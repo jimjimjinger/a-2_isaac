@@ -34,6 +34,15 @@ SENSOR_QOS = QoSProfile(
     depth=5,
 )
 
+# Annotated image 만 RELIABLE 로 발행 — web_video_server (RELIABLE subscribe)
+# 와 QoS 호환을 위해. detection FSM 자체는 SENSOR_QOS 그대로 유지.
+ANNOTATED_QOS = QoSProfile(
+    reliability=ReliabilityPolicy.RELIABLE,
+    durability=DurabilityPolicy.VOLATILE,
+    history=HistoryPolicy.KEEP_LAST,
+    depth=1,
+)
+
 
 VALUE_SCORE_BY_NAME = {
     "blue_mineral":   10.0,
@@ -118,7 +127,7 @@ class CamChannel:
         self.pub_det = node.create_publisher(DetectionArray, det_topic, 10)
         self.pub_ann = None
         if publish_annotated:
-            self.pub_ann = node.create_publisher(Image, ann_topic, SENSOR_QOS)
+            self.pub_ann = node.create_publisher(Image, ann_topic, ANNOTATED_QOS)
 
     def _log(self, msg: str, level: str = "info") -> None:
         # rclpy logger caches severity per source line, so call distinct

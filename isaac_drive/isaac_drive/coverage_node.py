@@ -95,6 +95,12 @@ class CoverageNode(Node):
         self.declare_parameter("max_lin", 3.0)
         self.declare_parameter("max_ang", 1.5)
         self.declare_parameter("sector_done_ratio", 0.95)
+        # 분홍 별(anchor) 도달 인정 거리. navigator.py default(0.3m)는 평지
+        # 가정 — 경사 위 anchor 는 0.3m 안 진입 어려워 rover 가 주변 배회.
+        # 0.8m 으로 늘려 경사 anchor 도 통과 처리. waypoint_tol(중간점)은
+        # default 0.4m 유지 — path 정확도 손상 최소화.
+        self.declare_parameter("anchor_final_tol", 0.8)
+        self.declare_parameter("waypoint_tol", 0.4)
         self.declare_parameter("enable_minimap", True)
         self.declare_parameter("viewer_write_every", 3)
         self.declare_parameter("enable_minimap_topics", True)
@@ -128,6 +134,8 @@ class CoverageNode(Node):
             self.pose,
             max_lin=float(self.get_parameter("max_lin").value),
             max_ang=float(self.get_parameter("max_ang").value),
+            waypoint_tol=float(self.get_parameter("waypoint_tol").value),
+            final_tol=float(self.get_parameter("anchor_final_tol").value),
         )
         self.mission = Mission(
             self.fog, ogrid, planner, navigator, self.pose,

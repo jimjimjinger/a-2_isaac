@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Mars Rover Ops — Mission Control</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
+</head>
+<body>
+  <!-- ┌────────────────────────────────────────────────────────────┐
+       │ TOP BAR  (timer / resources / connection)                 │
+       └────────────────────────────────────────────────────────────┘ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">▲ MARS ROVER OPS</span>
+      <span id="conn-pill" class="pill pill-offline">OFFLINE</span>
+    </div>
+    <div class="topbar-right">
+      <div class="resource" title="Blue mineral 누적">
+        <span class="res-icon res-blue"></span>
+        <span id="res-blue">0</span>
+      </div>
+      <div class="resource" title="Yellow mineral 누적">
+        <span class="res-icon res-yellow"></span>
+        <span id="res-yellow">0</span>
+      </div>
+      <div class="resource" title="Green gas 누적">
+        <span class="res-icon res-green"></span>
+        <span id="res-green">0</span>
+      </div>
+      <div class="resource resource-cargo" title="채집 / 목표">
+        <span class="res-icon res-cargo"></span>
+        <span id="res-collected">0</span><span class="res-sep">/</span><span id="res-goal">5</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ┌────────────────────────────────────────────────────────────┐
+       │ MAIN VIEW  (3 cameras side-by-side)                       │
+       └────────────────────────────────────────────────────────────┘ -->
+  <main class="viewports">
+    <figure class="viewport viewport-overview">
+      <figcaption>Terrain — Overview <span class="vp-tag">preview.png (static)</span></figcaption>
+      <div class="vp-frame">
+        <img id="cam-overview" src="{{ terrain_preview }}" alt="terrain preview"
+             onerror="this.classList.add('cam-down');" />
+        <div class="cam-down-overlay">terrain preview missing</div>
+      </div>
+    </figure>
+    <figure class="viewport viewport-chase">
+      <figcaption>Rover — Chase <span class="vp-tag">/camera/chase</span></figcaption>
+      <div class="vp-frame">
+        <img id="cam-chase" src="{{ cam_chase }}" alt="chase cam"
+             onerror="this.classList.add('cam-down');" />
+        <div class="cam-down-overlay">chase cam offline</div>
+      </div>
+    </figure>
+    <figure class="viewport viewport-wrist">
+      <figcaption>Wrist — YOLO <span class="vp-tag">/perception/wrist_image_annotated</span></figcaption>
+      <div class="vp-frame">
+        <img id="cam-wrist" src="{{ cam_wrist }}" alt="wrist cam"
+             onerror="this.classList.add('cam-down');" />
+        <div class="cam-down-overlay">wrist cam offline</div>
+      </div>
+    </figure>
+  </main>
+
+  <!-- ┌──────────────────┬──────────────────────────┬──────────────┐
+       │  MINIMAP (LL)    │  STATUS / PORTRAIT (C)   │ 3x3 GRID (R) │
+       └──────────────────┴──────────────────────────┴──────────────┘ -->
+  <section class="hud">
+    <!-- 좌하단 — coverage minimap -->
+    <div class="hud-cell hud-minimap">
+      <div class="hud-cell-title">COVERAGE MAP</div>
+      <div class="minimap-wrap">
+        <canvas id="minimap" width="320" height="320"></canvas>
+        <div class="minimap-axes">
+          <span class="axis-x">X →</span>
+          <span class="axis-y">Y ↑</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 중앙하단 — status (portrait + bars + menu) -->
+    <div class="hud-cell hud-status">
+      <div class="status-portrait">
+        <div class="portrait-frame">
+          <!-- 초상화 placeholder. 추후 static/img/portrait.png 로 교체. -->
+          <div class="portrait-img-placeholder">
+            <span>ROVER</span>
+            <span class="portrait-sub">RV-6W</span>
+          </div>
+        </div>
+        <button class="menu-btn" type="button" disabled>MENU</button>
+      </div>
+      <div class="status-info">
+        <div class="status-row">
+          <span class="status-label">PHASE</span>
+          <span id="phase-badge" class="phase-badge phase-EXPLORE">EXPLORE</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">BATTERY</span>
+          <div class="bar"><div id="batt-bar" class="bar-fill bar-ok" style="width:100%"></div></div>
+          <span id="batt-pct" class="status-value">100%</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">COLLECTED</span>
+          <div class="bar"><div id="col-bar" class="bar-fill bar-col" style="width:0%"></div></div>
+          <span id="col-text" class="status-value">0 / 5</span>
+        </div>
+        <div class="status-grid">
+          <div class="status-pair"><span class="k">POS</span><span id="pos-xy" class="v">— , —</span></div>
+          <div class="status-pair"><span class="k">YAW</span><span id="pos-yaw" class="v">— °</span></div>
+          <div class="status-pair"><span class="k">SPEED</span><span id="spd" class="v">— m/s</span></div>
+          <div class="status-pair"><span class="k">CMD</span><span id="cmdv" class="v">—</span></div>
+          <div class="status-pair"><span class="k">TASK</span><span id="task" class="v">—</span></div>
+          <div class="status-pair status-error"><span class="k">ERR</span><span id="err" class="v">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우하단 — 3x3 action grid (placeholder: 디자인만, 클릭 X) -->
+    <div class="hud-cell hud-actions">
+      <div class="hud-cell-title">ACTIONS</div>
+      <div class="action-grid">
+        <button class="act" disabled title="AUTO / MANUAL 토글 (placeholder)">
+          <span class="act-icon">⇄</span><span class="act-label">AUTO<br/>MANUAL</span></button>
+        <button class="act act-warn" disabled title="비상정지 (placeholder)">
+          <span class="act-icon">!</span><span class="act-label">E-STOP</span></button>
+        <button class="act" disabled title="베이스 강제 복귀 (placeholder)">
+          <span class="act-icon">↩</span><span class="act-label">RTB</span></button>
+
+        <button class="act" disabled title="채집 카운터 리셋 (placeholder)">
+          <span class="act-icon">0→</span><span class="act-label">RESET</span></button>
+        <button class="act" disabled title="Coverage replan 요청 (placeholder)">
+          <span class="act-icon">↻</span><span class="act-label">REPLAN</span></button>
+        <button class="act" disabled title="카메라 view 토글 (placeholder)">
+          <span class="act-icon">⊞</span><span class="act-label">CAM</span></button>
+
+        <button class="act act-empty" disabled><span class="act-icon">·</span></button>
+        <button class="act act-empty" disabled><span class="act-icon">·</span></button>
+        <button class="act act-empty" disabled><span class="act-icon">·</span></button>
+      </div>
+    </div>
+  </section>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"
+          integrity="sha384-2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"
+          crossorigin="anonymous"></script>
+  <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
