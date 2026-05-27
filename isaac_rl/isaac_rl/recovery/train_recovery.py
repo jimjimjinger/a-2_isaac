@@ -31,9 +31,11 @@ parser.add_argument("--log_dir",         type=str,   default="logs/recovery")
 parser.add_argument("--checkpoint",      type=str,   default=None)
 parser.add_argument("--eval_episodes",    type=int,   default=100)
 parser.add_argument("--eval_envs",        type=int,   default=4)
-parser.add_argument("--eval_interval",    type=int,   default=100)
+parser.add_argument("--eval_interval",    type=int,   default=999999)
 parser.add_argument("--policy_std_max",   type=float, default=2.0)
 parser.add_argument("--policy_std_min",   type=float, default=1e-3)
+parser.add_argument("--resume_log_dir",   type=str,   default=None,
+                    help="chunk 재시작 시 기존 log dir 지정 (TensorBoard 연속)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
@@ -213,7 +215,7 @@ class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
     seed              = 42
     num_steps_per_env = 32     # 64→32 revert: 8GB GPU에서 OOM 발생
     max_iterations    = 3000
-    save_interval     = 100
+    save_interval     = 20
     experiment_name   = "rover_recovery"
     empirical_normalization = True
     obs_groups        = {}
@@ -295,18 +297,23 @@ agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, RSL_RL_VERSION)
 log_root = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "..", "..", args.log_dir
 ))
-log_dir = os.path.join(log_root, datetime.now().strftime("%Y%m%d_%H%M%S"))
+if args.resume_log_dir:
+    log_dir = args.resume_log_dir   # chunk 재시작: 기존 dir 이어서 기록
+else:
+    log_dir = os.path.join(log_root, datetime.now().strftime("%Y%m%d_%H%M%S"))
 
 # ── 학습 실행 ─────────────────────────────────────────────────────────────
 runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device="cuda:0")
 
 if args.checkpoint:
     runner.load(args.checkpoint)
-    # 저장된 optimizer LR(1e-5 수준)을 리셋해서 학습이 다시 진행되도록 함
-    for pg in runner.alg.optimizer.param_groups:
-        pg["lr"] = RESUME_LR
+    # alg.learning_rate는 Python 속성이라 load_state_dict에 포함되지 않음.
+    # optimizer의 실제 LR(adaptive scheduler가 조정한 값)을 복원해야 chunk 재시작 시
+    # LR이 3e-4로 리셋되는 현상을 막을 수 있다.
+    restored_lr = runner.alg.optimizer.param_groups[0]["lr"]
+    runner.alg.learning_rate = restored_lr
     print(f"[train] 체크포인트 로드: {args.checkpoint}")
-    print(f"[train] optimizer LR 리셋: {RESUME_LR}")
+    print(f"[train] LR 복원: {restored_lr:.2e}  (chunk 재시작 연속)")
 
 print(f"\n{'='*60}")
 print(f"  Rover Recovery RL 학습 시작")

@@ -140,7 +140,7 @@ MARS_TERRAIN_GEN_CFG = TerrainGeneratorCfg(
 
 # 절차적 TerrainImporter (훈련 기본값)
 MARS_TERRAIN_CFG = TerrainImporterCfg(
-    prim_path             = "/World/terrain",
+    prim_path             = "/World/Terrain",
     terrain_type          = "generator",
     terrain_generator     = MARS_TERRAIN_GEN_CFG,
     max_init_terrain_level = 0,      # 커리큘럼: 쉬운 지형부터
@@ -186,7 +186,7 @@ def get_mars_usd_terrain_cfg(
     usd_path = _TERRAIN_USD_FILES[idx]
 
     return TerrainImporterCfg(
-        prim_path        = "/World/terrain",
+        prim_path        = "/World/Terrain",
         terrain_type     = "usd",
         usd_path         = usd_path,
         collision_group  = -1,
@@ -209,11 +209,86 @@ def get_random_train_terrain_cfg() -> TerrainImporterCfg:
         return MARS_TERRAIN_CFG  # fallback to procedural
     usd_path = random.choice(MARS_TRAIN_TERRAIN_FILES)
     return TerrainImporterCfg(
-        prim_path        = "/World/terrain",
+        prim_path        = "/World/Terrain",
         terrain_type     = "usd",
         usd_path         = usd_path,
         collision_group  = -1,
         physics_material = MARS_PHYSICS_MATERIAL,
+        debug_vis        = False,
+    )
+
+
+def get_v4_curriculum_terrain_cfg(stage: int = 4) -> TerrainImporterCfg:
+    """v4 학습용 terrain curriculum config.
+
+    Stage schedule:
+      1: flat only
+      2: flat + rough
+      3: rough + slope
+      4: flat + rough + slope + crater
+    """
+    if stage <= 1:
+        sub_terrains = {
+            "flat": HfRandomUniformTerrainCfg(
+                proportion       = 1.0,
+                size             = (8.0, 8.0),
+                horizontal_scale = 0.1,
+                vertical_scale   = 0.005,
+                noise_range      = (-0.01, 0.01),
+                noise_step       = 0.01,
+                border_width     = 0.25,
+            ),
+        }
+    elif stage == 2:
+        sub_terrains = {
+            "flat": HfRandomUniformTerrainCfg(
+                proportion       = 0.5,
+                size             = (8.0, 8.0),
+                horizontal_scale = 0.1,
+                vertical_scale   = 0.005,
+                noise_range      = (-0.02, 0.02),
+                noise_step       = 0.02,
+                border_width     = 0.25,
+            ),
+            "rough": MarsRoughTerrainCfg(),
+        }
+    elif stage == 3:
+        sub_terrains = {
+            "rough": MarsRoughTerrainCfg(),
+            "slope": MarsSlopeTerrainCfg(),
+        }
+    else:
+        sub_terrains = {
+            "flat":   MARS_TERRAIN_GEN_CFG.sub_terrains["flat"],
+            "rough":  MarsRoughTerrainCfg(),
+            "crater": MarsCraterTerrainCfg(),
+            "slope":  MarsSlopeTerrainCfg(),
+        }
+
+    generator = TerrainGeneratorCfg(
+        seed             = 42,
+        size             = (8.0, 8.0),
+        border_width     = 0.5,
+        num_rows         = 4,
+        num_cols         = 4,
+        horizontal_scale = 0.1,
+        vertical_scale   = 0.005,
+        slope_threshold  = 0.75,
+        use_cache        = False,
+        sub_terrains     = sub_terrains,
+    )
+
+    return TerrainImporterCfg(
+        prim_path        = "/World/Terrain",
+        terrain_type     = "generator",
+        terrain_generator = generator,
+        max_init_terrain_level = 0,
+        collision_group  = -1,
+        physics_material = MARS_PHYSICS_MATERIAL,
+        visual_material  = sim_utils.MdlFileCfg(
+            mdl_path    = "{NVIDIA_NUCLEUS_DIR}/Materials/Base/Masonry/Concrete_Rough.mdl",
+            project_uvw = True,
+        ),
         debug_vis        = False,
     )
 

@@ -123,6 +123,14 @@ def fix_rigid_body(prim: Usd.Prim) -> None:
     ).Set(0.001)
 
 
+def fix_contact_report(prim: Usd.Prim) -> None:
+    """RigidBodyAPI prim에 contact reporter API를 명시적으로 부착."""
+    from pxr import PhysxSchema
+
+    cr_api = PhysxSchema.PhysxContactReportAPI.Apply(prim)
+    cr_api.CreateThresholdAttr().Set(0.0)
+
+
 def fix_collision_offsets(prim: Usd.Prim) -> None:
     """CollisionAPI prim에 contactOffset / restOffset 설정."""
     _get_or_create_attr(
@@ -229,6 +237,7 @@ def main() -> None:
         # ── 1. RigidBody 수정 ──────────────────────────────────────────
         if "PhysicsRigidBodyAPI" in schemas:
             fix_rigid_body(prim)
+            fix_contact_report(prim)
             rigid_count += 1
 
         # ── 2. Collision offset 수정 ───────────────────────────────────

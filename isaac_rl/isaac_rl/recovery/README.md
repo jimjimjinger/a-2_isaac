@@ -1,7 +1,6 @@
 # Rover Recovery RL
 
-넘어진 Rover를 **M0609 팔 + 바퀴**를 동시에 사용해 스스로 일어나는 강화학습 환경.  
-Isaac Lab (ManagerBasedRLEnv) + RSL-RL PPO 기반으로 구현.
+화성 로버 자력복구 강화학습 — Isaac Lab PPO 기반
 
 ---
 
@@ -9,222 +8,110 @@ Isaac Lab (ManagerBasedRLEnv) + RSL-RL PPO 기반으로 구현.
 
 | 파일 | 역할 |
 |---|---|
-| `recovery_env_cfg.py` | Isaac Lab 환경 설정 (씬, 관측, 행동, 보상, 종료) |
+| `recovery_env_cfg.py` | 환경 설정 (씬, 관측, 행동, 보상, 종료) |
 | `recovery_mdp.py` | 관측/보상/이벤트 함수 구현 |
 | `train_recovery.py` | PPO 학습 진입점 |
-| `play_recovery.py` | 학습된 정책으로 Isaac Sim 시각화 실행 |
-| `recovery_node.py` | 학습된 정책을 ROS2로 실행하는 노드 |
+| `play_recovery.py` | 학습된 정책 Isaac Sim 시각화 |
+| `run_curriculum.sh` | 1000 iter 단위 자동 분할 학습 스크립트 |
 
 ---
 
-## 환경 개요
+## 학습
 
-### 씬
-
-```
-[Ground Plane]
-    ├── Rover (vehicle_v3.usd)  — 넘어진 상태로 랜덤 초기화
-    └── M0609 Arm               — Rover 옆 1.2m 고정 베이스
+### 처음 시작
+```bash
+cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
+./run_curriculum.sh
 ```
 
-- 중력: **화성 중력 −3.72 m/s²**
-- 물리 주기: 200 Hz / 정책 주기: 50 Hz (decimation=4)
-- 에피소드 길이: **15초 (750 step)**
+### 체크포인트에서 이어서
+```bash
+cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
+./run_curriculum.sh /home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery/20260527_013331/model_2997.pt
+```
 
-### 초기 상태
-
-| 항목 | 값 |
-|---|---|
-| Rover roll | 60° ~ 120° (완전히 옆으로 넘어짐) |
-| Rover pitch | −30° ~ +30° (랜덤) |
-| Rover 위치 xy | ±0.5 m 랜덤 |
-| Rover 바퀴/스티어 | 0 rad, 0 rad/s |
-| M0609 자세 | 홈 자세 |
+학습 로그: `/home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery/날짜_시간/`
 
 ---
 
-## 행동 공간 (dim=12)
-
-| 인덱스 | 관절 | 제어 방식 | 스케일 |
-|---|---|---|---|
-| 0–5 | M0609 joint_1 ~ joint_6 | Position target | ±0.5 rad/step |
-| 6–11 | FL/FR/CL/CR/RL/RR\_Drive\_Continuous | Velocity target | ±15 rad/s |
-
-> 스티어 관절(FL/FR/RL/RR\_Steer\_Revolute)은 관측에만 포함, 행동 제어 없음.
-
----
-
-## 관측 공간 (dim=32)
-
-| 항목 | dim | 설명 |
-|---|---|---|
-| rover_roll, pitch, yaw | 3 | 오일러각 (rad) |
-| rover_pos_z | 1 | 지면 대비 높이 (m) |
-| rover_lin_vel | 3 | 선속도 (m/s) |
-| rover_ang_vel | 3 | 각속도 (rad/s) |
-| arm_joint_pos | 6 | M0609 관절 위치 (rad) |
-| arm_joint_vel | 6 | M0609 관절 속도 (rad/s) |
-| rover_drive_vel | 6 | 드라이브 바퀴 각속도 (rad/s) |
-| rover_steer_pos | 4 | 스티어 관절 위치 (rad) |
-
----
-
-## 보상 설계
-
-| 보상 항목 | weight | 수식 / 조건 |
-|---|---|---|
-| `upright_cosine` | **+10.0** | cos(roll) × cos(pitch) — upright=1.0, 90°옆=0.0 |
-| `height_reward` | **+5.0** | clamp((z − 0.30) / 0.30, 0, 1) — 몸체가 올라올수록 |
-| `success_bonus` | **+500.0** | \|roll\|<15° AND \|pitch\|<15° 달성 시 1.0 (sparse) |
-| `fallen_penalty` | **−3.0** | tilt > 75° 상태 지속 시 1.0 — 정체 방지 |
-| `time_penalty` | **−0.2** | 매 스텝 1.0 — 빠른 기립 압박 |
-| `wheel_drive_bonus` | **+2.0** | tilt>45° 상태에서 바퀴 회전속도 clamp(rms/10, 0, 1) |
-| `arm_vel_penalty` | −0.005 | Σ(arm\_joint\_vel²) — 팔 부드럽게 |
-| `joint_limit_penalty` | −2.0 | 팔 관절 소프트 한계 초과량 합 |
-
-**보상 전략 요약:**
-- 기립에 가까울수록 `upright_cosine`과 `height_reward`가 지속적으로 큰 양의 신호 제공
-- 성공 시 `success_bonus` 500으로 강한 목표 유도
-- `fallen_penalty` + `time_penalty`로 넘어진 채 버티는 lazy 정책 방지
-- `wheel_drive_bonus`로 팔만 쓰는 것이 아니라 바퀴 회전을 통한 모멘텀 활용 유도
-
----
-
-## 종료 조건
-
-| 조건 | 설명 |
-|---|---|
-| `rover_upright` | \|roll\|<15° AND \|pitch\|<15° → **성공 종료** |
-| `time_out` | 15초 초과 → 실패 종료 |
-
----
-
-## 학습 실행
+## 시각화 (Isaac Sim GUI)
 
 ```bash
 cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
-
-# 신규 학습
-/mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p train_recovery.py \
-    --num_envs 64 \
-    --max_iterations 5000 \
-    --headless
-
-# 체크포인트에서 재개
-/mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p train_recovery.py \
-    --num_envs 64 \
-    --max_iterations 5000 \
-    --headless \
-    --checkpoint <path/to/model_XXXX.pt>
-```
-
-### TensorBoard 모니터링
-
-```bash
-tensorboard --logdir ~/dev_ws/rover_ws/src/a2_isaac/logs/recovery --port 6006
-# 브라우저: http://localhost:6006
-```
-
----
-
-## 정책 시각화 (play)
-
-학습된 체크포인트로 Isaac Sim에서 직접 시각화할 수 있다.
-
-```bash
-cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
-
 /mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p play_recovery.py \
-    --checkpoint <path/to/model_XXXX.pt> \
-    --num_envs 4 \
-    --num_steps 1000
+    --checkpoint /home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery/20260527_013331/model_2997.pt \
+    --num_envs 4
 ```
 
 | 옵션 | 기본값 | 설명 |
 |---|---|---|
-| `--checkpoint` | (필수) | 로드할 `.pt` 체크포인트 경로 |
+| `--checkpoint` | (필수) | 로드할 `.pt` 경로 |
 | `--num_envs` | 4 | 동시 시각화 환경 수 |
-| `--num_steps` | 1000 | 실행 스텝 수 |
+| `--num_steps` | 10000 | 최대 실행 스텝 수 |
+
+GUI 창을 닫으면 자동 종료됩니다.
 
 ---
 
-## PPO 하이퍼파라미터
+## 현재 베스트 모델
+
+| 체크포인트 | 버전 | 비고 |
+|---|---|---|
+| `20260527_013331/model_2997.pt` | **v3** | 최신 — 3000 iter 완료 (2026-05-27) |
+| `20260526_173647/model_800.pt` | v2 | 성공률 61.4%, 피크 68.5% @ iter 578 |
+
+---
+
+## 학습 설정 (v3)
 
 | 항목 | 값 |
 |---|---|
-| num_steps_per_env | 24 |
-| num_learning_epochs | 5 |
-| num_mini_batches | 4 |
-| learning_rate | 1e-3 (adaptive) |
-| clip_param | 0.2 |
-| gamma / lambda | 0.99 / 0.95 |
-| desired_kl | 0.01 |
-| entropy_coef | 0.005 |
-| network | [256, 128, 64] ELU |
+| 환경 수 | 128 |
+| Chunk | 1000 iter |
+| 총 목표 | 3000 iter |
+| 정책 주기 | 50 Hz (decimation=2) |
+| 에피소드 길이 | 15초 |
+| 중력 | −3.72 m/s² (화성) |
+| GPU | RTX 5060 8GB |
+| 행동 차원 | 6 (M0609 arm only) |
+| 관측 차원 | 31 |
 
 ---
 
-## ROS2 통합 (recovery_node)
+## 초기 상태 분포 (v3)
 
-학습된 정책을 실제 로버에 배포하는 ROS2 노드.
+| 모드 | 비율 | roll | pitch |
+|---|---|---|---|
+| 옆으로 넘어짐 | 40% | ±60°~120° | < 20° |
+| 뒤집힘 | 30% | ±140°~180° | < 20° |
+| 비스듬히 | 30% | ±30°~70° | ±20°~50° |
+
+---
+
+## 보상 구조 (v3)
+
+| 항목 | weight | 설명 |
+|---|---|---|
+| `upright_cosine` | +10.0 | (cos(roll)·cos(pitch)+1)/2 — 항상 [0,1] |
+| `near_success` | +20.0 | 기립 근접 가우시안 신호 |
+| `stable_upright` | +20.0 | 연속 upright 프레임 비율 |
+| `wheel_contact` | +15.0 | 바퀴 지면 접촉 비율 |
+| `arm_recovery` | +8.0 | 팔로 땅 짚고 일어나기 |
+| `success_bonus` | +200.0 | 8프레임 안정 기립 달성 시 |
+| `height_reward` | +5.0 | 차체 높이 상승 |
+| `recovery_ang_vel` | +5.0 | 기립 방향 각속도 |
+| `fallen_penalty` | −1.0 | 넘어진 상태 지속 |
+| `time_penalty` | −0.1 | 매 스텝 소량 감점 |
+| `joint_limit` | −2.0 | arm 관절 한계 초과 |
+| `arm_vel` | −0.005 | 기립 후 arm 과속 |
+| `ang_vel` | −0.02 | 폭발적 회전 억제 |
+| `action_rate` | −0.01 | 급격한 동작 변화 |
+
+---
+
+## TensorBoard 모니터링
 
 ```bash
-source /opt/ros/humble/setup.bash
-source ~/dev_ws/rover_ws/install/setup.bash
-ros2 run isaac_rl recovery_node
+tensorboard --logdir /home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery --port 6006
+# 브라우저: http://localhost:6006
 ```
-
-### 토픽 / 서비스
-
-| 구분 | 이름 | 타입 | 설명 |
-|---|---|---|---|
-| 구독 | `/imu/data` | `sensor_msgs/Imu` | 자세 추정 (넘어짐 감지) |
-| 구독 | `/joint_states_raw` | `sensor_msgs/JointState` | M0609 관절 상태 |
-| 발행 | `/m0609/joint_command` | `sensor_msgs/JointState` | M0609 관절 명령 |
-| 발행 | `/recovery/status` | `std_msgs/String` | 복구 상태 (IDLE / FALLEN / RECOVERING / SUCCESS / TIMEOUT) |
-| 서비스 | `/recovery/start` | `std_srvs/Trigger` | 수동 복구 시작 |
-| 서비스 | `/recovery/stop` | `std_srvs/Trigger` | 복구 중지 |
-
-### 동작 흐름
-
-```
-IMU 수신 → 넘어짐 감지 (|roll| or |pitch| > 45°, 2초 지속)
-    → 자동 복구 시작 OR /recovery/start 서비스 호출
-    → 정책 inference (20 Hz)
-    → /m0609/joint_command 발행
-    → 성공: |roll|<15° AND |pitch|<15° → 종료
-    → 타임아웃: 15초 초과 → 종료
-```
-
-> `policies/recovery_policy.pt` 가 없으면 홈 자세(fallback)로만 동작.
-
----
-
-## 출력 파일
-
-```
-logs/recovery/<YYYYMMDD_HHMMSS>/
-    ├── model_200.pt, model_400.pt, ...   # 200 iter 마다 저장
-    └── events.out.tfevents.*             # TensorBoard 로그
-
-policies/
-    └── recovery_policy.pt               # 학습 완료 후 최종 정책
-```
-
-### 학습 세션 기록
-
-| 세션 | 시작 시각 |
-|---|---|
-| 세션 1 | 2026-05-24 15:54:58 |
-| 세션 2 | 2026-05-24 16:01:32 |
-| 세션 3 | 2026-05-24 16:28:45 |
-
----
-
-## 주요 관절명 (vehicle_v3.usd)
-
-| 종류 | 관절명 |
-|---|---|
-| Drive (6) | `FL_Drive_Continuous`, `FR_Drive_Continuous`, `CL_Drive_Continuous`, `CR_Drive_Continuous`, `RL_Drive_Continuous`, `RR_Drive_Continuous` |
-| Steer (4) | `FL_Steer_Revolute`, `FR_Steer_Revolute`, `RL_Steer_Revolute`, `RR_Steer_Revolute` |
-| Arm (6) | `joint_1` ~ `joint_6` |
