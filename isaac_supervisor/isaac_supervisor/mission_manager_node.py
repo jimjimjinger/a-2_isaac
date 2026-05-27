@@ -922,11 +922,13 @@ class MissionManagerNode(Node):
             self.waypoints = []
             self.wp_idx = 0
             self.last_plan_target = None
-        # EXPLORE / MISSION_COMPLETE 진입 시 supervisor source 의 path/target
-        # 을 한 번만 청소 — 직전 APPROACH/RTB 의 분홍 별·하늘색 점선이
-        # dashboard 에 남아있지 않게. 그 후엔 supervisor 가 발행 안 하므로
-        # coverage_node 의 /mission/path · /mission/markers 가 그대로 표시됨.
-        if new_phase in ("EXPLORE", "MISSION_COMPLETE"):
+        # EXPLORE / MISSION_COMPLETE / RTB 진입 시 supervisor source 의
+        # path/target 을 한 번 청소 — 직전 phase 의 mineral 별·점선이
+        # dashboard 에 남아있다가 새 viz tick 전까지 stale 로 보이는 현상
+        # 차단 (2026-05-27 rover_1 RTB 시연에서 옛 mineral target 잔재 관찰).
+        # RTB 의 경우 다음 _drive_to_basecamp tick 에서 새 basecamp target 으로
+        # 즉시 덮어쓰지만, 그 한 frame 사이 stale frame 을 None 으로 막음.
+        if new_phase in ("EXPLORE", "MISSION_COMPLETE", "RETURN_TO_BASE"):
             try:
                 self._publish_supervisor_viz(target_xy=None)
             except Exception:

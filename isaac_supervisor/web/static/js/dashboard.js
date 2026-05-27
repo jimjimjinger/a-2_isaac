@@ -288,26 +288,48 @@
     };
 
     // 모든 rover 의 path 를 색 분리해 그림.
+    //
+    // 핵심: backend mission_manager 가 보내는 path 는 A* 풀린 시점의
+    // grid cell 시작점 ~ 목표 의 전체 waypoint. rover 가 이미 path 중간을
+    // 따라간 후엔 path[0] 이 stale 한 옛 위치를 가리킴. 그대로 그리면
+    // "현위치와 다른 곳에서 path 가 시작" 처럼 보이거나, path 가 짧아
+    // length<2 라 안 그려지는 사례 발생 (2026-05-27 rover_1/rover_2 시연).
+    //
+    // 해결: rover 의 현재 odom 위치를 path 의 첫 점으로 prepend,
+    // 그 다음에 현재 위치에서 가장 가까운 waypoint 부터 끝까지 이어 그림.
+    // length>=1 이면 충분 (마지막 waypoint 하나만 있어도 rover→그 점 라인).
     for (const rid in byRover) {
       const r = byRover[rid];
       const col = colorFor(rid);
-      if (r.path && r.path.pts && r.path.pts.length >= 2) {
-        ctx.save();
-        ctx.strokeStyle = col.path;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([6, 4]);
-        // coverage map 은 탭과 무관하게 모든 rover 의 trail 을 동등 가시.
-        ctx.globalAlpha = 1.0;
-        ctx.beginPath();
-        const [x0, y0] = worldToPx(r.path.pts[0][0], r.path.pts[0][1]);
-        ctx.moveTo(x0, y0);
-        for (let k = 1; k < r.path.pts.length; k++) {
-          const [px, py] = worldToPx(r.path.pts[k][0], r.path.pts[k][1]);
-          ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        ctx.restore();
+      if (!r.path || !r.path.pts || r.path.pts.length < 1) continue;
+      if (!r.odom) continue;  // rover 현 위치 모르면 stale path 안 그림
+      const ox = r.odom.x, oy = r.odom.y;
+      // 현재 위치에서 가장 가까운 waypoint 의 index 찾기 (남은 경로 시작).
+      let startI = 0;
+      let bestD2 = Infinity;
+      for (let i = 0; i < r.path.pts.length; i++) {
+        const dx = r.path.pts[i][0] - ox;
+        const dy = r.path.pts[i][1] - oy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) { bestD2 = d2; startI = i; }
       }
+      // 가장 가까운 waypoint 가 rover 뒤(이미 지나간 지점) 라도 인덱스+1
+      // 쪽이 "남은 길" 의미상 자연. 단 끝 도달 직전이면 끝 인덱스 유지.
+      const remainStart = Math.min(startI + 1, r.path.pts.length - 1);
+      ctx.save();
+      ctx.strokeStyle = col.path;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.globalAlpha = 1.0;
+      ctx.beginPath();
+      const [px0, py0] = worldToPx(ox, oy);
+      ctx.moveTo(px0, py0);
+      for (let k = remainStart; k < r.path.pts.length; k++) {
+        const [px, py] = worldToPx(r.path.pts[k][0], r.path.pts[k][1]);
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
 
     // 모든 rover 의 target marker (분홍 별).
