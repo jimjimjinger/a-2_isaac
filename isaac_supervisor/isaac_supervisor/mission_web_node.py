@@ -401,6 +401,10 @@ def main(args: list[str] | None = None) -> None:
         def mjpeg(topic: str) -> str:
             return (f"http://{host}:{port}/stream?topic={topic}"
                     f"&type=mjpeg&quality=70")
+        # terrain_preview_path 가 .../generated_terrains/terrain_NNNNN/preview.png
+        # 패턴이라 부모 디렉토리 이름이 곧 terrain id.
+        terrain_path = str(ros_node.get_parameter("terrain_preview_path").value)
+        terrain_name = os.path.basename(os.path.dirname(terrain_path)) or "—"
         return render_template(
             "index.html",
             # 시연 단계: wrist 슬롯의 stream 을 body(nav) YOLO 로 변경
@@ -408,6 +412,7 @@ def main(args: list[str] | None = None) -> None:
             cam_wrist=mjpeg(topics["body"]),
             cam_chase=mjpeg(topics["chase"]),
             terrain_preview="/terrain/preview",
+            terrain_name=terrain_name,
         )
 
     @app.route("/terrain/preview")

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-05-27T08:33:56+00:00",
+  "generated_at": "2026-05-27T09:03:20+00:00",
   "terrains": [
     {
       "id": "terrain_00001",
@@ -151,6 +151,36 @@
       "split": "train",
       "difficulty": 0.32,
       "seed": 25025
+    },
+    {
+      "id": "terrain_00026",
+      "split": "train",
+      "difficulty": 0.314,
+      "seed": 26026
+    },
+    {
+      "id": "terrain_00027",
+      "split": "train",
+      "difficulty": 0.316,
+      "seed": 27027
+    },
+    {
+      "id": "terrain_00028",
+      "split": "train",
+      "difficulty": 0.307,
+      "seed": 28028
+    },
+    {
+      "id": "terrain_00029",
+      "split": "train",
+      "difficulty": 0.307,
+      "seed": 29029
+    },
+    {
+      "id": "terrain_00030",
+      "split": "train",
+      "difficulty": 0.308,
+      "seed": 30030
     }
   ]
 }

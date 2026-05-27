@@ -76,7 +76,10 @@
   <section class="hud">
     <!-- 좌하단 — terrain preview (작은 참고용. coverage map 은 메인 viewport 로 승격됨) -->
     <div class="hud-cell hud-minimap">
-      <div class="hud-cell-title">TERRAIN OVERVIEW</div>
+      <div class="hud-cell-title">
+        <span>TERRAIN OVERVIEW</span>
+        <span id="terrain-name" class="hud-cell-tag">{{ terrain_name }}</span>
+      </div>
       <div class="minimap-wrap">
         <img id="cam-overview" src="{{ terrain_preview }}" alt="terrain preview"
              class="terrain-preview-img"
@@ -89,8 +92,12 @@
     <div class="hud-cell hud-status">
       <div class="status-portrait">
         <div class="portrait-frame">
-          <!-- 초상화 placeholder. 추후 static/img/portrait.png 로 교체. -->
-          <div class="portrait-img-placeholder">
+          <img class="portrait-img"
+               src="{{ url_for('static', filename='img/rover_portrait.png') }}"
+               alt="rover portrait"
+               onerror="this.style.display='none';
+                        this.nextElementSibling.style.display='flex';" />
+          <div class="portrait-img-placeholder" style="display:none">
             <span>ROVER</span>
             <span class="portrait-sub">RV-6W</span>
           </div>
