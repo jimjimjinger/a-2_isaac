@@ -240,13 +240,13 @@ def generate_launch_description() -> LaunchDescription:
             "rovers", default_value="rover_1 rover_2",
             description="공백 구분 namespace 리스트. 예: 'rover_1 rover_2 rover_3'"),
         DeclareLaunchArgument(
-            "terrain_id", default_value="terrain_00023",
+            "terrain_id", default_value="terrain_00026",
             description="T1 Isaac Sim 의 --terrain 인자와 동일해야 obstacle_grid 정합."),
         DeclareLaunchArgument(
             "terrain_root", default_value=_default_terrain_root(),
             description="terrain_<id> 디렉토리들이 모여있는 루트."),
         DeclareLaunchArgument(
-            "collection_goal", default_value="5",
+            "collection_goal", default_value="2",
             description="각 rover 가 N개 채집 시 RETURN_TO_BASE. 빠른 시연 1."),
         DeclareLaunchArgument(
             "basecamp_arrive_radius_m", default_value="8.0",

@@ -64,7 +64,7 @@ def _default_terrain_root() -> str:
 
 def generate_launch_description() -> LaunchDescription:
     terrain_id_arg = DeclareLaunchArgument(
-        "terrain_id", default_value="terrain_00023",
+        "terrain_id", default_value="terrain_00026",
         description="coverage/mission_manager 가 사용할 terrain. T1 Isaac Sim "
                     "의 --terrain 인자와 같아야 obstacle_grid/baseanchor 정합. "
                     "default=terrain_00023 (epic obstacle 4종 = T5 localization "
@@ -73,7 +73,7 @@ def generate_launch_description() -> LaunchDescription:
         "terrain_root", default_value=_default_terrain_root(),
         description="terrain_<id> 디렉토리들이 모여있는 루트.")
     collection_goal_arg = DeclareLaunchArgument(
-        "collection_goal", default_value="5",
+        "collection_goal", default_value="2",
         description="광물 N개 채집 시 RETURN_TO_BASE 자동 전환.")
     battery_drain_arg = DeclareLaunchArgument(
         "battery_drain_per_tick", default_value="0.15",
