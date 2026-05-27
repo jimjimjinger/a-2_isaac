@@ -43,7 +43,7 @@ def _default_terrain_root() -> str:
 
 
 def _rover_group(ns: str, terrain_dir: str, collection_goal: int,
-                 arrive_r: float, fringe_r: float):
+                 arrive_r: float, fringe_r: float, reveal_radius: float):
     """단일 rover 의 5 노드 묶음 — 토픽 모두 /<ns>/... prefix.
 
     terrain_dir 는 T1 Isaac Sim 의 --terrain 인자와 동일한 terrain 폴더 경로.
@@ -202,7 +202,7 @@ def _launch_setup(context, *args, **kwargs):
     nodes = []
     for ns in rovers:
         nodes.extend(_rover_group(ns, terrain_dir, collection_goal,
-                                  arrive_r, fringe_r))
+                                  arrive_r, fringe_r, reveal_radius))
 
     # Web HUD — 단일 인스턴스가 모든 rover namespace 추적 (옵션 X 단계 2).
     # mission_web_node 의 rover_namespaces param 으로 ns 리스트 전달.
