@@ -80,7 +80,7 @@ from isaacsim.robot_setup.assembler import RobotAssembler
 A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 # T1 김현중이 main 에 추가한 in-repo rover 자산 (2026-05-20).
-ROVER_USD = A2_ROOT / "isaac_sim/assets/vehicle/legacy/rover/Mars_Rover.usd"
+ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 
 # M0609 + RG2 도 in-repo 로 이전 (2026-05-20). m0609 URDF 의 mesh absolute path
 # 는 sed 로 상대경로(meshes/...) 패치됨. 자가포함 → 다른 PC 에서도 그대로 작동.

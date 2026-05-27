@@ -539,6 +539,13 @@ def _attach(stage, link_path, obj_path):
     joint = UsdPhysics.FixedJoint.Define(stage, GRASP_JOINT_PATH)
     joint.CreateBody0Rel().SetTargets([Sdf.Path(link_path)])
     joint.CreateBody1Rel().SetTargets([Sdf.Path(obj_path)])
+    # Body0 = right_inner_finger frame origin (knuckle 회전축) 에 mineral attach.
+    # 시연용으로 lever arm = 0 유지 → cargo basket 으로 swing 시 mineral inertia
+    # 가 회전축 위에 있어 안정.
+    # 졸업 과제 (list_to_fix): 우리 main 의 vehicle_v3.usd 의 right_inner_finger
+    # frame 축 정의 검사 + finger tip 까지 정확한 offset 측정해 시각 개선.
+    # T2 제안값 (0.06, 0, 0.14) 시도 → 좌표계 mismatch 의심 + cargo 회전 시
+    # lever arm 효과로 oscillation 관찰 (2026-05-26 시연 검증). 원복.
     joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
     joint.CreateLocalRot0Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))

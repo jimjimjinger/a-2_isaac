@@ -82,7 +82,7 @@ from isaac_perception.cyan_detector import CyanDetector
 
 A2_ROOT = Path(_PKG_PARENT)
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
-ROVER_USD = A2_ROOT / "isaac_sim/assets/vehicle/legacy/rover/Mars_Rover.usd"
+ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"
 RG2_URDF = A2_ROOT / "isaac_sim/assets/onrobot_rg2/urdf/onrobot_rg2.urdf"
 
