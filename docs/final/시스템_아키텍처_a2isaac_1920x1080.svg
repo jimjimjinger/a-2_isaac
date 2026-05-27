@@ -1,0 +1,387 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" font-family="'Noto Sans CJK KR', 'Noto Sans KR', sans-serif">
+  <title>A2 ISAAC 시스템 아키텍처 — 패키지별 클러스터 (clean)</title>
+
+  <defs>
+    <marker id="ar-ros" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#0F6E56"/>
+    </marker>
+    <marker id="ar-ctrl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#C0392B"/>
+    </marker>
+    <marker id="ar-action" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#8E44AD"/>
+    </marker>
+    <marker id="ar-coop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#1F6FB5"/>
+    </marker>
+    <marker id="ar-ws" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#5F5E5A"/>
+    </marker>
+    <marker id="ar-swap" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0 0L10 5L0 10z" fill="#8E8E8E"/>
+    </marker>
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#FAFAFA"/>
+
+  <!-- ────── TITLE ────── -->
+  <rect x="0" y="0" width="1920" height="78" fill="url(#title-grad)" opacity="0.95"/>
+  <text x="960" y="36" text-anchor="middle" font-size="26" font-weight="bold" fill="white">A2 ISAAC 시스템 아키텍처 · 패키지 → 노드 → 토픽</text>
+  <text x="960" y="62" text-anchor="middle" font-size="14" fill="#FFF59D">멀티 rover 2대 · namespace 격리 (/rover_1/*, /rover_2/*) · vehicle_v3 ActionGraph · GT cheat fwd · 시연 D-day</text>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ROW 1 : Isaac Sim (시뮬레이터)  — 센서/액추에이터 게이트웨이 -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 100)">
+    <rect width="1840" height="160" rx="12" fill="#FFF1E0" stroke="#D9730D" stroke-width="2.5"/>
+    <rect width="1840" height="40" rx="12" fill="#D9730D"/>
+    <rect width="1840" height="20" y="20" fill="#D9730D"/>
+    <text x="20" y="28" font-size="18" font-weight="bold" fill="white">🛰️ Isaac Sim 5.1 · vehicle_v3.usd (USD 내장 ActionGraph — 런타임 OmniGraph 빌드 코드 불필요)</text>
+    <text x="1820" y="26" text-anchor="end" font-size="12" fill="#FFE8C8">패키지: isaac_sim · script: run_vehicle_v3.py</text>
+
+    <!-- PUBS (Isaac → ROS2) -->
+    <g transform="translate(30, 56)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#8C4A00">▲ PUBS (센서 · GT, Isaac → ROS2)</text>
+      <text x="0" y="36" font-size="13" fill="#8C4A00">/imu/data  ·  /joint_states_raw  ·  /ground_truth/odom</text>
+      <text x="0" y="56" font-size="13" fill="#8C4A00">/camera/{rover, wrist}/{image_raw, depth, camera_info}</text>
+      <text x="0" y="76" font-size="13" fill="#8C4A00">/camera/{sun, chase}/image_raw  ·  /camera/{sun}/camera_info</text>
+    </g>
+
+    <!-- SUBS (ROS2 → Isaac) -->
+    <g transform="translate(960, 56)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#8C4A00">▼ SUBS (제어 · manipulation, ROS2 → Isaac)</text>
+      <text x="0" y="36" font-size="13" fill="#8C4A00">/cmd_vel  →  ScriptNode (6-wheel Ackermann)</text>
+      <text x="0" y="56" font-size="13" fill="#8C4A00">/arm/joint_command  →  m0609 Articulation (I11)</text>
+      <text x="0" y="76" font-size="13" fill="#8C4A00">/grasp/command  →  ScriptNode (FixedJoint snap/release)</text>
+    </g>
+
+    <!-- GraspBridge 보조 표시 (위로 이동: 위 화살표 라벨과 겹침 회피) -->
+    <g transform="translate(1480, 60)">
+      <rect width="340" height="36" rx="6" fill="#FAFAF8" stroke="#5F5E5A" stroke-width="1.2"/>
+      <text x="170" y="16" text-anchor="middle" font-size="11" font-weight="bold" fill="#3D3D3A">🤝 GraspBridge (스크립트 내부 rclpy 사이드카)</text>
+      <text x="170" y="30" text-anchor="middle" font-size="10" fill="#5F5E5A">/grasp/command backup listener · OmniGraph race 우회</text>
+    </g>
+
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ROS2 Bridge 띠 (Row 1 ↔ Row 2 사이 — 모든 토픽이 이 경계 통과) -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <rect x="40" y="262" width="1840" height="30" rx="6" fill="#E0F2F1" stroke="#085041" stroke-width="1.2" stroke-dasharray="5 3"/>
+  <text x="1150" y="282" text-anchor="middle" font-size="13" font-weight="bold" fill="#085041">🌉 ROS2 Bridge</text>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ROW 2 : ROS2 노드 — 4 개 패키지 클러스터                    -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+
+  <!-- ───── isaac_drive ───── -->
+  <g transform="translate(40, 296)">
+    <rect width="430" height="280" rx="12" fill="#EEEDFE" stroke="#534AB7" stroke-width="2.5"/>
+    <rect width="430" height="36" rx="12" fill="#534AB7"/>
+    <rect width="430" height="18" y="18" fill="#534AB7"/>
+    <text x="16" y="26" font-size="16" font-weight="bold" fill="white">📦 isaac_drive</text>
+    <text x="414" y="25" text-anchor="end" font-size="11" fill="#D6D3F5">2 노드 (사용 중)</text>
+
+    <!-- odom_to_estimated_pose -->
+    <g transform="translate(16, 48)">
+      <rect width="398" height="108" rx="8" fill="white" stroke="#534AB7" stroke-width="1.5"/>
+      <text x="14" y="22" font-size="15" font-weight="bold" fill="#3C3489">📍 odom_to_estimated_pose</text>
+      <text x="14" y="38" font-size="11" fill="#534AB7">GT cheat 어댑터 — 졸업 시 EKF stack 으로 swap →</text>
+      <line x1="14" y1="46" x2="384" y2="46" stroke="#534AB7" stroke-width="0.5" stroke-dasharray="3 2"/>
+      <text x="14" y="64" font-size="11" font-weight="bold" fill="#3C3489">▼ sub</text>
+      <text x="50" y="64" font-size="11" fill="#3C3489">/ground_truth/odom</text>
+      <text x="14" y="82" font-size="11" font-weight="bold" fill="#3C3489">▲ pub</text>
+      <text x="50" y="82" font-size="11" fill="#3C3489">/rover/estimated_pose</text>
+      <text x="14" y="100" font-size="10" font-style="italic" fill="#7B73C8">시연: GT cheat (정공법 검증용 swap 대상은 ↓ isaac_localization)</text>
+    </g>
+
+    <!-- coverage_node -->
+    <g transform="translate(16, 164)">
+      <rect width="398" height="108" rx="8" fill="white" stroke="#534AB7" stroke-width="1.5"/>
+      <text x="14" y="22" font-size="15" font-weight="bold" fill="#3C3489">🗺️ coverage_node</text>
+      <text x="14" y="38" font-size="11" fill="#534AB7">BCD anchor sweep + A* 회피 · terrain meta 로드</text>
+      <line x1="14" y1="46" x2="384" y2="46" stroke="#534AB7" stroke-width="0.5" stroke-dasharray="3 2"/>
+      <text x="14" y="64" font-size="11" font-weight="bold" fill="#3C3489">▼ subs</text>
+      <text x="60" y="64" font-size="11" fill="#3C3489">/rover/estimated_pose · /coverage/replan_request</text>
+      <text x="14" y="82" font-size="11" font-weight="bold" fill="#3C3489">▲ pubs</text>
+      <text x="60" y="82" font-size="11" fill="#3C3489">/coverage/cmd_vel_raw · /mission/{path, markers, minimap}</text>
+      <text x="14" y="100" font-size="10" font-style="italic" fill="#7B73C8">terrain_NNNNN/obstacle_grid + meta 파일 직접 로드</text>
+    </g>
+  </g>
+
+  <!-- ───── isaac_localization (현재 미사용, 회색) ───── -->
+  <g transform="translate(40, 586)">
+    <rect width="430" height="76" rx="10" fill="#EDEDED" stroke="#8E8E8E" stroke-width="1.5" stroke-dasharray="6 3"/>
+    <rect width="430" height="22" rx="10" fill="#8E8E8E"/>
+    <rect width="430" height="11" y="11" fill="#8E8E8E"/>
+    <text x="14" y="16" font-size="12" font-weight="bold" fill="white">📦 isaac_localization · (현재 미사용 — 졸업 swap 대상)</text>
+    <text x="416" y="16" text-anchor="end" font-size="10" fill="#E5E5E5">9 노드</text>
+
+    <text x="14" y="36" font-size="10" font-weight="bold" fill="#5A5A5A">EKF stack — GPS-less rover pose (wheel + IMU + sun_yaw + TRN fusion)</text>
+
+    <g font-size="10" fill="#6E6E6E">
+      <text x="14" y="52">• wheel_odom</text>
+      <text x="108" y="52">• imu_integrator</text>
+      <text x="216" y="52">• sun_yaw</text>
+      <text x="298" y="52">• trn</text>
+      <text x="338" y="52">• ekf_fusion</text>
+      <text x="14" y="66">• localization</text>
+      <text x="108" y="66">• terrain_map_publisher</text>
+      <text x="246" y="66">• joint_state_splitter</text>
+      <text x="370" y="66">• local_height_patch</text>
+    </g>
+  </g>
+
+  <!-- swap 화살표: odom_to_estimated_pose → isaac_localization (두 박스 사이) -->
+  <path d="M 90 576 L 90 586" fill="none" stroke="#8E8E8E" stroke-width="1.5" stroke-dasharray="3 2" marker-end="url(#ar-swap)"/>
+  <path d="M 420 576 L 420 586" fill="none" stroke="#8E8E8E" stroke-width="1.5" stroke-dasharray="3 2" marker-end="url(#ar-swap)"/>
+  <rect x="160" y="569" width="190" height="16" rx="3" fill="white" stroke="#8E8E8E" stroke-width="0.7"/>
+  <text x="255" y="581" text-anchor="middle" font-size="10" font-style="italic" fill="#5A5A5A">↓ 졸업 swap (EKF stack 교체)</text>
+
+  <!-- ───── isaac_perception ───── -->
+  <g transform="translate(490, 296)">
+    <rect width="370" height="350" rx="12" fill="#E1F0E8" stroke="#0F6E56" stroke-width="2.5"/>
+    <rect width="370" height="36" rx="12" fill="#0F6E56"/>
+    <rect width="370" height="18" y="18" fill="#0F6E56"/>
+    <text x="16" y="26" font-size="16" font-weight="bold" fill="white">📦 isaac_perception</text>
+    <text x="354" y="25" text-anchor="end" font-size="11" fill="#C8E6D6">1 노드</text>
+
+    <g transform="translate(16, 52)">
+      <rect width="338" height="284" rx="8" fill="white" stroke="#0F6E56" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="15" font-weight="bold" fill="#085041">👁️ yolo_perception_node</text>
+      <text x="14" y="42" font-size="11" fill="#0F6E56">YOLO + depth backproject → world XYZ</text>
+      <line x1="14" y1="50" x2="324" y2="50" stroke="#0F6E56" stroke-width="0.5" stroke-dasharray="3 2"/>
+      <text x="14" y="68" font-size="11" font-weight="bold" fill="#085041">▼ subs (RealSense D455)</text>
+      <text x="14" y="86" font-size="11" fill="#0F6E56">/camera/rover/{image_raw, depth, info}</text>
+      <text x="14" y="102" font-size="11" fill="#0F6E56">/camera/wrist/{image_raw, depth, info}</text>
+      <text x="14" y="124" font-size="11" font-weight="bold" fill="#085041">▲ pubs</text>
+      <text x="14" y="142" font-size="11" fill="#0F6E56">/perception/detections</text>
+      <text x="14" y="158" font-size="11" fill="#0F6E56">/perception/image_annotated</text>
+      <text x="14" y="184" font-size="11" font-weight="bold" fill="#085041">classes</text>
+      <text x="14" y="202" font-size="11" fill="#0F6E56">💎 blue_mineral</text>
+      <text x="14" y="220" font-size="11" fill="#0F6E56">💎 yellow_mineral</text>
+      <text x="14" y="238" font-size="11" fill="#0F6E56">💨 green_gas</text>
+      <text x="14" y="266" font-size="10" font-style="italic" fill="#3B8C73">팀 T2 메인 · 명명 통일 완료</text>
+    </g>
+  </g>
+
+  <!-- ───── isaac_supervisor ───── -->
+  <g transform="translate(880, 296)">
+    <rect width="540" height="350" rx="12" fill="#FFE9D6" stroke="#E65100" stroke-width="3"/>
+    <rect width="540" height="36" rx="12" fill="#E65100"/>
+    <rect width="540" height="18" y="18" fill="#E65100"/>
+    <text x="16" y="26" font-size="16" font-weight="bold" fill="white">📦 isaac_supervisor  ⭐ 두뇌</text>
+    <text x="524" y="25" text-anchor="end" font-size="11" fill="#FFE0BD">3 노드</text>
+
+    <!-- mission_manager_node (강조) -->
+    <g transform="translate(16, 52)">
+      <rect width="508" height="210" rx="8" fill="white" stroke="#E65100" stroke-width="2"/>
+      <text x="14" y="24" font-size="15" font-weight="bold" fill="#BF360C">⭐ mission_manager_node  <tspan font-size="11" font-weight="normal" fill="#E65100">(×2 인스턴스 — rover_1, rover_2)</tspan></text>
+      <text x="14" y="42" font-size="11" fill="#E65100">Supervisor FSM (per rover) · 두뇌 · A* 동적 inflate · multi-rover coop</text>
+      <line x1="14" y1="50" x2="494" y2="50" stroke="#E65100" stroke-width="0.5" stroke-dasharray="3 2"/>
+      <text x="14" y="68" font-size="11" font-weight="bold" fill="#BF360C">▼ subs</text>
+      <text x="14" y="86" font-size="11" fill="#E65100">/perception/detections · /rover/estimated_pose</text>
+      <text x="14" y="102" font-size="11" fill="#E65100">/coverage/cmd_vel_raw · /battery_state</text>
+      <text x="14" y="118" font-size="11" font-weight="bold" fill="#6A1B9A">/mineral_claims · /rover_positions <tspan font-style="italic" font-weight="normal">(coop)</tspan></text>
+      <text x="14" y="138" font-size="11" font-weight="bold" fill="#BF360C">▲ pubs</text>
+      <text x="14" y="156" font-size="11" fill="#E65100">/cmd_vel · /mission/{state, phase, path}</text>
+      <text x="14" y="172" font-size="11" fill="#E65100">/supervisor/{path, target} · ExecuteArmTask (action)</text>
+      <text x="14" y="194" font-size="11" font-style="italic" fill="#BF360C">FSM: EXPLORE → APPROACH → PICK_READY → RETURN_TO_BASE → COMPLETE</text>
+    </g>
+
+    <!-- battery_monitor_node -->
+    <g transform="translate(16, 274)">
+      <rect width="248" height="62" rx="8" fill="white" stroke="#E65100" stroke-width="1.5"/>
+      <text x="14" y="22" font-size="14" font-weight="bold" fill="#BF360C">🔋 battery_monitor_node</text>
+      <text x="14" y="40" font-size="10" fill="#E65100">mock drain 0.15 %/tick (1 Hz)</text>
+      <text x="14" y="55" font-size="11" font-weight="bold" fill="#E65100">▲ pub  </text>
+      <text x="62" y="55" font-size="11" fill="#E65100">/battery_state  (≤10% → RTB)</text>
+    </g>
+
+    <!-- mission_web_node (요약, 자세한 내용은 Row 3) -->
+    <g transform="translate(276, 274)">
+      <rect width="248" height="62" rx="8" fill="white" stroke="#E65100" stroke-width="1.5"/>
+      <text x="14" y="22" font-size="14" font-weight="bold" fill="#BF360C">🌐 mission_web_node</text>
+      <text x="14" y="40" font-size="10" fill="#E65100">Web HUD gateway (아래 Row 3 참조)</text>
+      <text x="14" y="55" font-size="11" font-style="italic" fill="#E65100">Flask + Socket.IO + web_video_server</text>
+    </g>
+  </g>
+
+  <!-- ───── isaac_manipulation ───── -->
+  <g transform="translate(1440, 296)">
+    <rect width="440" height="350" rx="12" fill="#FCE4E0" stroke="#C0392B" stroke-width="2.5"/>
+    <rect width="440" height="36" rx="12" fill="#C0392B"/>
+    <rect width="440" height="18" y="18" fill="#C0392B"/>
+    <text x="16" y="26" font-size="16" font-weight="bold" fill="white">📦 isaac_manipulation</text>
+    <text x="424" y="25" text-anchor="end" font-size="11" fill="#F8D7D2">1 노드</text>
+
+    <g transform="translate(16, 52)">
+      <rect width="408" height="284" rx="8" fill="white" stroke="#C0392B" stroke-width="1.5"/>
+      <text x="14" y="24" font-size="15" font-weight="bold" fill="#8E2A1E">🤖 arm_executor_node</text>
+      <text x="14" y="42" font-size="11" fill="#C0392B">Action server · m0609 + RG2-FT manipulation</text>
+      <line x1="14" y1="50" x2="394" y2="50" stroke="#C0392B" stroke-width="0.5" stroke-dasharray="3 2"/>
+      <text x="14" y="68" font-size="11" font-weight="bold" fill="#8E2A1E">▼ subs / action</text>
+      <text x="14" y="86" font-size="11" fill="#C0392B">ExecuteArmTask  ← mission_manager (action goal)</text>
+      <text x="14" y="102" font-size="11" fill="#C0392B">/ground_truth/odom  (arm base pose)</text>
+      <text x="14" y="118" font-size="11" fill="#C0392B">/joint_states_raw</text>
+      <text x="14" y="140" font-size="11" font-weight="bold" fill="#8E2A1E">▲ pubs</text>
+      <text x="14" y="158" font-size="11" fill="#C0392B">/arm/joint_command  (I11)</text>
+      <text x="14" y="174" font-size="11" fill="#C0392B">/grasp/command  (Twist hijack)</text>
+      <text x="14" y="196" font-size="11" font-weight="bold" fill="#8E2A1E">pick_mineral pipeline</text>
+      <text x="14" y="214" font-size="11" fill="#C0392B">HOME → APPROACH → DESCEND →</text>
+      <text x="14" y="230" font-size="11" fill="#C0392B">  grasp pickup → HOME_MID →</text>
+      <text x="14" y="246" font-size="11" fill="#C0392B">  CARGO_SWING → settle 2.5s → release</text>
+      <text x="14" y="268" font-size="10" font-style="italic" fill="#A04434">IK: DLS-IK world target (정공법)</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- ROW 3 : Web HUD (자세히)                                     -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 686)">
+    <rect width="1840" height="180" rx="12" fill="#E1EAF5" stroke="#1F6FB5" stroke-width="2.5"/>
+    <rect width="1840" height="36" rx="12" fill="#1F6FB5"/>
+    <rect width="1840" height="18" y="18" fill="#1F6FB5"/>
+    <text x="16" y="26" font-size="16" font-weight="bold" fill="white">🌐 Web HUD  ·  mission_web_node + web_video_server  (단일 인스턴스가 모든 rover_namespace 추적)</text>
+    <text x="1824" y="25" text-anchor="end" font-size="11" fill="#C8DCF1">패키지: isaac_supervisor · stack: Flask + Socket.IO + ThreadingHTTPServer</text>
+
+    <g transform="translate(20, 52)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#0C447C">▼ ROS2 subs (모든 노드로부터)</text>
+      <text x="0" y="34" font-size="11" fill="#1F6FB5">/mission/state · /mission/{minimap, path, markers}</text>
+      <text x="0" y="50" font-size="11" fill="#1F6FB5">/ground_truth/odom · /cmd_vel · /supervisor/{path, target}</text>
+      <text x="0" y="66" font-size="11" fill="#1F6FB5">/perception/image_annotated · /camera/chase/image_raw</text>
+    </g>
+
+    <g transform="translate(500, 52)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#0C447C">▲ Socket.IO emit  (브라우저 → 실시간)</text>
+      <text x="0" y="34" font-size="11" fill="#1F6FB5">state · odom · minimap · path · target</text>
+      <text x="0" y="50" font-size="11" fill="#1F6FB5">rovers (namespace 리스트, chip 토글)</text>
+    </g>
+
+    <g transform="translate(940, 52)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#0C447C">HTTP endpoints</text>
+      <text x="0" y="34" font-size="11" fill="#1F6FB5">GET /           (index.html)</text>
+      <text x="0" y="50" font-size="11" fill="#1F6FB5">GET /terrain/preview  (terrain_NNNNN/preview.png)</text>
+      <text x="0" y="66" font-size="11" fill="#1F6FB5">web_video_server: GET /stream?topic=...&amp;type=mjpeg</text>
+    </g>
+
+    <g transform="translate(1420, 52)">
+      <text x="0" y="14" font-size="13" font-weight="bold" fill="#0C447C">접속 URL</text>
+      <text x="0" y="34" font-size="13" font-weight="bold" fill="#0C447C">http://localhost:8088</text>
+      <text x="0" y="50" font-size="11" fill="#1F6FB5">web_video :8090</text>
+      <text x="0" y="70" font-size="11" font-style="italic" fill="#1F6FB5">▶ 상단 3 viewports + 하단 4-cell strip</text>
+    </g>
+
+    <g transform="translate(20, 134)">
+      <text x="0" y="14" font-size="11" font-style="italic" fill="#0C447C">UI: 상단 (Coverage Map · Chase cam · Body YOLO) · 하단 (Terrain · Status · Portrait · Actions)  ·  rover_1 / rover_2 chip 토글</text>
+      <text x="0" y="30" font-size="11" font-style="italic" fill="#0C447C">multi-rover coop: /mineral_claims (dedup) · /rover_positions (A* dynamic inflate)  ← mission_manager 간 직접 통신, namespace 없음</text>
+    </g>
+  </g>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 화살표 — 데이터 흐름 (수직 정렬)                            -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+
+  <!-- Isaac Sim → isaac_drive (odom 센서) -->
+  <path d="M 200 260 L 200 296" fill="none" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+  <rect x="60" y="266" width="280" height="20" rx="3" fill="white" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="200" y="280" text-anchor="middle" font-size="11" font-weight="bold" fill="#0F6E56">/ground_truth/odom · /joint_states_raw</text>
+
+  <!-- Isaac Sim → isaac_perception (camera) -->
+  <path d="M 670 260 L 670 296" fill="none" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+  <rect x="540" y="266" width="260" height="20" rx="3" fill="white" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="670" y="280" text-anchor="middle" font-size="11" font-weight="bold" fill="#0F6E56">/camera/{rover, wrist}/* (D455)</text>
+
+  <!-- Isaac Sim → isaac_manipulation (joint_states + odom) -->
+  <path d="M 1640 260 L 1640 296" fill="none" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+  <rect x="1500" y="266" width="280" height="20" rx="3" fill="white" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="1640" y="280" text-anchor="middle" font-size="11" font-weight="bold" fill="#0F6E56">/joint_states_raw · /ground_truth/odom</text>
+
+  <!-- isaac_drive → isaac_supervisor (estimated_pose + coverage cmd_vel_raw) -->
+  <path d="M 470 470 L 880 470" fill="none" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+  <rect x="510" y="450" width="330" height="20" rx="3" fill="white" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="675" y="464" text-anchor="middle" font-size="11" font-weight="bold" fill="#0F6E56">/rover/estimated_pose · /coverage/cmd_vel_raw</text>
+
+  <!-- isaac_perception → isaac_supervisor (detections) -->
+  <path d="M 860 420 L 880 420" fill="none" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+  <rect x="690" y="400" width="180" height="20" rx="3" fill="white" stroke="#0F6E56" stroke-width="0.8"/>
+  <text x="780" y="414" text-anchor="middle" font-size="11" font-weight="bold" fill="#0F6E56">/perception/detections</text>
+
+  <!-- isaac_supervisor → isaac_manipulation (ExecuteArmTask action) -->
+  <path d="M 1420 410 L 1440 410" fill="none" stroke="#8E44AD" stroke-width="2.5" marker-end="url(#ar-action)"/>
+  <rect x="1240" y="390" width="184" height="20" rx="3" fill="white" stroke="#8E44AD" stroke-width="0.8"/>
+  <text x="1332" y="404" text-anchor="middle" font-size="11" font-weight="bold" fill="#8E44AD">ExecuteArmTask (action)</text>
+
+  <!-- isaac_supervisor → Isaac Sim (/cmd_vel, 제어 명령) -->
+  <path d="M 1080 296 L 1080 240 L 480 240 L 480 260" fill="none" stroke="#C0392B" stroke-width="2.5" marker-end="url(#ar-ctrl)"/>
+  <rect x="660" y="230" width="320" height="20" rx="3" fill="white" stroke="#C0392B" stroke-width="0.8"/>
+  <text x="820" y="244" text-anchor="middle" font-size="11" font-weight="bold" fill="#C0392B">/cmd_vel  (mission_manager → vehicle_v3)</text>
+
+  <!-- isaac_manipulation → Isaac Sim (/arm/joint_command, /grasp/command) -->
+  <path d="M 1700 296 L 1700 232 L 1500 232 L 1500 260" fill="none" stroke="#C0392B" stroke-width="2.5" marker-end="url(#ar-ctrl)"/>
+  <rect x="1470" y="222" width="280" height="20" rx="3" fill="white" stroke="#C0392B" stroke-width="0.8"/>
+  <text x="1610" y="236" text-anchor="middle" font-size="11" font-weight="bold" fill="#C0392B">/arm/joint_command · /grasp/command</text>
+
+  <!-- coop self-loop: mission_manager_node 박스 우측 외부 (rover_1 ↔ rover_2 인스턴스 간) -->
+  <path d="M 1404 444 L 1430 444 L 1430 516 L 1404 516" fill="none" stroke="#1F6FB5" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#ar-coop)" marker-start="url(#ar-coop)"/>
+  <text x="1417" y="484" text-anchor="middle" font-size="10" font-weight="bold" fill="#1F6FB5">coop</text>
+
+  <!-- 모든 노드 → Web HUD (집합 화살표) -->
+  <path d="M 250 662 L 250 686" fill="none" stroke="#5F5E5A" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-ws)"/>
+  <path d="M 675 646 L 675 686" fill="none" stroke="#5F5E5A" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-ws)"/>
+  <path d="M 1150 646 L 1150 686" fill="none" stroke="#5F5E5A" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-ws)"/>
+  <path d="M 1640 646 L 1640 686" fill="none" stroke="#5F5E5A" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-ws)"/>
+  <rect x="820" y="656" width="280" height="22" rx="3" fill="white" stroke="#5F5E5A" stroke-width="0.8"/>
+  <text x="960" y="671" text-anchor="middle" font-size="12" font-weight="bold" fill="#3D3D3A">모든 노드 → Web HUD (ROS2 subscribe)</text>
+
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <!-- 범례                                                          -->
+  <!-- ════════════════════════════════════════════════════════════ -->
+  <g transform="translate(40, 900)">
+    <text x="0" y="14" font-size="13" font-weight="bold" fill="#3D3D3A">범례</text>
+
+    <line x1="60" y1="10" x2="100" y2="10" stroke="#0F6E56" stroke-width="2.5" marker-end="url(#ar-ros)"/>
+    <text x="108" y="14" font-size="12" fill="#0F6E56">ROS2 토픽 (publish/subscribe)</text>
+
+    <line x1="320" y1="10" x2="360" y2="10" stroke="#C0392B" stroke-width="2.5" marker-end="url(#ar-ctrl)"/>
+    <text x="368" y="14" font-size="12" fill="#C0392B">제어 명령 (ROS2 → Isaac Sim)</text>
+
+    <line x1="600" y1="10" x2="640" y2="10" stroke="#8E44AD" stroke-width="2.5" marker-end="url(#ar-action)"/>
+    <text x="648" y="14" font-size="12" fill="#8E44AD">ROS2 Action</text>
+
+    <line x1="800" y1="10" x2="840" y2="10" stroke="#1F6FB5" stroke-width="2" stroke-dasharray="5 3" marker-end="url(#ar-coop)"/>
+    <text x="848" y="14" font-size="12" fill="#1F6FB5">multi-rover coop (claims · positions)</text>
+
+    <line x1="1140" y1="10" x2="1180" y2="10" stroke="#5F5E5A" stroke-width="2" stroke-dasharray="6 3" marker-end="url(#ar-ws)"/>
+    <text x="1188" y="14" font-size="12" fill="#5F5E5A">모든 노드 → Web HUD</text>
+  </g>
+
+  <g transform="translate(40, 940)">
+    <rect x="0" y="0" width="18" height="14" rx="3" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.8"/>
+    <text x="26" y="12" font-size="12" fill="#3C3489">isaac_drive</text>
+
+    <rect x="160" y="0" width="18" height="14" rx="3" fill="#E1F0E8" stroke="#0F6E56" stroke-width="0.8"/>
+    <text x="186" y="12" font-size="12" fill="#085041">isaac_perception</text>
+
+    <rect x="350" y="0" width="18" height="14" rx="3" fill="#FFE9D6" stroke="#E65100" stroke-width="0.8"/>
+    <text x="376" y="12" font-size="12" fill="#BF360C">isaac_supervisor (두뇌)</text>
+
+    <rect x="600" y="0" width="18" height="14" rx="3" fill="#FCE4E0" stroke="#C0392B" stroke-width="0.8"/>
+    <text x="626" y="12" font-size="12" fill="#8E2A1E">isaac_manipulation</text>
+
+    <rect x="830" y="0" width="18" height="14" rx="3" fill="#FFF1E0" stroke="#D9730D" stroke-width="0.8"/>
+    <text x="856" y="12" font-size="12" fill="#8C4A00">isaac_sim (vehicle_v3 ActionGraph)</text>
+
+    <rect x="1140" y="0" width="18" height="14" rx="3" fill="#E1EAF5" stroke="#1F6FB5" stroke-width="0.8"/>
+    <text x="1166" y="12" font-size="12" fill="#0C447C">Web HUD (mission_web)</text>
+  </g>
+
+  <text x="40" y="990" font-size="11" font-style="italic" fill="#5F5E5A">📍 2026-05-27 기준 · main 브랜치 · 사용 중 7개 (isaac_drive 2 + isaac_perception 1 + isaac_supervisor 3 + isaac_manipulation 1) · 회색 isaac_localization 9개는 미사용(졸업 swap 대상)</text>
+  <text x="40" y="1010" font-size="11" font-style="italic" fill="#5F5E5A">⭐ mission_manager_node 가 FSM 두뇌 · ⭐ vehicle_v3.usd 가 standalone 그래프-내장 로봇 (런타임 wiring 코드 0) · ⭐ Web HUD 가 단일 관측 거점</text>
+  <text x="40" y="1030" font-size="11" font-style="italic" fill="#5F5E5A">🤝 GraspBridge 는 run_vehicle_v3.py 내부 rclpy 사이드카 (별도 노드 아님) · 졸업 swap: odom_to_estimated_pose → isaac_localization EKF stack 으로 교체 예정</text>
+
+</svg>
