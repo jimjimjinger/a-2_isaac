@@ -316,15 +316,20 @@ body {
 
 .menu-btn { display: none; }
 
-.status-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.status-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0;
+  min-width: 0;
+}
 .status-row {
   display: grid;
   grid-template-columns: 90px 1fr 90px;
   gap: 12px;
   align-items: center;
   font-size: 13px;
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 0 0 auto;
 }
 .status-label { color: #6cd9ff; letter-spacing: 1px; }
 .status-value { text-align: right; color: #e8eef7; font-variant-numeric: tabular-nums; }
@@ -365,12 +370,10 @@ body {
 .status-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  grid-auto-rows: 1fr;
   gap: 4px 16px;
-  margin-top: 6px;
-  flex: 1 1 auto;
+  margin-top: 0;
+  flex: 0 0 auto;
   font-size: 13px;
-  align-content: stretch;
 }
 .status-pair {
   display: flex;
