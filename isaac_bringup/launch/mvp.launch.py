@@ -194,6 +194,10 @@ def generate_launch_description() -> LaunchDescription:
                 additional_env={
                     "WEB_VIDEO_PORT": LaunchConfiguration("web_video_port"),
                 },
+                parameters=[{
+                    "terrain_preview_path": PathJoinSubstitution([
+                        terrain_dir, "preview.png"]),
+                }],
                 condition=IfCondition(LaunchConfiguration("enable_dashboard")),
             ),
             # MJPEG 스트리머 — 브라우저가 <img src="http://host:8080/stream?topic=..."> 로 임베드.

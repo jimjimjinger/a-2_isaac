@@ -217,6 +217,7 @@ def _launch_setup(context, *args, **kwargs):
             },
             parameters=[{
                 "rover_namespaces": rovers,
+                "terrain_preview_path": os.path.join(terrain_dir, "preview.png"),
             }],
         ))
     if str(enable_web_video).lower() in ("true", "1", "yes"):
