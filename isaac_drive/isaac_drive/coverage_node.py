@@ -90,7 +90,9 @@ class CoverageNode(Node):
         self.declare_parameter("tick_hz", 30.0)
         self.declare_parameter("cell_size", 0.1)
         self.declare_parameter("robot_radius", 0.7)
-        self.declare_parameter("reveal_radius", 2.0)
+        # 5.0 m — 시연 가시성 위해 default 키움 (2026-05-27). 시연 중 launch
+        # 인자 reveal_radius:=N 로 override 가능 (mvp / mvp_multi 둘 다 노출).
+        self.declare_parameter("reveal_radius", 5.0)
         self.declare_parameter("grid_n", 3)
         self.declare_parameter("max_lin", 3.0)
         self.declare_parameter("max_ang", 1.5)

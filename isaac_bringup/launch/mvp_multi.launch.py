@@ -110,6 +110,7 @@ def _rover_group(ns: str, terrain_dir: str, collection_goal: int,
                 "enable_minimap": False,
                 "enable_minimap_topics": True,
                 "minimap_rover_id": ns,
+                "reveal_radius": reveal_radius,
             }],
             remappings=[
                 # minimap_publisher 의 absolute 토픽 → namespace 강제
@@ -195,6 +196,7 @@ def _launch_setup(context, *args, **kwargs):
     enable_dashboard = LaunchConfiguration("enable_dashboard").perform(context)
     enable_web_video = LaunchConfiguration("enable_web_video").perform(context)
     web_video_port = LaunchConfiguration("web_video_port").perform(context)
+    reveal_radius = float(LaunchConfiguration("reveal_radius").perform(context))
     print(f"[mvp_multi] terrain_dir={terrain_dir}  rovers={rovers}  "
           f"collection_goal={collection_goal} (per rover)")
     nodes = []
@@ -260,5 +262,9 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument(
             "web_video_port", default_value="8090",
             description="web_video_server HTTP 포트. Web HUD 이미지 src 가 이 포트."),
+        DeclareLaunchArgument(
+            "reveal_radius", default_value="5.0",
+            description="coverage_node 의 fog reveal 반경 (m). 멀티 rover 시연 "
+                        "가시성 위해 default 5.0. 더 키우려면 reveal_radius:=7.0."),
         OpaqueFunction(function=_launch_setup),
     ])

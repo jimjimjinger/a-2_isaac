@@ -89,6 +89,10 @@ def generate_launch_description() -> LaunchDescription:
         description=("web_video_server 가 노출할 HTTP 포트. 8080 은 시스템 nginx 가 "
                      "차지하는 일이 있어 충돌 회피용으로 8090 default. "
                      "mission_web_node 에 WEB_VIDEO_PORT 환경변수로 자동 전달."))
+    reveal_radius_arg = DeclareLaunchArgument(
+        "reveal_radius", default_value="5.0",
+        description="coverage_node 의 fog reveal 반경 (m). 시연 가시성 위해 "
+                    "default 5.0. 발표 직전 키우려면 reveal_radius:=7.0 식으로 override.")
 
     terrain_dir = PathJoinSubstitution([
         LaunchConfiguration("terrain_root"),
@@ -104,6 +108,7 @@ def generate_launch_description() -> LaunchDescription:
             enable_dashboard_arg,
             enable_web_video_arg,
             web_video_port_arg,
+            reveal_radius_arg,
             # T5 cheat 어댑터 — /ground_truth/odom → /rover/estimated_pose.
             Node(
                 package="isaac_drive",
@@ -137,6 +142,7 @@ def generate_launch_description() -> LaunchDescription:
                     # Web HUD 가 동작.
                     "enable_minimap": False,
                     "enable_minimap_topics": True,
+                    "reveal_radius": LaunchConfiguration("reveal_radius"),
                 }],
             ),
             # Supervisor — EXPLORE→APPROACH→PICK→RTB→COMPLETE 전환 + AUTO/MANUAL
