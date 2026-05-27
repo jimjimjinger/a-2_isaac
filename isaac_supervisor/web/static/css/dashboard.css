@@ -159,7 +159,8 @@ body {
 .hud {
   flex: 0 0 220px;
   display: grid;
-  grid-template-columns: 360px 1fr 280px;
+  /* 4-cell split: terrain | status | portrait | actions */
+  grid-template-columns: 360px 1fr 220px 280px;
   gap: 6px;
   padding: 0 6px 6px 6px;
 }
@@ -252,44 +253,13 @@ body {
 
 /* ── status (center) ── */
 
-/* hud-status: status 셀만 padding 0 (다른 hud-cell 의 padding 8 유지).
-   portrait width 는 cell height 와 같게 정사각 (aspect-ratio 1/1 + h:100%)
-   → grid 의 column 2 'auto' 가 portrait 자연 너비만큼만 차지.
-   status-info 는 남은 1fr + 자체 padding 으로 contents 박지 않게. */
-.hud-cell.hud-status { padding: 0; }
-.hud-status {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: 100%;
-  gap: 0;
-  flex: 1 1 auto;
-  height: 100%;
-  min-height: 0;
-}
-.status-portrait {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
-  grid-column: 2;
-  align-self: stretch;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-}
-.status-info {
-  grid-column: 1;
-  padding: 8px;
-  align-self: stretch;
-  height: 100%;
-  min-height: 0;
-  min-width: 0;
-}
+/* 4-split: status 셀은 bars+grid only (hud-cell 기본 padding 8 사용),
+   portrait 는 독립 셀 (padding 0, frame 이 셀 가장자리까지). */
+.hud-cell.hud-portrait { padding: 0; }
+.hud-portrait { display: flex; align-items: stretch; }
 .portrait-frame {
-  height: 100%;
-  aspect-ratio: 1 / 1;
+  flex: 1 1 auto;
   background: #060b16;
-  border-left: 1px solid #1f3653;
   overflow: hidden;
   position: relative;
 }
@@ -326,7 +296,9 @@ body {
   flex-direction: column;
   justify-content: space-between;
   gap: 0;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 0;
 }
 .status-row {
   display: grid;

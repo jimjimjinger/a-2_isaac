@@ -88,22 +88,8 @@
       </div>
     </div>
 
-    <!-- 중앙하단 — status (portrait + bars + menu) -->
+    <!-- 중앙하단 — status info (bars + grid). hud strip 4-cell split. -->
     <div class="hud-cell hud-status">
-      <div class="status-portrait">
-        <div class="portrait-frame">
-          <img class="portrait-img"
-               src="{{ url_for('static', filename='img/rover_portrait.png') }}"
-               alt="rover portrait"
-               onerror="this.style.display='none';
-                        this.nextElementSibling.style.display='flex';" />
-          <div class="portrait-img-placeholder" style="display:none">
-            <span>ROVER</span>
-            <span class="portrait-sub">RV-6W</span>
-          </div>
-        </div>
-        <button class="menu-btn" type="button" disabled>MENU</button>
-      </div>
       <div class="status-info">
         <div class="status-row">
           <span class="status-label">PHASE</span>
@@ -126,6 +112,21 @@
           <div class="status-pair"><span class="k">CMD</span><span id="cmdv" class="v">—</span></div>
           <div class="status-pair"><span class="k">TASK</span><span id="task" class="v">—</span></div>
           <div class="status-pair status-error"><span class="k">ERR</span><span id="err" class="v">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- portrait 전용 셀 — 정사각 frame, cell 가장자리까지 가득 -->
+    <div class="hud-cell hud-portrait">
+      <div class="portrait-frame">
+        <img class="portrait-img"
+             src="{{ url_for('static', filename='img/rover_portrait.png') }}"
+             alt="rover portrait"
+             onerror="this.style.display='none';
+                      this.nextElementSibling.style.display='flex';" />
+        <div class="portrait-img-placeholder" style="display:none">
+          <span>ROVER</span>
+          <span class="portrait-sub">RV-6W</span>
         </div>
       </div>
     </div>
