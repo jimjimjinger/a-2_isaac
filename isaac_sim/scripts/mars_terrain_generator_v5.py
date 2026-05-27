@@ -500,7 +500,9 @@ def place_minerals(rng, hm, slope_deg, rocks, obstacle=None):
             continue
         if obstacle is not None and sample(obstacle, x, y) > 0.5:
             continue
-        if _inside_any_epic_obstacle(x, y, margin_m=0.8):
+        # v5: 0.8 → 2.0. A* inflation 0.8 + rover footprint half 0.62 +
+        # stop_d 0.7 + safety 합쳐서 epic 옆 mineral 도달성 보장.
+        if _inside_any_epic_obstacle(x, y, margin_m=2.0):
             continue
         if any(math.hypot(x - r["x"], y - r["y"])
                < r["radius"] + CFG["mineral_clearance_from_rock_m"]
