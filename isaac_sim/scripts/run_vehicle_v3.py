@@ -475,9 +475,24 @@ from pxr import UsdPhysics, UsdGeom, Gf, Sdf, Usd
 import omni.usd
 import omni.graph.core as og
 import math
+import time
 
 _state = {"attached_joint_path": None, "attached_obj_path": None,
-          "gripper_link_path": None}
+          "gripper_link_path": None, "arm_base_path": None,
+          "attach_time": None}
+
+# release ROS msg 가 OmniGraph Subscribe 의 frame race 로 drop 돼도
+# mineral 이 그리퍼에 영원히 attach 된 채 남는 사례 (2026-05-27 시연)
+# 차단용. attach 후 AUTO_RELEASE_SEC 지나면 ScriptNode 가 자체적으로
+# detach + hide. 정상 release msg 가 그 전에 들어오면 timer 가 reset
+# 되어 fail-safe 발동 X.
+#
+# Timing budget (DLS-IK + cargo_settle 1.5 + release burst 3s 기준):
+#   attach 시점 ~ HOME_POST 끝 ≈ 9~10초.
+# 12초로 두면 정상 release 가 들어오는 경우 timer 발동 전 reset.
+# 정상 release 가 drop 된 경우 12초 시점에 fail-safe 자동 hide.
+AUTO_RELEASE_SEC = 12.0
+
 
 ROVER_ROOT = "__ROVER_ROOT__"
 GRASP_JOINT_PATH = "__GRASP_JOINT_PATH__"
@@ -602,6 +617,27 @@ def setup(db):
 
 
 def compute(db):
+    # ── Fail-safe auto-release ─────────────────────────────────────────
+    # attach 후 AUTO_RELEASE_SEC 가 지나도 정상 release 가 안 들어왔으면
+    # 자체적으로 detach + hide. ROS msg drop 에 의존하지 않는 backup.
+    # compute() 가 message-triggered 라 매 tick 호출이 보장되진 않지만,
+    # 다음 pickup/release msg 도착 시 한 번이라도 호출되면 작동.
+    attach_t = _state.get("attach_time")
+    if (attach_t is not None
+            and _state.get("attached_obj_path")
+            and (time.time() - attach_t) > AUTO_RELEASE_SEC):
+        stage = omni.usd.get_context().get_stage()
+        obj = _state["attached_obj_path"]
+        _detach(stage)
+        _set_mineral_collision(stage, obj, True)
+        _hide(stage, obj)
+        elapsed = time.time() - attach_t
+        print(f"[grasp] AUTO-release + hide {obj} "
+              f"(timer fail-safe {elapsed:.1f}s > {AUTO_RELEASE_SEC}s)")
+        _state["attached_joint_path"] = None
+        _state["attached_obj_path"] = None
+        _state["attach_time"] = None
+
     lin = db.inputs.linearVelocity
     ang = db.inputs.angularVelocity
     mode = _component(ang, 0)  # +1 pickup, -1 release
@@ -645,6 +681,7 @@ def compute(db):
         if _attach(stage, gripper_path, mineral_path):
             _state["attached_joint_path"] = GRASP_JOINT_PATH
             _state["attached_obj_path"] = mineral_path
+            _state["attach_time"] = time.time()  # fail-safe timer 시작
             _set_mineral_collision(stage, mineral_path, False)
             print(f"[grasp] pickup OK — attached {mineral_path} to {gripper_path} "
                   f"(arm_base GT=({bx:.2f},{by:.2f}), "
@@ -660,6 +697,7 @@ def compute(db):
             print(f"[grasp] release + hide {obj}")
         _state["attached_joint_path"] = None
         _state["attached_obj_path"] = None
+        _state["attach_time"] = None  # timer reset
         return True
     return True
 '''

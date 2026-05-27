@@ -152,8 +152,19 @@ class ArmExecutorNode(Node):
         #   pickup x y z target_id   → linear=(x,y,z) angular.x=+1.0
         #   release                  → linear=(0,0,0) angular.x=-1.0
         # vehicle_v3 ScriptNode decodes the sign of angular.x.
+        # grasp_pub queue depth 10 → 100. burst publish 시 transmit queue 가
+        # 가득 차서 frame drop 되는 race 차단 (2026-05-27 release fail 디버깅).
+        # 기본 reliability=RELIABLE 유지, durability=VOLATILE 유지
+        # (OmniGraph Subscribe 와 호환).
+        _grasp_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=100,
+        )
         self.grasp_pub = self.create_publisher(
-            Twist, str(self.get_parameter("grasp_command_topic").value), 10)
+            Twist, str(self.get_parameter("grasp_command_topic").value),
+            _grasp_qos)
 
         self.create_subscription(
             DetectionArray, str(self.get_parameter("wrist_detections_topic").value),
