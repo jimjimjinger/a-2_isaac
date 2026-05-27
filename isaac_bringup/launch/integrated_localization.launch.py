@@ -19,17 +19,13 @@ from launch_ros.actions import Node
 
 
 def _default_terrain_root() -> str:
+    """ISAAC_TERRAIN_ROOT env 우선, 없으면 launch 파일 위치 기준 상대 경로."""
     env = os.environ.get("ISAAC_TERRAIN_ROOT")
     if env:
         return env
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.normpath(
+    return os.path.normpath(
         os.path.join(here, "..", "..", "..", "isaac_sim", "assets", "generated_terrains")
-    )
-    if os.path.isdir(candidate):
-        return candidate
-    return os.path.expanduser(
-        "~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains"
     )
 
 

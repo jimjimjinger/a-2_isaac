@@ -51,6 +51,16 @@ SENSOR_QOS = QoSProfile(
 )
 
 
+def _a2_isaac_root() -> str:
+    """src/a2_isaac 의 절대경로. A2_ISAAC_ROOT env override, 없으면
+    노드 파일 위치 기준 (isaac_supervisor/isaac_supervisor/*.py → parents[2])."""
+    env = os.environ.get("A2_ISAAC_ROOT")
+    if env:
+        return env
+    return os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+
 def _yaw_from_quat(q) -> float:
     siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
     cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
@@ -70,11 +80,13 @@ class MissionWebRosNode(Node):
         self.declare_parameter("chase_cam_topic_for_url",
                                "/camera/chase/image_raw")
         # Overview 슬롯을 정적 이미지로 대체할 때 사용. terrain_NNNNN/preview.png.
+        # launch 가 terrain_id 기반으로 override 하는 게 정상. fallback 은
+        # 노드 파일 위치 기준 상대경로 + A2_ISAAC_ROOT env override.
         self.declare_parameter(
             "terrain_preview_path",
-            os.path.expanduser(
-                "~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/"
-                "generated_terrains/terrain_00004/preview.png"))
+            os.path.join(_a2_isaac_root(),
+                         "isaac_sim/assets/generated_terrains/"
+                         "terrain_00004/preview.png"))
         # rover_namespaces — 멀티 rover 추적용. 빈 리스트 또는 [""] 면 단일
         # rover (absolute 토픽 sub). 예: ["rover_1", "rover_2"] 면 각 namespace
         # 의 토픽을 모두 sub 하고 payload 에 rover_id 필드를 박아 emit.

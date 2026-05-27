@@ -29,18 +29,13 @@ from launch_ros.actions import Node
 
 
 def _default_terrain_root() -> str:
-    """isaac_sim package source 의 generated_terrains 디렉토리.
-    env var ISAAC_TERRAIN_ROOT 가 있으면 우선. 없으면 git checkout 위치 추정."""
+    """ISAAC_TERRAIN_ROOT env 우선, 없으면 launch 파일 위치 기준 상대 경로."""
     env = os.environ.get("ISAAC_TERRAIN_ROOT")
     if env:
         return env
     here = os.path.dirname(os.path.abspath(__file__))
-    candidate = os.path.normpath(os.path.join(
+    return os.path.normpath(os.path.join(
         here, "..", "..", "..", "isaac_sim", "assets", "generated_terrains"))
-    if os.path.isdir(candidate):
-        return candidate
-    return os.path.expanduser(
-        "~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains")
 
 
 def _read_initial_pose(terrain_root: str, terrain_id: str) -> dict:

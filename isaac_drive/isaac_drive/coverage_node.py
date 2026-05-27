@@ -40,12 +40,17 @@ def _find_default_terrain() -> str:
     실행될 수 있고, terrain 자산은 소스 트리에만 있다(install share 에 없음).
     실행 위치별 후보를 순서대로 시도하고, 없으면 "" → 파라미터로 받아야 한다.
     """
-    here = os.path.dirname(os.path.abspath(__file__))
+    env = os.environ.get("A2_ISAAC_ROOT")
+    if env:
+        path = os.path.join(env, "isaac_sim", "assets",
+                            "generated_terrains", "terrain_00004")
+        if os.path.isdir(path):
+            return path
+    here = os.path.dirname(os.path.realpath(__file__))
     ws_from_build = os.path.dirname(os.path.dirname(os.path.dirname(here)))
     candidates = [
         os.path.dirname(os.path.dirname(here)),                # 소스 실행 → a2_isaac
         os.path.join(ws_from_build, "src", "a2_isaac"),        # build/install 실행
-        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac"),  # README 표준 위치
     ]
     for root in candidates:
         path = os.path.join(root, "isaac_sim", "assets",
@@ -66,11 +71,11 @@ def _find_scripts_dir() -> str:
     build 트리를 가리키므로 realpath 로 심링크를 풀어 소스 경로를 얻은 뒤,
     후보 위치를 순서대로 시도한다. 못 찾으면 "" 반환(미니맵 비활성).
     """
+    env = os.environ.get("A2_ISAAC_ROOT")
     here = os.path.dirname(os.path.realpath(__file__))   # .../isaac_drive/isaac_drive
-    candidates = [
-        os.path.join(os.path.dirname(here), "scripts"),
-        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac/isaac_drive/scripts"),
-    ]
+    candidates = [os.path.join(os.path.dirname(here), "scripts")]
+    if env:
+        candidates.append(os.path.join(env, "isaac_drive", "scripts"))
     for path in candidates:
         if os.path.isfile(os.path.join(path, "state_writer.py")):
             return path
