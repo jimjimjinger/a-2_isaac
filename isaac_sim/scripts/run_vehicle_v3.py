@@ -502,6 +502,22 @@ def _find_gripper_link(stage):
     return None
 
 
+def _find_arm_base(stage):
+    """로봇팔 articulation root (m0609 base_link) — snap distance 기준점.
+    IK 자세 폭주로 finger 가 텔레포트해도 base_link 는 안정.
+    """
+    root = stage.GetPrimAtPath(ROVER_ROOT)
+    if not root.IsValid():
+        return None
+    for prim in Usd.PrimRange(root):
+        if prim.HasAPI("PhysicsArticulationRootAPI"):
+            return str(prim.GetPath())
+    for prim in Usd.PrimRange(root):
+        if prim.GetName() == "base_link" and "m0609" in str(prim.GetPath()):
+            return str(prim.GetPath())
+    return None
+
+
 def _find_nearest_mineral(stage, tx, ty):
     cache = UsdGeom.XformCache()
     best_path = None
@@ -596,26 +612,34 @@ def compute(db):
             print("[grasp] gripper link 못 찾음")
             return False
         _state["gripper_link_path"] = gripper_path
-        # supervisor 의 추정 mineral 좌표 (localization 오차 흡수 안 됨).
+        # arm_base (articulation root) — snap 거리 측정 기준. finger 와 달리
+        # IK 자세 폭주에 영향 안 받음 (rover body 와 함께 stable).
+        arm_base_path = _state.get("arm_base_path") or _find_arm_base(stage)
+        if not arm_base_path:
+            print("[grasp] arm_base 못 찾음 — m0609 articulation root 없음")
+            return False
+        _state["arm_base_path"] = arm_base_path
+        # supervisor 가 보낸 추정 mineral 좌표 (참고용 log).
         req_x = _component(lin, 0)
         req_y = _component(lin, 1)
-        # ── snap 판정 cheat ─────────────────────────────────────────────
-        # 추정 mineral 좌표가 아니라 gripper link 의 GT world 위치를
-        # 기준으로 nearest mineral 을 찾는다. localization 1~2m drift 가
-        # 있어도 시각적으로 그리퍼가 광물 옆에 가있으면 무조건 잡히도록 한다.
-        # 실제 로봇에선 동작 안 하지만 시연 안정성 우선 (2026-05-27).
-        gripper_prim = stage.GetPrimAtPath(gripper_path)
-        gx, gy = req_x, req_y
-        if gripper_prim and gripper_prim.IsValid():
+        # ── snap 판정: arm_base GT 기준 nearest mineral ──────────────────
+        # finger world transform 은 PhysX articulation 폭주 시 텔레포트 가능
+        # (2026-05-27 rover_1 시연에서 gripper GT (19.78,20.95) 폭주 관찰).
+        # arm_base 는 articulation root 라 stable. SEARCH_RADIUS 2.5m 안에
+        # mineral 이 들어오면 nearest 를 그리퍼 finger 로 snap (attach 대상은
+        # 그리퍼 그대로 — 시각적으로 그리퍼가 광물 들고 있는 모습 유지).
+        arm_prim = stage.GetPrimAtPath(arm_base_path)
+        bx, by = req_x, req_y
+        if arm_prim and arm_prim.IsValid():
             cache = UsdGeom.XformCache()
-            M = cache.GetLocalToWorldTransform(gripper_prim)
-            gpos = M.ExtractTranslation()
-            gx = float(gpos[0])
-            gy = float(gpos[1])
-        mineral_path, dist = _find_nearest_mineral(stage, gx, gy)
+            M = cache.GetLocalToWorldTransform(arm_prim)
+            apos = M.ExtractTranslation()
+            bx = float(apos[0])
+            by = float(apos[1])
+        mineral_path, dist = _find_nearest_mineral(stage, bx, by)
         if not mineral_path:
-            print(f"[grasp] pickup ignored — no mineral near gripper GT "
-                  f"({gx:.2f},{gy:.2f}) within {SEARCH_RADIUS}m "
+            print(f"[grasp] pickup ignored — no mineral near arm_base "
+                  f"({bx:.2f},{by:.2f}) within {SEARCH_RADIUS}m "
                   f"(requested=({req_x:.2f},{req_y:.2f}))")
             return True
         if _attach(stage, gripper_path, mineral_path):
@@ -623,7 +647,7 @@ def compute(db):
             _state["attached_obj_path"] = mineral_path
             _set_mineral_collision(stage, mineral_path, False)
             print(f"[grasp] pickup OK — attached {mineral_path} to {gripper_path} "
-                  f"(gripper GT=({gx:.2f},{gy:.2f}), "
+                  f"(arm_base GT=({bx:.2f},{by:.2f}), "
                   f"requested=({req_x:.2f},{req_y:.2f}), "
                   f"target dist {dist:.2f}m, snapped, collision off)")
         return True

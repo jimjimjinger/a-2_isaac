@@ -212,6 +212,17 @@ def _find_gripper_link(stage):
     return None
 
 
+def _find_arm_base(stage):
+    """로봇팔 articulation root (m0609 base_link) — snap distance 기준점."""
+    for prim in stage.Traverse():
+        if prim.HasAPI("PhysicsArticulationRootAPI"):
+            return str(prim.GetPath())
+    for prim in stage.Traverse():
+        if prim.GetName() == "base_link" and "m0609" in str(prim.GetPath()):
+            return str(prim.GetPath())
+    return None
+
+
 def _find_nearest_mineral(stage, tx, ty):
     """이름이 'Minerals' 인 어떤 scope (e.g. /World/Minerals,
     /World/MarsScene/Minerals) 의 직속 children 중 (tx,ty) 수평거리 최소 prim.
@@ -311,28 +322,44 @@ def compute(db):
     mode = _component(db.inputs.angularVelocity, 0)  # angular.x as sign marker
 
     if mode > 0.5:    # pickup
-        # gripper link path — terrain reference prefix 따라 바뀌므로 traverse 검색.
+        # gripper link path — attach 대상 (시각적으로 그리퍼가 광물 들고 있음).
         link_path = _state.get("gripper_link_path") or _find_gripper_link(stage)
         if link_path is None:
             print(f"[grasp] pickup FAILED — '{GRIPPER_LINK_NAME}' prim 없음")
         else:
             _state["gripper_link_path"] = link_path
-            tx = _component(db.inputs.linearVelocity, 0)
-            ty = _component(db.inputs.linearVelocity, 1)
-            obj_path, dist = _find_nearest_mineral(stage, tx, ty)
+            # arm_base — snap distance 측정 기준 (finger 와 달리 자세 폭주에
+            # 영향 안 받는 articulation root).
+            arm_base_path = (_state.get("arm_base_path")
+                             or _find_arm_base(stage))
+            if arm_base_path is None:
+                print("[grasp] pickup FAILED — m0609 articulation root 없음")
+                db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+                return True
+            _state["arm_base_path"] = arm_base_path
+            req_x = _component(db.inputs.linearVelocity, 0)
+            req_y = _component(db.inputs.linearVelocity, 1)
+            arm_prim = stage.GetPrimAtPath(arm_base_path)
+            bx, by = req_x, req_y
+            if arm_prim and arm_prim.IsValid():
+                cache = UsdGeom.XformCache()
+                M = cache.GetLocalToWorldTransform(arm_prim)
+                apos = M.ExtractTranslation()
+                bx = float(apos[0]); by = float(apos[1])
+            obj_path, dist = _find_nearest_mineral(stage, bx, by)
             if obj_path is None:
-                print(f"[grasp] pickup ignored — no mineral near "
-                      f"({tx:.2f},{ty:.2f}) within {SEARCH_RADIUS}m")
+                print(f"[grasp] pickup ignored — no mineral near arm_base "
+                      f"({bx:.2f},{by:.2f}) within {SEARCH_RADIUS}m "
+                      f"(requested=({req_x:.2f},{req_y:.2f}))")
             else:
                 ok = _attach(stage, link_path, obj_path)
                 if ok:
-                    # snap 충격이 rover 에 전파 안 되도록 mineral collision off.
                     _set_mineral_collision(stage, obj_path, False)
                     _state["attached_joint_path"] = GRASP_JOINT_PATH
                     _state["attached_obj_path"] = obj_path
                     print(f"[grasp] pickup OK — attached {obj_path} to "
-                          f"{link_path} (target dist {dist:.2f}m, snapped, "
-                          f"collision off)")
+                          f"{link_path} (arm_base GT=({bx:.2f},{by:.2f}), "
+                          f"target dist {dist:.2f}m, snapped, collision off)")
                 else:
                     print(f"[grasp] pickup FAILED — attach error on {obj_path}")
     elif mode < -0.5:  # release

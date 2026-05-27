@@ -8,7 +8,7 @@ import numpy as np
 
 
 class ObstacleGrid:
-    def __init__(self, map_size=(24.0, 24.0), cell_size=0.1, robot_radius=0.6):
+    def __init__(self, map_size=(24.0, 24.0), cell_size=0.1, robot_radius=0.8):
         self.map_w, self.map_h = float(map_size[0]), float(map_size[1])
         self.cell_size = float(cell_size)
         self.robot_radius = float(robot_radius)

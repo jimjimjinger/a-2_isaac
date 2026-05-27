@@ -89,7 +89,8 @@ class CoverageNode(Node):
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("tick_hz", 30.0)
         self.declare_parameter("cell_size", 0.1)
-        self.declare_parameter("robot_radius", 0.7)
+        # 팀 표준 0.8 — mission_manager 의 path_robot_radius 와 통일 (2026-05-27).
+        self.declare_parameter("robot_radius", 0.8)
         # 5.0 m — 시연 가시성 위해 default 키움 (2026-05-27). 시연 중 launch
         # 인자 reveal_radius:=N 로 override 가능 (mvp / mvp_multi 둘 다 노출).
         self.declare_parameter("reveal_radius", 5.0)
