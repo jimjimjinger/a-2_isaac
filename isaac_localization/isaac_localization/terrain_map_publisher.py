@@ -20,6 +20,29 @@ from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
 
+def _resolve_a2_root(caller_file: str) -> Path:
+    """팀 어느 머신에서도 작동하도록 a2_isaac 패키지 루트 해석.
+
+    우선순위:
+    1. A2_ISAAC_ROOT 환경변수 (팀원 별 setup.bash 에서 export 권장)
+    2. 같은 colcon workspace 의 src/a2_isaac 가 caller 의 부모로 보이면 그것 사용
+       (개발 시 install 된 site-packages 가 아니라 src 의 isaac_sim/assets 가
+        최신이므로 이쪽을 우선)
+    3. installed 위치 — caller 파일 기준 parents[2] (share/<pkg>/<module> 패턴)
+    """
+    env = os.environ.get("A2_ISAAC_ROOT")
+    if env:
+        return Path(env)
+    caller_path = Path(caller_file).resolve()
+    for parent in caller_path.parents:
+        if parent.name == "a2_isaac" and (parent / "isaac_sim").exists():
+            return parent
+        candidate = parent / "src" / "a2_isaac"
+        if (candidate / "isaac_sim").exists():
+            return candidate
+    return caller_path.parents[2]
+
+
 class TerrainMapPublisher(Node):
     """Publish generated terrain assets as RViz-friendly map and markers."""
 
@@ -183,17 +206,7 @@ class TerrainMapPublisher(Node):
         if self.terrain_root:
             root = Path(self.terrain_root)
         else:
-            env_a2_root = os.environ.get("A2_ISAAC_ROOT")
-            source_a2_root = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
-            installed_a2_root = Path(__file__).resolve().parents[2]
-
-            if env_a2_root:
-                a2_root = Path(env_a2_root)
-            elif (source_a2_root / "isaac_sim").exists():
-                a2_root = source_a2_root
-            else:
-                a2_root = installed_a2_root
-
+            a2_root = _resolve_a2_root(__file__)
             root = a2_root / "isaac_sim" / "assets" / "generated_terrains"
 
         terrain_id = self.terrain_id

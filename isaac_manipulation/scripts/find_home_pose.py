@@ -60,7 +60,9 @@ from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
 
-A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+A2_ROOT = Path(
+    os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[2]
+)
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"

@@ -31,9 +31,13 @@ except Exception:
     pass
 
 # ── argparse pre ──────────────────────────────────────────────────────
+from pathlib import Path as _Path
+_A2_ROOT_DEFAULT = os.environ.get("A2_ISAAC_ROOT") or str(
+    _Path(__file__).resolve().parents[2]
+)
 _ap = argparse.ArgumentParser(add_help=False)
 _ap.add_argument("--output", type=str,
-                 default="/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/dataset/manual/negative")
+                 default=f"{_A2_ROOT_DEFAULT}/isaac_perception/dataset/manual/negative")
 _ap.add_argument("--resolution", type=str, default="1280x720")
 args, _ = _ap.parse_known_args()
 
@@ -55,9 +59,9 @@ from isaacsim.sensors.camera import Camera
 
 
 # ── 자산 경로 ──────────────────────────────────────────────────────
-PKG_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+PKG_ROOT = Path(_A2_ROOT_DEFAULT)
 TERRAIN_USD = PKG_ROOT / "isaac_sim/worlds/terrain_00022.usd"
-VEHICLE_USD = Path("/home/rokey/dev_ws/rover_ws/src/Vehicle.usd")
+VEHICLE_USD = PKG_ROOT.parent / "Vehicle.usd"
 
 
 def build_scene(stage):

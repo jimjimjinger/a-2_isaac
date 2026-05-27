@@ -18,6 +18,23 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, Quaternion
 
 
+def _resolve_a2_root(caller_file: str) -> Path:
+    """팀 어느 머신에서도 작동하도록 a2_isaac 패키지 루트 해석.
+    우선순위: A2_ISAAC_ROOT env → 같은 colcon workspace src → installed.
+    """
+    env = os.environ.get("A2_ISAAC_ROOT")
+    if env:
+        return Path(env)
+    caller_path = Path(caller_file).resolve()
+    for parent in caller_path.parents:
+        if parent.name == "a2_isaac" and (parent / "isaac_sim").exists():
+            return parent
+        candidate = parent / "src" / "a2_isaac"
+        if (candidate / "isaac_sim").exists():
+            return candidate
+    return caller_path.parents[2]
+
+
 class TRNNode(Node):
     """
     TRN: Terrain Relative Navigation Node
@@ -1319,17 +1336,7 @@ class TRNNode(Node):
         if self.terrain_root:
             terrain_root = Path(self.terrain_root)
         else:
-            env_a2_root = os.environ.get("A2_ISAAC_ROOT")
-            source_a2_root = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
-            installed_a2_root = Path(__file__).resolve().parents[2]
-
-            if env_a2_root:
-                a2_root = Path(env_a2_root)
-            elif (source_a2_root / "isaac_sim").exists():
-                a2_root = source_a2_root
-            else:
-                a2_root = installed_a2_root
-
+            a2_root = _resolve_a2_root(__file__)
             terrain_root = (
                 a2_root / "isaac_sim" / "assets" / "generated_terrains"
             )

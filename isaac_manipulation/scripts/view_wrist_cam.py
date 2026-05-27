@@ -75,7 +75,9 @@ from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
-_PKG_PARENT = "/home/rokey/dev_ws/rover_ws/src/a2_isaac"
+_PKG_PARENT = os.environ.get("A2_ISAAC_ROOT") or str(
+    Path(__file__).resolve().parents[2]
+)
 sys.path.insert(0, f"{_PKG_PARENT}/isaac_perception")
 from isaac_perception.cyan_detector import CyanDetector
 

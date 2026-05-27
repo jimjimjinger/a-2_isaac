@@ -1,7 +1,9 @@
+import os
 from PIL import Image, ImageEnhance
 from pathlib import Path
 
-BASE = Path("/home/kimi/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/markers/tier2_mineral/0")
+_A2_ROOT = Path(os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[3])
+BASE = _A2_ROOT / "isaac_sim/assets/markers/tier2_mineral/0"
 
 base_color = BASE / "Default_OBJ_baseColor.jpg"
 emissive = BASE / "Default_OBJ_emissive.jpg"

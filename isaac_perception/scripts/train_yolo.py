@@ -12,15 +12,13 @@
 """
 import argparse
 import shutil
+import os
 from pathlib import Path
 
 
-DEFAULT_DATASET_YAML = Path(
-    "/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/dataset/dataset.yaml"
-)
-DEFAULT_MODELS_DIR = Path(
-    "/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/models"
-)
+_A2_ROOT = Path(os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[2])
+DEFAULT_DATASET_YAML = _A2_ROOT / "isaac_perception/dataset/dataset.yaml"
+DEFAULT_MODELS_DIR = _A2_ROOT / "isaac_perception/models"
 
 
 def main():

@@ -41,16 +41,19 @@ except Exception:
     pass
 
 # ── argparse pre ──────────────────────────────────────────────────────
+_A2_ROOT_DEFAULT = os.environ.get("A2_ISAAC_ROOT") or str(
+    Path(__file__).resolve().parents[2]
+)
 _ap = argparse.ArgumentParser(add_help=False)
 _ap.add_argument("--model", type=str,
-                 default="/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/models/mineral_yolo_best.pt")
+                 default=f"{_A2_ROOT_DEFAULT}/isaac_perception/models/mineral_yolo_best.pt")
 _ap.add_argument("--conf", type=float, default=0.5)
 _ap.add_argument("--iou", type=float, default=0.45)
 _ap.add_argument("--interval", type=int, default=2,
                  help="N step 마다 inference (1=매 step, 큰 값 → 적은 부하)")
 _ap.add_argument("--resolution", type=str, default="1280x720")
 _ap.add_argument("--out", type=str,
-                 default="/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/runs/mineral/demo_shots")
+                 default=f"{_A2_ROOT_DEFAULT}/isaac_perception/runs/mineral/demo_shots")
 args, _ = _ap.parse_known_args()
 
 # ── SimulationApp ────────────────────────────────────────────────────
@@ -73,7 +76,7 @@ from isaacsim.sensors.camera import Camera
 
 
 # ── 자산 경로 ──────────────────────────────────────────────────────
-PKG_ROOT    = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+PKG_ROOT    = Path(_A2_ROOT_DEFAULT)
 TERRAIN_USD = PKG_ROOT / "isaac_sim/worlds/terrain_00022.usd"
 VEHICLE_USD = PKG_ROOT / "isaac_sim/assets/vehicle/vehicle_v2.usd"
 MINERAL_ASSETS_DIR = PKG_ROOT / "isaac_sim/assets/markers/tier2_mineral"
@@ -1045,7 +1048,7 @@ def main():
 
     # ── t_op 을 ground 수준 + spawn xy 로 미리 맞춤 (anchor target 과 mismatch 방지) ──
     import json as _json_pre
-    _TERR_DIR_PRE = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains/terrain_00022")
+    _TERR_DIR_PRE = PKG_ROOT / "isaac_sim/assets/generated_terrains/terrain_00022"
     try:
         _hm_pre = np.load(_TERR_DIR_PRE / "heightmap.npy")
         _meta_pre = _json_pre.loads((_TERR_DIR_PRE / "meta.json").read_text())
@@ -1134,7 +1137,7 @@ def main():
 
     # ── Heightmap 으로 초기 ground z 계산 (terrain 자체에 collision 없음 → settle 불가) ──
     import json as _json_init
-    TERRAIN_DIR_INIT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains/terrain_00022")
+    TERRAIN_DIR_INIT = PKG_ROOT / "isaac_sim/assets/generated_terrains/terrain_00022"
     _hm_init = np.load(TERRAIN_DIR_INIT / "heightmap.npy")
     _meta_init = _json_init.loads((TERRAIN_DIR_INIT / "meta.json").read_text())
     _res_init = float(_meta_init["resolution_m"])
@@ -1345,7 +1348,7 @@ def main():
     import json as _json
     GROUND_CLEARANCE = 0.35  # 차량 base 위 ground 클리어런스
 
-    TERRAIN_DIR = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/generated_terrains/terrain_00022")
+    TERRAIN_DIR = PKG_ROOT / "isaac_sim/assets/generated_terrains/terrain_00022"
     _hm = np.load(TERRAIN_DIR / "heightmap.npy")  # (H, W)
     _meta = _json.loads((TERRAIN_DIR / "meta.json").read_text())
     _res = float(_meta["resolution_m"])

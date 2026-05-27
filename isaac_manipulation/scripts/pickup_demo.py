@@ -18,6 +18,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path as _Path
+
+# a2_isaac 패키지 루트 — A2_ISAAC_ROOT env 또는 scripts/../.. 로 자동 해석.
+_PKG_PARENT = os.environ.get("A2_ISAAC_ROOT") or str(
+    _Path(__file__).resolve().parents[2]
+)
 import tempfile
 import time
 
@@ -65,7 +71,6 @@ from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
 # isaac_perception 모듈 path 추가 (ROS2 install 없이 직접 import)
-_PKG_PARENT = "/home/rokey/dev_ws/rover_ws/src/a2_isaac"
 sys.path.insert(0, f"{_PKG_PARENT}/isaac_perception")
 from isaac_perception.cyan_detector import CyanDetector
 
@@ -75,7 +80,7 @@ from isaac_perception.cyan_detector import CyanDetector
 # ────────────────────────────────────────────────────────────────────
 from pathlib import Path
 
-A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+A2_ROOT = Path(_PKG_PARENT)
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"
 M0609_URDF = A2_ROOT / "isaac_sim/assets/doosan-robot2/urdf/m0609_isaac_sim.urdf"

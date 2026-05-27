@@ -6,6 +6,69 @@
 
 ---
 
+## 🔬 T3 / T5 — Localization 검증 카피 브랜치 워크플로
+
+> **언제 쓰는가**: 시연 main 은 `odom_to_estimated_pose` GT cheat 으로 동작 중. T3·T5 는 main 카피 브랜치에서 GT 빼고 EKF stack (wheel_odom + IMU + sun_yaw + TRN + EDL prior) 만으로 동일 미션이 끝까지 도는지 검증한다. 검증 통과한 브랜치를 main 으로 치환 = 졸업.
+
+### 0. 카피 브랜치 시작 (1회만)
+
+```bash
+cd ~/dev_ws/rover_ws/src/a2_isaac
+git checkout main && git pull
+git checkout -b localize/<본인-이니셜>        # 예: localize/leechanhwi, localize/leejimin
+
+# (선택) 사용자 이름이 sungyu / rokey 가 아니면 env var 로 root override
+export A2_ISAAC_ROOT="$(pwd)"               # ~/.bashrc 에 추가 권장
+
+cd ~/dev_ws/rover_ws
+colcon build --symlink-install
+source install/setup.bash
+```
+
+### 1. 검증 시연 (3 터미널, GT cheat 없음)
+
+```bash
+# ── 터미널 1: Isaac Sim (overview off — sun_yaw 카메라 충돌 방지) ──
+cd ~/dev_ws/rover_ws/src/a2_isaac
+tools/isaac-pypi isaac_sim/scripts/run_vehicle_v3.py \
+    --terrain terrain_00023 --no-overview
+
+# ── 터미널 2: 정공법 stack (estimated_odom 사용, 로그 저장) ──
+source /opt/ros/humble/setup.bash
+source ~/dev_ws/rover_ws/install/setup.bash
+export ROS_DOMAIN_ID=<본인 트랙 값>           # T3=112, T5=115
+ros2 launch isaac_bringup integrated_localization.launch.py \
+    collection_goal:=1 \
+    2>&1 | tee /tmp/loc_$(date +%Y%m%d_%H%M%S).log
+
+# ── 터미널 3: Web HUD (integrated 에는 mission_web_node 없음) ──
+source /opt/ros/humble/setup.bash
+source ~/dev_ws/rover_ws/install/setup.bash
+export ROS_DOMAIN_ID=<위와 동일>
+WEB_VIDEO_PORT=8090 ros2 run isaac_supervisor mission_web_node &
+ros2 run web_video_server web_video_server --ros-args -p port:=8090
+
+# 브라우저:  http://localhost:8088
+```
+
+### 2. 검증 체크리스트 (저장된 log 기준)
+
+| 항목 | 명령어 | 합격 조건 |
+|---|---|---|
+| **sun_yaw publish 율** | `grep -c "status=published" /tmp/loc_*.log` | 시연 시간 1초당 ≥ 1회 |
+| **sun_yaw reject 누적** | `grep -c "innovation .* > " /tmp/loc_*.log` | 0 (현재 max_sun_yaw_innovation=π 라 거의 안 남) |
+| **TRN publish 성공** | `grep -c "TRN matched" /tmp/loc_*.log` | ≥ 5회 (현재 거의 0 — 졸업 목표) |
+| **TRN reject 사유 분포** | `grep -oE "rejected: [^.]+\." /tmp/loc_*.log \| sort \| uniq -c \| sort -rn` | local_obs/obstacle/confidence 중 어느 게 발목 잡는지 식별 |
+| **미션 완주** | `grep "MISSION_COMPLETE\|collected=1/1" /tmp/loc_*.log` | 1줄 이상 — 1개 채집 후 RTB 까지 |
+| **estimated vs GT 오차** | RViz 에서 `/rover/estimated_marker` (파랑) 와 ground truth (없으면 wheel_odom drift 비교) | 시연 끝나는 시점 < 1.5m (snap 임계) |
+
+### 3. 결과 main 치환
+
+검증 통과 → `git checkout main && git merge --ff-only localize/<본인>` → push.
+시연 중인 T2/T4 영향 없도록 **시연 영상 촬영 전엔 main push 금지**, 끝난 후 통합.
+
+---
+
 ## 🚀 팀원이 main pull 후 해야 할 것 (Quick Start)
 
 ### 1. 환경 셋업 (1회만)

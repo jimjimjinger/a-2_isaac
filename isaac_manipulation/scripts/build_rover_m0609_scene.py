@@ -77,7 +77,9 @@ from isaacsim.robot_setup.assembler import RobotAssembler
 
 
 # ─── 경로 ──────────────────────────────────────────────────────────────────
-A2_ROOT = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac")
+A2_ROOT = Path(
+    os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[2]
+)
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 # T1 김현중이 main 에 추가한 in-repo rover 자산 (2026-05-20).
 ROVER_USD = A2_ROOT / "isaac_sim/assets/rover/Mars_Rover.usd"

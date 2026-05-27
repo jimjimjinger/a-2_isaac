@@ -7,7 +7,10 @@
 """
 import argparse
 import sys
+import os
 from pathlib import Path
+
+_A2_ROOT = Path(os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[2])
 
 import cv2
 
@@ -15,9 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "isaac_perceptio
 from yolo_mineral_detector import YoloMineralDetector
 
 
-DEFAULT_MODEL = Path(
-    "/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/models/mineral_yolo_best.pt"
-)
+DEFAULT_MODEL = _A2_ROOT / "isaac_perception/models/mineral_yolo_best.pt"
 
 
 def main():

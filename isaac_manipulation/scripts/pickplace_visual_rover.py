@@ -77,10 +77,12 @@ from realsense_mount import attach_realsense_d455
 
 
 # ── 자산 경로 ────────────────────────────────────────────────────────
-_PKG_PARENT = "/home/rokey/dev_ws/rover_ws/src/a2_isaac"
+_PKG_PARENT = os.environ.get("A2_ISAAC_ROOT") or str(
+    Path(__file__).resolve().parents[2]
+)
 A2_ROOT = Path(_PKG_PARENT)
 MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
-VEHICLE_USD = Path("/home/rokey/dev_ws/rover_ws/src/Vehicle.usd")
+VEHICLE_USD = A2_ROOT.parent / "Vehicle.usd"
 
 # ── Scene 파라미터 ───────────────────────────────────────────────────
 SPAWN_X_DEFAULT, SPAWN_Y_DEFAULT = 4.5, -1.0

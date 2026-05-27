@@ -9,7 +9,10 @@
 """
 import argparse
 import random
+import os
 from pathlib import Path
+
+_A2_ROOT = Path(os.environ.get("A2_ISAAC_ROOT") or Path(__file__).resolve().parents[2])
 
 import cv2
 import numpy as np
@@ -21,7 +24,7 @@ CLASS_COLORS = {
     2: (50, 220, 255),     # yellow_mineral — 노랑계열
 }
 CLASS_NAMES = ["blue", "green_gas", "yellow"]
-DEFAULT_DATASET = Path("/home/rokey/dev_ws/rover_ws/src/a2_isaac/isaac_perception/dataset")
+DEFAULT_DATASET = _A2_ROOT / "isaac_perception/dataset"
 
 
 def yolo_to_xyxy(cx, cy, w, h, img_w, img_h):

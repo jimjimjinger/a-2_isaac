@@ -74,7 +74,9 @@ from isaacsim.core.prims import SingleArticulation
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot_setup.assembler import RobotAssembler
 
-_PKG_PARENT = "/home/rokey/dev_ws/rover_ws/src/a2_isaac"
+_PKG_PARENT = os.environ.get("A2_ISAAC_ROOT") or str(
+    Path(__file__).resolve().parents[2]
+)
 sys.path.insert(0, f"{_PKG_PARENT}/isaac_perception")
 from isaac_perception.cyan_detector import CyanDetector
 
@@ -85,7 +87,7 @@ MARS_WORLD_USD = A2_ROOT / "isaac_sim/worlds/mars_exploration_world.usd"
 #   /Vehicle/Vehicle/m0609/base_link  ← articulation root
 #   /Vehicle/Vehicle/rover/Body       ← anchor 대상
 #   /Vehicle/Vehicle/onrobot_rg2ft/angle_bracket  ← 카메라 마운트
-VEHICLE_USD = Path("/home/rokey/dev_ws/rover_ws/src/Vehicle.usd")
+VEHICLE_USD = A2_ROOT.parent / "Vehicle.usd"
 
 # rover spawn XY — 사용자 지정 평탄 영역. (5,0) 언덕, (0,0) 돔, (-5,0) 구멍.
 SPAWN_X, SPAWN_Y = 4.5, -1.0
