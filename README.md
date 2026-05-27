@@ -128,6 +128,44 @@ ros2 launch isaac_bringup rqt_views.launch.py
 → rover 가 자율적으로 EXPLORE → APPROACH → PICK 반복 후, `collection_goal` (기본 5개) 도달
 또는 배터리 critical 시 **RETURN_TO_BASE** → 베이스캠프 (0,0) 도착 → **MISSION_COMPLETE**.
 
+#### 3-bis. 화성 환경 실험 (시연 X, 거동 검증·튜닝용)
+
+`run_vehicle_v4_test.py` — `run_vehicle_v3.py` 사본 + 화성 중력 3.72 m/s² 적용판.
+시연 main path 와 격리되어 있으니 자유롭게 실험 가능. `vehicle_v3.usd` 자체는 안 건드림.
+
+**Set A — gravity 만 override (Tier 0):**
+```bash
+# T1 — 9.81 → 3.72 만 변경, 다른 파라미터는 v3 그대로
+cd ~/dev_ws/rover_ws/src/a2_isaac
+tools/isaac-pypi isaac_sim/scripts/run_vehicle_v4_test.py \
+    --terrain terrain_00026 --rovers rover_1 rover_2 --no-tier1
+
+# T2 / T3 는 §3 의 mvp_multi / 브라우저 그대로
+```
+결과: WHEEL_VELOCITY_GAIN 2.0 이 지구 기준 튜닝값이라 중력 1/3 환경에서
+**rover 가 통통 튀다 전복**. "화성 = 단순히 중력만 바꾸면 안 됨" 검증.
+
+**Set B — gravity + Tier 1 파라미터 (안정 거동):**
+```bash
+# T1 — gravity + ACK_SCRIPT 화성용 교체 (WHEEL_VELOCITY_GAIN 0.7, STEERING_GAIN 0.8, cmd_vel LPF α=0.2)
+cd ~/dev_ws/rover_ws/src/a2_isaac
+tools/isaac-pypi isaac_sim/scripts/run_vehicle_v4_test.py \
+    --terrain terrain_00026 --rovers rover_1 rover_2
+
+# T2 — coverage max_lin / max_ang 도 화성 스케일로 다운
+source /opt/ros/humble/setup.bash && source ~/dev_ws/rover_ws/install/setup.bash
+cd ~/dev_ws/rover_ws
+ros2 launch isaac_bringup mvp_multi.launch.py max_lin:=1.0 max_ang:=0.6
+
+# T3 — 브라우저 그대로
+xdg-open http://localhost:8088
+```
+결과: 통통 튐 사라지고 안정 주행. 단 속도가 1 m/s 라 시연 시간 ↑.
+참고로 실제 NASA Curiosity 평균 ~1.5 cm/s — 우리 v4_test 도 여전히 ~30 배 빠름.
+
+> **시연 D-day 는 §3 의 지구용 (`run_vehicle_v3.py`) 만 사용**. v4_test 는 발표
+> talking point + 향후 "Mars-ready rover" 작업의 baseline.
+
 ### 4. Mission Control UI (Web HUD)
 
 `mvp.launch.py` 가 띄우는 **mission_web_node** (Flask+SocketIO) + **web_video_server** 가

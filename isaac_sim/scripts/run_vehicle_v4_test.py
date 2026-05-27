@@ -40,6 +40,10 @@ _p.add_argument("--rovers", nargs="*", default=[],
 _p.add_argument("--spawn-spacing", type=float, default=0.0,
                 help="다중 rover 시 사이 간격 (m). >0 이면 meta spawn_locations "
                      "무시하고 spawn[0] 기준 X 방향으로 N 미터씩 배치 (A* 회피 검증용).")
+_p.add_argument("--no-tier1", action="store_true",
+                help="v4_test: Tier 1 파라미터 적용 skip (gravity 만 override). "
+                     "기본은 gravity + Tier 1 (WHEEL_VELOCITY_GAIN 0.7, "
+                     "STEERING_GAIN 0.8, cmd_vel LPF) 모두 적용.")
 _a, _ = _p.parse_known_args()
 
 # ── v4_test Tier 1: 화성용 ACK_SCRIPT (WHEEL_VELOCITY_GAIN ↓ + STEERING_GAIN ↓ + LPF) ──
@@ -1172,8 +1176,11 @@ def main() -> None:
 
     for _ in range(20):
         app.update()
-    # v4_test: vehicle reference 완료 후 ACK_SCRIPT 화성용으로 교체
-    _patch_mars_ack_scripts()
+    # v4_test: vehicle reference 완료 후 ACK_SCRIPT 화성용으로 교체 (Tier 1)
+    if _a.no_tier1:
+        print("[v4_test] --no-tier1: ACK_SCRIPT 교체 skip (gravity 만 override)")
+    else:
+        _patch_mars_ack_scripts()
     world.reset()
     world.play()
     if _a.rovers:
