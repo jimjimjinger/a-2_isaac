@@ -106,7 +106,7 @@
     <g transform="translate(20, 445)">
       <rect width="480" height="155" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="6"/>
       <text x="240" y="66" font-size="24" font-weight="bold" text-anchor="middle">⚙️ Ackermann 변환 로직</text>
-      <text x="240" y="118" font-size="20" font-weight="bold" fill="#BF360C" text-anchor="middle">▶ "실제 핸들 조작"</text>
+      <text x="240" y="118" font-size="20" font-weight="bold" fill="#BF360C" text-anchor="middle">▶ "6륜 조향 + 구동"</text>
     </g>
 
     <g transform="translate(20, 615)">
