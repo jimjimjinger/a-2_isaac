@@ -14,6 +14,9 @@
     <marker id="arrow-fail" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
       <path d="M0,0 L0,14 L13,7 z" fill="#C62828"/>
     </marker>
+    <marker id="arrow-loc" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L10,6 z" fill="#C62828"/>
+    </marker>
     <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#1565C0"/>
       <stop offset="100%" stop-color="#E65100"/>
@@ -24,270 +27,330 @@
 
   <!-- ════════════ TITLE ════════════ -->
   <rect x="0" y="0" width="2560" height="110" fill="url(#title-grad)" opacity="0.95"/>
-  <text x="1280" y="48" font-size="36" font-weight="bold" text-anchor="middle" fill="white">
+  <text x="1280" y="48" font-size="38" font-weight="bold" text-anchor="middle" fill="white">
     🚀 화성 광물 수집 자율 탐사 로버 — Mission Flow
   </text>
-  <text x="1280" y="76" font-size="17" text-anchor="middle" fill="#FFF59D">
+  <text x="1280" y="78" font-size="18" text-anchor="middle" fill="#FFF59D">
     Procedural Mars Terrain × Multi-rover Autonomy × Coverage Planning × Manipulation
   </text>
-  <text x="1280" y="98" font-size="13" text-anchor="middle" fill="#E1F5FE">
+  <text x="1280" y="100" font-size="14" text-anchor="middle" fill="#E1F5FE">
     시연 D-day — 멀티 rover 2대 · terrain_00026 · 로버당 광물 2개 채집 · Isaac Sim 5.1 + ROS2 Humble
   </text>
 
   <!-- ════════════ INPUT BLOCK ════════════ -->
-  <g transform="translate(80, 130)">
-    <rect width="2400" height="180" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="12"/>
-    <text x="1200" y="34" font-size="22" font-weight="bold" text-anchor="middle" fill="#BF360C">
+  <g transform="translate(60, 130)">
+    <rect width="2440" height="190" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="12"/>
+    <text x="1220" y="38" font-size="24" font-weight="bold" text-anchor="middle" fill="#BF360C">
       📥 INPUT — 절차생성된 화성 환경 (매 미션 다름)
     </text>
 
-    <g transform="translate(40, 60)">
-      <rect width="555" height="110" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
-      <text x="277" y="30" font-size="15" font-weight="bold" text-anchor="middle">🗺️ Procedural Terrain (v5)</text>
-      <text x="277" y="55" font-size="13" text-anchor="middle" fill="#555">Perlin + crater/hill/ridge + epic obstacles</text>
-      <text x="277" y="75" font-size="13" text-anchor="middle" fill="#555">heightmap · obstacle_grid · spawn locations</text>
-      <text x="277" y="96" font-size="12" text-anchor="middle" fill="#888">terrain_00026 · passable 88% · slope 5.78°</text>
+    <g transform="translate(40, 65)">
+      <rect width="570" height="115" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="285" y="32" font-size="17" font-weight="bold" text-anchor="middle">🗺️ Procedural Terrain (v5)</text>
+      <text x="285" y="58" font-size="14" text-anchor="middle" fill="#555">Perlin + crater/hill/ridge + epic obstacles</text>
+      <text x="285" y="79" font-size="14" text-anchor="middle" fill="#555">heightmap · obstacle_grid · spawn locations</text>
+      <text x="285" y="100" font-size="13" text-anchor="middle" fill="#888">terrain_00026 · passable 88% · slope 5.78°</text>
     </g>
 
-    <g transform="translate(635, 60)">
-      <rect width="555" height="110" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
-      <text x="277" y="30" font-size="15" font-weight="bold" text-anchor="middle">🌡️ Mars 물리</text>
-      <text x="277" y="55" font-size="13" text-anchor="middle" fill="#555">중력 3.72 m/s² (지구 1/3)</text>
-      <text x="277" y="75" font-size="13" text-anchor="middle" fill="#555">Regolith 마찰 + 경사 · 6륜 Ackermann 슬립</text>
-      <text x="277" y="96" font-size="12" text-anchor="middle" fill="#888">50 m 아레나 경계 충돌벽 4면</text>
+    <g transform="translate(640, 65)">
+      <rect width="570" height="115" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="285" y="32" font-size="17" font-weight="bold" text-anchor="middle">🌡️ Mars 물리</text>
+      <text x="285" y="58" font-size="14" text-anchor="middle" fill="#555">중력 3.72 m/s² (지구 1/3)</text>
+      <text x="285" y="79" font-size="14" text-anchor="middle" fill="#555">Regolith 마찰 + 경사 · 6륜 Ackermann 슬립</text>
+      <text x="285" y="100" font-size="13" text-anchor="middle" fill="#888">50 m 아레나 경계 충돌벽 4면</text>
     </g>
 
-    <g transform="translate(1230, 60)">
-      <rect width="555" height="110" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
-      <text x="277" y="30" font-size="15" font-weight="bold" text-anchor="middle">🏠 베이스캠프 (0, 0)</text>
-      <text x="277" y="55" font-size="13" text-anchor="middle" fill="#555">RTB 도착 anchor (radius 2 m)</text>
-      <text x="277" y="75" font-size="13" text-anchor="middle" fill="#555">mineral/spawn 자동 keepout</text>
-      <text x="277" y="96" font-size="12" text-anchor="middle" fill="#888">미션 시작·종료 지점</text>
+    <g transform="translate(1240, 65)">
+      <rect width="570" height="115" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="285" y="32" font-size="17" font-weight="bold" text-anchor="middle">🏠 베이스캠프 (0, 0)</text>
+      <text x="285" y="58" font-size="14" text-anchor="middle" fill="#555">RTB 도착 anchor (radius 2 m)</text>
+      <text x="285" y="79" font-size="14" text-anchor="middle" fill="#555">mineral/spawn 자동 keepout</text>
+      <text x="285" y="100" font-size="13" text-anchor="middle" fill="#888">미션 시작·종료 지점</text>
     </g>
 
-    <g transform="translate(1825, 60)">
-      <rect width="555" height="110" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
-      <text x="277" y="30" font-size="15" font-weight="bold" text-anchor="middle">💎 광물 (3 클래스)</text>
-      <text x="277" y="55" font-size="13" text-anchor="middle" fill="#555">blue_mineral · yellow_mineral · green_gas</text>
-      <text x="277" y="75" font-size="13" text-anchor="middle" fill="#555">spawn disc-check 통과 셀에 배치</text>
-      <text x="277" y="96" font-size="12" text-anchor="middle" fill="#888">class 별 카운트 (collected_by_class)</text>
+    <g transform="translate(1840, 65)">
+      <rect width="560" height="115" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
+      <text x="280" y="32" font-size="17" font-weight="bold" text-anchor="middle">💎 광물 (3 클래스)</text>
+      <text x="280" y="58" font-size="14" text-anchor="middle" fill="#555">blue_mineral · yellow_mineral · green_gas</text>
+      <text x="280" y="79" font-size="14" text-anchor="middle" fill="#555">spawn disc-check 통과 셀에 배치</text>
+      <text x="280" y="100" font-size="13" text-anchor="middle" fill="#888">class 별 카운트 (collected_by_class)</text>
     </g>
   </g>
 
   <!-- Arrow to mission start -->
-  <line x1="1280" y1="310" x2="1280" y2="360" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="1310" y="342" font-size="14" fill="#555">멀티 rover 2대 spawn</text>
+  <line x1="1280" y1="320" x2="1280" y2="380" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1320" y="362" font-size="16" fill="#555">멀티 rover 2대 spawn</text>
 
   <!-- ════════════ MISSION START ════════════ -->
-  <g transform="translate(1110, 365)">
-    <rect width="340" height="55" fill="#212121" rx="27"/>
-    <text x="170" y="36" font-size="20" font-weight="bold" text-anchor="middle" fill="white">🚀 MISSION START · ×2 rovers</text>
+  <g transform="translate(1100, 388)">
+    <rect width="360" height="60" fill="#212121" rx="30"/>
+    <text x="180" y="40" font-size="22" font-weight="bold" text-anchor="middle" fill="white">🚀 MISSION START · ×2 rovers</text>
   </g>
 
   <!-- L-bend arrow from Mission Start to Phase 1 top -->
-  <path d="M 1280 420 L 1280 442 L 330 442 L 330 460" fill="none" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <path d="M 1280 448 L 1280 470 L 320 470 L 320 488" fill="none" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
 
   <!-- ════════════ PHASE 1: EXPLORE ════════════ -->
-  <g transform="translate(80, 460)">
-    <rect width="500" height="600" fill="#E3F2FD" stroke="#1976D2" stroke-width="3" rx="12"/>
-    <rect width="500" height="40" fill="#1976D2" rx="12"/>
-    <rect width="500" height="20" y="20" fill="#1976D2"/>
-    <text x="20" y="28" font-size="16" font-weight="bold" fill="white">📍 PHASE 1: EXPLORE</text>
-    <text x="480" y="28" font-size="11" text-anchor="end" fill="#BBDEFB">FSM: EXPLORE</text>
-    <text x="250" y="62" font-size="12" text-anchor="middle" fill="#0D47A1">미지의 화성을 자율 탐사 (coverage sweep)</text>
+  <g transform="translate(60, 488)">
+    <rect width="520" height="680" fill="#E3F2FD" stroke="#1976D2" stroke-width="3" rx="12"/>
+    <rect width="520" height="46" fill="#1976D2" rx="12"/>
+    <rect width="520" height="24" y="22" fill="#1976D2"/>
+    <text x="22" y="32" font-size="19" font-weight="bold" fill="white">📍 PHASE 1: EXPLORE</text>
+    <text x="500" y="32" font-size="12" text-anchor="end" fill="#BBDEFB">FSM: EXPLORE</text>
+    <text x="260" y="72" font-size="14" text-anchor="middle" fill="#0D47A1">미지의 화성을 자율 탐사 (coverage sweep)</text>
 
-    <g transform="translate(20, 80)">
-      <rect width="460" height="115" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="230" y="26" font-size="14" font-weight="bold" text-anchor="middle">🗺️ Coverage Planner (BCD)</text>
-      <text x="230" y="50" font-size="12" text-anchor="middle" fill="#555">3×3 sector + fog reveal (r = 5m)</text>
-      <text x="230" y="68" font-size="12" text-anchor="middle" fill="#555">미방문 sector → 다음 anchor</text>
-      <text x="230" y="86" font-size="12" text-anchor="middle" fill="#555">cell_size 0.1 m · robot_radius 0.8 m</text>
-      <text x="230" y="106" font-size="11" fill="#1976D2" text-anchor="middle">▶ "어디로 갈까"</text>
+    <g transform="translate(20, 92)">
+      <rect width="480" height="135" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="240" y="30" font-size="17" font-weight="bold" text-anchor="middle">🗺️ Coverage Planner (BCD)</text>
+      <text x="240" y="58" font-size="14" text-anchor="middle" fill="#555">3×3 sector + fog reveal (r = 5 m)</text>
+      <text x="240" y="78" font-size="14" text-anchor="middle" fill="#555">미방문 sector → 다음 anchor</text>
+      <text x="240" y="98" font-size="14" text-anchor="middle" fill="#555">cell_size 0.1 m · robot_radius 0.8 m</text>
+      <text x="240" y="122" font-size="13" font-weight="bold" fill="#1976D2" text-anchor="middle">▶ "어디로 갈까"</text>
     </g>
 
-    <g transform="translate(20, 205)">
-      <rect width="460" height="115" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="230" y="26" font-size="14" font-weight="bold" text-anchor="middle">🛣️ A* Path Planner</text>
-      <text x="230" y="50" font-size="12" text-anchor="middle" fill="#555">obstacle_grid + 동적 다른 rover inflate</text>
-      <text x="230" y="68" font-size="12" text-anchor="middle" fill="#555">큰 바위·절벽·epic obstacle 회피</text>
-      <text x="230" y="86" font-size="12" text-anchor="middle" fill="#555">simplify_path → waypoint list</text>
-      <text x="230" y="106" font-size="11" fill="#1976D2" text-anchor="middle">▶ "어떻게 갈까"</text>
+    <g transform="translate(20, 237)">
+      <rect width="480" height="135" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="240" y="30" font-size="17" font-weight="bold" text-anchor="middle">🛣️ A* Path Planner</text>
+      <text x="240" y="58" font-size="14" text-anchor="middle" fill="#555">obstacle_grid + 동적 다른 rover inflate</text>
+      <text x="240" y="78" font-size="14" text-anchor="middle" fill="#555">큰 바위·절벽·epic obstacle 회피</text>
+      <text x="240" y="98" font-size="14" text-anchor="middle" fill="#555">simplify_path → waypoint list</text>
+      <text x="240" y="122" font-size="13" font-weight="bold" fill="#1976D2" text-anchor="middle">▶ "어떻게 갈까"</text>
     </g>
 
-    <g transform="translate(20, 330)">
-      <rect width="460" height="115" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="6"/>
-      <text x="230" y="26" font-size="14" font-weight="bold" text-anchor="middle">⚙️ vehicle_v3 Ackermann</text>
-      <text x="230" y="50" font-size="12" text-anchor="middle" fill="#555">USD baked ScriptNode (6-wheel)</text>
-      <text x="230" y="68" font-size="12" text-anchor="middle" fill="#555">/cmd_vel → 휠 4조향각 + 6구동속도</text>
-      <text x="230" y="86" font-size="12" text-anchor="middle" fill="#555">슬립·슬로프 지형 적응 (실차 모델)</text>
-      <text x="230" y="106" font-size="11" fill="#BF360C" text-anchor="middle">▶ "실제 핸들 조작"</text>
+    <g transform="translate(20, 382)">
+      <rect width="480" height="135" fill="#FFE0B2" stroke="#E65100" stroke-width="2" rx="6"/>
+      <text x="240" y="30" font-size="17" font-weight="bold" text-anchor="middle">⚙️ vehicle_v3 Ackermann</text>
+      <text x="240" y="58" font-size="14" text-anchor="middle" fill="#555">USD baked ScriptNode (6-wheel)</text>
+      <text x="240" y="78" font-size="14" text-anchor="middle" fill="#555">/cmd_vel → 휠 4조향각 + 6구동속도</text>
+      <text x="240" y="98" font-size="14" text-anchor="middle" fill="#555">슬립·슬로프 지형 적응 (실차 모델)</text>
+      <text x="240" y="122" font-size="13" font-weight="bold" fill="#BF360C" text-anchor="middle">▶ "실제 핸들 조작"</text>
     </g>
 
-    <g transform="translate(20, 455)">
-      <rect width="460" height="115" fill="#C8E6C9" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="230" y="26" font-size="14" font-weight="bold" text-anchor="middle">📷 YOLO Vision Detection</text>
-      <text x="230" y="50" font-size="12" text-anchor="middle" fill="#555">/camera/rover/* + /camera/wrist/*</text>
-      <text x="230" y="68" font-size="12" text-anchor="middle" fill="#555">YOLO + depth backproject → world XYZ</text>
-      <text x="230" y="86" font-size="12" text-anchor="middle" fill="#555">/perception/detections 발행</text>
-      <text x="230" y="106" font-size="11" fill="#2E7D32" text-anchor="middle">▶ "광물 발견 시 phase 전환"</text>
+    <g transform="translate(20, 527)">
+      <rect width="480" height="135" fill="#C8E6C9" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="30" font-size="17" font-weight="bold" text-anchor="middle">📷 YOLO Vision Detection</text>
+      <text x="240" y="58" font-size="14" text-anchor="middle" fill="#555">/camera/rover/* + /camera/wrist/*</text>
+      <text x="240" y="78" font-size="14" text-anchor="middle" fill="#555">YOLO + depth backproject → world XYZ</text>
+      <text x="240" y="98" font-size="14" text-anchor="middle" fill="#555">/perception/detections 발행</text>
+      <text x="240" y="122" font-size="13" font-weight="bold" fill="#2E7D32" text-anchor="middle">▶ "광물 발견 시 phase 전환"</text>
     </g>
   </g>
 
   <!-- Arrow Phase 1 → Phase 2 -->
-  <line x1="580" y1="760" x2="620" y2="760" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="600" y="748" font-size="12" font-weight="bold" text-anchor="middle" fill="#2E7D32">광물 발견!</text>
+  <line x1="580" y1="828" x2="618" y2="828" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="599" y="814" font-size="14" font-weight="bold" text-anchor="middle" fill="#2E7D32">광물 발견!</text>
 
   <!-- ════════════ PHASE 2: APPROACH ════════════ -->
-  <g transform="translate(620, 460)">
-    <rect width="500" height="600" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
-    <rect width="500" height="40" fill="#2E7D32" rx="12"/>
-    <rect width="500" height="20" y="20" fill="#2E7D32"/>
-    <text x="20" y="28" font-size="16" font-weight="bold" fill="white">🎯 PHASE 2: APPROACH</text>
-    <text x="480" y="28" font-size="11" text-anchor="end" fill="#C8E6C9">FSM: APPROACH</text>
-    <text x="250" y="62" font-size="12" text-anchor="middle" fill="#1B5E20">발견한 광물로 정밀 접근</text>
+  <g transform="translate(618, 488)">
+    <rect width="520" height="680" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
+    <rect width="520" height="46" fill="#2E7D32" rx="12"/>
+    <rect width="520" height="24" y="22" fill="#2E7D32"/>
+    <text x="22" y="32" font-size="19" font-weight="bold" fill="white">🎯 PHASE 2: APPROACH</text>
+    <text x="500" y="32" font-size="12" text-anchor="end" fill="#C8E6C9">FSM: APPROACH</text>
+    <text x="260" y="72" font-size="14" text-anchor="middle" fill="#1B5E20">발견한 광물로 정밀 접근</text>
 
-    <g transform="translate(20, 90)">
-      <rect width="460" height="150" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🎯 후보 선정 + 멀티 rover dedup</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">detection confidence ≥ thresh</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">다른 rover 의 /mineral_claims 회피</text>
-      <text x="230" y="100" font-size="11" fill="#6A1B9A" text-anchor="middle">→ 가장 가까운 unclaimed mineral 선택</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ "어떤 광물부터?"</text>
+    <g transform="translate(20, 95)">
+      <rect width="480" height="175" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🎯 후보 선정 + 멀티 rover dedup</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">detection confidence ≥ thresh</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">다른 rover 의 /mineral_claims 회피</text>
+      <text x="240" y="110" font-size="13" fill="#6A1B9A" text-anchor="middle">→ 가장 가까운 unclaimed mineral 선택</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ "어떤 광물부터?"</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">post_pick_skip_radius 1.0 m · cooldown 8 s</text>
     </g>
 
-    <g transform="translate(20, 255)">
-      <rect width="460" height="150" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🛣️ A* 재계획 + P-control</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">현재 위치 → mineral world XYZ</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">/supervisor/{path, target} 발행</text>
-      <text x="230" y="100" font-size="11" fill="#1976D2" text-anchor="middle">→ yaw + dist P-control align</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ "정밀 접근"</text>
+    <g transform="translate(20, 285)">
+      <rect width="480" height="175" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🛣️ A* 재계획 + P-control</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">현재 위치 → mineral world XYZ</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">/supervisor/{path, target} 발행</text>
+      <text x="240" y="110" font-size="13" fill="#1976D2" text-anchor="middle">→ yaw + dist P-control align</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ "정밀 접근"</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">hysteresis (stop_dist / resume_buffer) 진동 차단</text>
     </g>
 
-    <g transform="translate(20, 420)">
-      <rect width="460" height="150" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">📍 위치 추정 (GT cheat fwd)</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">/ground_truth/odom → /rover/estimated_pose</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">odom_to_estimated_pose 어댑터</text>
-      <text x="230" y="100" font-size="11" fill="#C62828" text-anchor="middle">→ 졸업 시 EKF stack (sun_yaw + TRN) swap</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ "GPS 없는 화성에서 어떻게?"</text>
+    <g transform="translate(20, 475)">
+      <rect width="480" height="175" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🔄 PICK_READY 진입 조건</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">dist ≤ stop_dist · 다른 rover claim 확정</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">cmd_vel = 0 (정지 holding)</text>
+      <text x="240" y="110" font-size="13" fill="#2E7D32" text-anchor="middle">→ FSM freeze + arm action goal 전송</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ "팔 동작 직전 준비 완료"</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">ExecuteArmTask: pick_mineral(world XYZ)</text>
     </g>
   </g>
 
   <!-- Arrow Phase 2 → Phase 3 -->
-  <line x1="1120" y1="760" x2="1160" y2="760" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="1140" y="748" font-size="12" font-weight="bold" text-anchor="middle" fill="#2E7D32">stop_dist 도달</text>
+  <line x1="1138" y1="828" x2="1176" y2="828" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1157" y="814" font-size="14" font-weight="bold" text-anchor="middle" fill="#2E7D32">stop_dist 도달</text>
 
   <!-- ════════════ PHASE 3: PICK & PLACE ════════════ -->
-  <g transform="translate(1160, 460)">
-    <rect width="500" height="600" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
-    <rect width="500" height="40" fill="#2E7D32" rx="12"/>
-    <rect width="500" height="20" y="20" fill="#2E7D32"/>
-    <text x="20" y="28" font-size="16" font-weight="bold" fill="white">🦾 PHASE 3: PICK_READY</text>
-    <text x="480" y="28" font-size="11" text-anchor="end" fill="#C8E6C9">FSM: PICK_READY</text>
-    <text x="250" y="62" font-size="12" text-anchor="middle" fill="#1B5E20">광물 채취 및 카고 적재</text>
+  <g transform="translate(1176, 488)">
+    <rect width="520" height="680" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
+    <rect width="520" height="46" fill="#2E7D32" rx="12"/>
+    <rect width="520" height="24" y="22" fill="#2E7D32"/>
+    <text x="22" y="32" font-size="19" font-weight="bold" fill="white">🦾 PHASE 3: PICK_READY</text>
+    <text x="500" y="32" font-size="12" text-anchor="end" fill="#C8E6C9">FSM: PICK_READY</text>
+    <text x="260" y="72" font-size="14" text-anchor="middle" fill="#1B5E20">광물 채취 및 카고 적재</text>
 
-    <g transform="translate(20, 90)">
-      <rect width="460" height="150" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🦾 M0609 DLS-IK Pipeline</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">HOME → APPROACH → DESCEND</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">→ HOME_MID → CARGO_SWING (joint1 180°)</text>
-      <text x="230" y="100" font-size="11" fill="#2E7D32" text-anchor="middle">→ /arm/joint_command (I11)</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ Doosan 6축 + RG2-FT 그리퍼</text>
+    <g transform="translate(20, 95)">
+      <rect width="480" height="175" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🦾 M0609 DLS-IK Pipeline</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">HOME → APPROACH → DESCEND</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">→ HOME_MID → CARGO_SWING (joint1 180°)</text>
+      <text x="240" y="110" font-size="13" fill="#2E7D32" text-anchor="middle">→ /arm/joint_command (I11)</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ Doosan 6축 + RG2-FT 그리퍼</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">DLS-IK world target (T2 정공법)</text>
     </g>
 
-    <g transform="translate(20, 255)">
-      <rect width="460" height="150" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">📦 Grasp + 카고 적재</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">/grasp/command pickup → FixedJoint snap</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">settle 2.5s → release → invisible</text>
-      <text x="230" y="100" font-size="11" fill="#2E7D32" text-anchor="middle">→ collected_count++ · collected_by_class++</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ post_pick_cooldown 8s</text>
+    <g transform="translate(20, 285)">
+      <rect width="480" height="175" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">📦 Grasp + 카고 적재</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">/grasp/command pickup → FixedJoint snap</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">settle 2.5 s → release → invisible</text>
+      <text x="240" y="110" font-size="13" fill="#2E7D32" text-anchor="middle">→ collected_count++ · collected_by_class++</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ post_pick_cooldown 8 s</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">GraspBridge 사이드카 (release race 우회)</text>
     </g>
 
-    <g transform="translate(20, 420)">
-      <rect width="460" height="150" fill="white" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="4,4" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🔌 ROS2 Event Publish</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">/mission/state (collected_by_class)</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">/mineral_claims (다른 rover 에게 알림)</text>
-      <text x="230" y="100" font-size="11" fill="#6A1B9A" text-anchor="middle">→ Web HUD 카운터 + STATUS 갱신</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ ExecuteArmTask action result</text>
+    <g transform="translate(20, 475)">
+      <rect width="480" height="175" fill="white" stroke="#6A1B9A" stroke-width="1.5" stroke-dasharray="4,4" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🔌 ROS2 Event Publish</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">/mission/state (collected_by_class)</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">/mineral_claims (다른 rover 에게 알림)</text>
+      <text x="240" y="110" font-size="13" fill="#6A1B9A" text-anchor="middle">→ Web HUD 카운터 + STATUS 갱신</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ ExecuteArmTask action result</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">success → supervisor 가 target 해제</text>
     </g>
   </g>
 
   <!-- Arrow Phase 3 → Decision -->
-  <line x1="1660" y1="760" x2="1700" y2="760" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="1680" y="748" font-size="12" font-weight="bold" text-anchor="middle" fill="#2E7D32">채취 완료</text>
+  <line x1="1696" y1="828" x2="1734" y2="828" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1715" y="814" font-size="14" font-weight="bold" text-anchor="middle" fill="#2E7D32">채취 완료</text>
 
   <!-- ════════════ DECISION DIAMOND ════════════ -->
-  <g transform="translate(1700, 660)">
-    <polygon points="90,0 180,100 90,200 0,100" fill="#FFF9C4" stroke="#F57F17" stroke-width="2"/>
-    <text x="90" y="88" font-size="14" font-weight="bold" text-anchor="middle">collected ≥ 2 ?</text>
-    <text x="90" y="110" font-size="12" text-anchor="middle">(또는 battery</text>
-    <text x="90" y="126" font-size="12" text-anchor="middle">critical)</text>
+  <g transform="translate(1734, 720)">
+    <polygon points="100,0 200,108 100,216 0,108" fill="#FFF9C4" stroke="#F57F17" stroke-width="2"/>
+    <text x="100" y="98" font-size="16" font-weight="bold" text-anchor="middle">collected ≥ 2 ?</text>
+    <text x="100" y="122" font-size="13" text-anchor="middle">(또는 battery</text>
+    <text x="100" y="140" font-size="13" text-anchor="middle">critical)</text>
   </g>
 
   <!-- YES arrow Decision → Phase 4 -->
-  <line x1="1880" y1="760" x2="1940" y2="760" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
-  <text x="1910" y="748" font-size="13" font-weight="bold" text-anchor="middle" fill="#C62828">YES</text>
+  <line x1="1934" y1="828" x2="1976" y2="828" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="1955" y="814" font-size="15" font-weight="bold" text-anchor="middle" fill="#C62828">YES</text>
 
   <!-- NO loop arrow Decision → back to Phase 1 -->
-  <path d="M 1790 860 L 1790 1080 L 330 1080 L 330 1060"
+  <path d="M 1834 936 L 1834 1090 L 320 1090 L 320 1168"
         fill="none" stroke="#9C27B0" stroke-width="3" stroke-dasharray="6,3" marker-end="url(#arrow-loop)"/>
-  <text x="1060" y="1072" font-size="13" font-weight="bold" text-anchor="middle" fill="#9C27B0">
+  <text x="1077" y="1082" font-size="15" font-weight="bold" text-anchor="middle" fill="#9C27B0">
     NO → PHASE 1 (다음 mineral 탐사)
   </text>
 
   <!-- ════════════ PHASE 4: RETURN ════════════ -->
-  <g transform="translate(1940, 460)">
-    <rect width="500" height="600" fill="#FFEBEE" stroke="#C62828" stroke-width="3" rx="12"/>
-    <rect width="500" height="40" fill="#C62828" rx="12"/>
-    <rect width="500" height="20" y="20" fill="#C62828"/>
-    <text x="20" y="28" font-size="16" font-weight="bold" fill="white">🏠 PHASE 4: RETURN_TO_BASE</text>
-    <text x="480" y="28" font-size="11" text-anchor="end" fill="#FFCDD2">FSM: RETURN_TO_BASE</text>
-    <text x="250" y="62" font-size="12" text-anchor="middle" fill="#B71C1C">베이스캠프로 자율 복귀</text>
+  <g transform="translate(1976, 488)">
+    <rect width="520" height="680" fill="#FFEBEE" stroke="#C62828" stroke-width="3" rx="12"/>
+    <rect width="520" height="46" fill="#C62828" rx="12"/>
+    <rect width="520" height="24" y="22" fill="#C62828"/>
+    <text x="22" y="32" font-size="19" font-weight="bold" fill="white">🏠 PHASE 4: RETURN_TO_BASE</text>
+    <text x="500" y="32" font-size="12" text-anchor="end" fill="#FFCDD2">FSM: RETURN_TO_BASE</text>
+    <text x="260" y="72" font-size="14" text-anchor="middle" fill="#B71C1C">베이스캠프로 자율 복귀</text>
 
-    <g transform="translate(20, 90)">
-      <rect width="460" height="150" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🎯 Goal = basecamp (0, 0)</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">terrain meta 의 basecamp anchor</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">stale path 폐기 + fresh A* 강제</text>
-      <text x="230" y="100" font-size="11" fill="#C62828" text-anchor="middle">→ 새 위치 기준 obstacle 회피 path</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ "임무 완수 후 귀환"</text>
+    <g transform="translate(20, 95)">
+      <rect width="480" height="175" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🎯 Goal = basecamp (0, 0)</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">terrain meta 의 basecamp anchor</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">stale path 폐기 + fresh A* 강제</text>
+      <text x="240" y="110" font-size="13" fill="#C62828" text-anchor="middle">→ 새 위치 기준 obstacle 회피 path</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#B71C1C" text-anchor="middle">▶ "임무 완수 후 귀환"</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">arrive_radius 2 m · 진입 안전</text>
     </g>
 
-    <g transform="translate(20, 255)">
-      <rect width="460" height="150" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">🛣️ A* + 멀티 rover 회피</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">/rover_positions inflate (r = 1.2 m)</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">A* fail → relaxed start cell 재시도</text>
-      <text x="230" y="100" font-size="11" fill="#1976D2" text-anchor="middle">→ 안전망: inflated 셀에서도 탈출</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ "탐사와 동일한 주행 스택 재사용"</text>
+    <g transform="translate(20, 285)">
+      <rect width="480" height="175" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">🛣️ A* + 멀티 rover 회피</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">/rover_positions inflate (r = 1.2 m)</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">A* fail → relaxed start cell 재시도</text>
+      <text x="240" y="110" font-size="13" fill="#1976D2" text-anchor="middle">→ 안전망: inflated 셀에서도 탈출</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#B71C1C" text-anchor="middle">▶ "탐사와 동일한 주행 스택 재사용"</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">coverage_node + supervisor mux 동일</text>
     </g>
 
-    <g transform="translate(20, 420)">
-      <rect width="460" height="150" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="230" y="28" font-size="14" font-weight="bold" text-anchor="middle">✅ 도착 판정</text>
-      <text x="230" y="55" font-size="12" text-anchor="middle" fill="#555">dist(rover, basecamp) ≤ 2 m</text>
-      <text x="230" y="76" font-size="12" text-anchor="middle" fill="#555">cmd_vel = 0 · 자세 유지</text>
-      <text x="230" y="100" font-size="11" fill="#2E7D32" text-anchor="middle">→ FSM: MISSION_COMPLETE</text>
-      <text x="230" y="125" font-size="11" fill="#888" text-anchor="middle">▶ Web HUD: 녹색 phase 배지</text>
+    <g transform="translate(20, 475)">
+      <rect width="480" height="175" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
+      <text x="240" y="32" font-size="17" font-weight="bold" text-anchor="middle">✅ 도착 판정</text>
+      <text x="240" y="62" font-size="14" text-anchor="middle" fill="#555">dist(rover, basecamp) ≤ 2 m</text>
+      <text x="240" y="84" font-size="14" text-anchor="middle" fill="#555">cmd_vel = 0 · 자세 유지</text>
+      <text x="240" y="110" font-size="13" fill="#2E7D32" text-anchor="middle">→ FSM: MISSION_COMPLETE</text>
+      <text x="240" y="136" font-size="13" font-weight="bold" fill="#B71C1C" text-anchor="middle">▶ Web HUD: 녹색 phase 배지</text>
+      <text x="240" y="158" font-size="12" fill="#888" text-anchor="middle">/mission/state + 종료 이벤트 emit</text>
     </g>
   </g>
+
+  <!-- battery critical override → RTB -->
+  <path d="M 1696 560 Q 1850 510 1976 560"
+        fill="none" stroke="#C62828" stroke-width="2.5" stroke-dasharray="6,4" marker-end="url(#arrow-fail)"/>
+  <text x="1836" y="500" font-size="13" font-weight="bold" text-anchor="middle" fill="#C62828">⚠️ battery critical → 즉시 RTB</text>
 
   <!-- Arrow Phase 4 → Mission Complete -->
-  <line x1="2190" y1="1060" x2="2190" y2="1095" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="2230" y1="1168" x2="2230" y2="1198" stroke="#444" stroke-width="3" marker-end="url(#arrow)"/>
 
   <!-- ════════════ MISSION COMPLETE ════════════ -->
-  <g transform="translate(2010, 1100)">
-    <rect width="360" height="60" fill="#2E7D32" rx="30"/>
-    <text x="180" y="30" font-size="18" font-weight="bold" text-anchor="middle" fill="white">✅ MISSION COMPLETE</text>
-    <text x="180" y="50" font-size="11" text-anchor="middle" fill="#C8E6C9">rover_1, rover_2 모두 채집 2개 · basecamp 도달</text>
+  <g transform="translate(2030, 1203)">
+    <rect width="400" height="68" fill="#2E7D32" rx="34"/>
+    <text x="200" y="34" font-size="21" font-weight="bold" text-anchor="middle" fill="white">✅ MISSION COMPLETE</text>
+    <text x="200" y="56" font-size="13" text-anchor="middle" fill="#C8E6C9">rover_1, rover_2 모두 채집 2개 · basecamp 도달</text>
   </g>
 
-  <!-- battery critical override → RTB (붉은 점선) -->
-  <path d="M 1660 530 Q 1850 480 1940 530"
-        fill="none" stroke="#C62828" stroke-width="2.2" stroke-dasharray="6,4" marker-end="url(#arrow-fail)"/>
-  <text x="1800" y="475" font-size="12" font-weight="bold" text-anchor="middle" fill="#C62828">⚠️ battery critical → 즉시 RTB</text>
+  <!-- ════════════ LOCALIZATION BASE LAYER ════════════ -->
+  <g transform="translate(60, 1203)">
+    <rect width="1940" height="218" fill="#FFEBEE" stroke="#C62828" stroke-width="2.5" rx="12"/>
+    <rect width="1940" height="44" fill="#C62828" rx="12"/>
+    <rect width="1940" height="22" y="22" fill="#C62828"/>
+    <text x="22" y="32" font-size="19" font-weight="bold" fill="white">📍 LOCALIZATION — 모든 PHASE 의 base layer (per rover, always on)</text>
+    <text x="1918" y="32" font-size="13" text-anchor="end" fill="#FFCDD2">시연: GT cheat fwd · 졸업: EKF stack swap</text>
+
+    <g transform="translate(22, 60)">
+      <rect width="460" height="140" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="230" y="30" font-size="16" font-weight="bold" text-anchor="middle">📥 sensor inputs</text>
+      <text x="230" y="56" font-size="13" text-anchor="middle" fill="#555">/ground_truth/odom (cheat 입력)</text>
+      <text x="230" y="76" font-size="13" text-anchor="middle" fill="#555">/imu/data · /joint_states_raw</text>
+      <text x="230" y="96" font-size="13" text-anchor="middle" fill="#555">/camera/sun/* (sun yaw 후보)</text>
+      <text x="230" y="120" font-size="12" fill="#888" text-anchor="middle">vehicle_v3 ActionGraph 가 항상 발행</text>
+    </g>
+
+    <g transform="translate(502, 60)">
+      <rect width="460" height="140" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="230" y="30" font-size="16" font-weight="bold" text-anchor="middle">⚙️ odom_to_estimated_pose</text>
+      <text x="230" y="56" font-size="13" text-anchor="middle" fill="#555">GT cheat 어댑터 (단일 노드)</text>
+      <text x="230" y="76" font-size="13" text-anchor="middle" fill="#555">/ground_truth/odom →</text>
+      <text x="230" y="96" font-size="13" text-anchor="middle" fill="#555">/rover/estimated_pose (I5, 30 Hz)</text>
+      <text x="230" y="120" font-size="12" font-weight="bold" fill="#C62828" text-anchor="middle">▶ "시연 D-day 의 단순/안정 경로"</text>
+    </g>
+
+    <g transform="translate(982, 60)">
+      <rect width="460" height="140" fill="white" stroke="#C62828" stroke-width="1.5" rx="6"/>
+      <text x="230" y="30" font-size="16" font-weight="bold" text-anchor="middle">🎓 졸업 경로 (EKF stack)</text>
+      <text x="230" y="56" font-size="13" text-anchor="middle" fill="#555">wheel_odom + IMU + EDL prior</text>
+      <text x="230" y="76" font-size="13" text-anchor="middle" fill="#555">sun_yaw (epic obstacle 방위)</text>
+      <text x="230" y="96" font-size="13" text-anchor="middle" fill="#555">TRN (heightmap 매칭)</text>
+      <text x="230" y="120" font-size="12" font-weight="bold" fill="#C62828" text-anchor="middle">▶ "GPS 없는 화성에서 정공법"</text>
+    </g>
+
+    <g transform="translate(1462, 60)">
+      <rect width="460" height="140" fill="#FFCDD2" stroke="#C62828" stroke-width="2" rx="6"/>
+      <text x="230" y="30" font-size="16" font-weight="bold" text-anchor="middle">📤 output: /rover/estimated_pose</text>
+      <text x="230" y="56" font-size="13" text-anchor="middle" fill="#555">→ PHASE 1 (coverage_node)</text>
+      <text x="230" y="76" font-size="13" text-anchor="middle" fill="#555">→ PHASE 2/3 (mission_manager FSM)</text>
+      <text x="230" y="96" font-size="13" text-anchor="middle" fill="#555">→ PHASE 4 (RTB target tracking)</text>
+      <text x="230" y="120" font-size="12" font-weight="bold" fill="#B71C1C" text-anchor="middle">▶ 모든 phase 의 공통 입력</text>
+    </g>
+  </g>
+
+  <!-- Localization → 모든 PHASE 연결 (위로 향하는 점선 화살표 4개) -->
+  <line x1="320" y1="1203" x2="320" y2="1168" stroke="#C62828" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-loc)" opacity="0.7"/>
+  <line x1="878" y1="1203" x2="878" y2="1168" stroke="#C62828" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-loc)" opacity="0.7"/>
+  <line x1="1436" y1="1203" x2="1436" y2="1168" stroke="#C62828" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-loc)" opacity="0.7"/>
+  <line x1="1994" y1="1203" x2="1994" y2="1168" stroke="#C62828" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#arrow-loc)" opacity="0.7"/>
 
 </svg>
