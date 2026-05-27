@@ -479,7 +479,7 @@ import time
 
 _state = {"attached_joint_path": None, "attached_obj_path": None,
           "gripper_link_path": None, "arm_base_path": None,
-          "attach_time": None}
+          "attach_time": None, "prev_mode": 0.0}
 
 # release ROS msg 가 OmniGraph Subscribe 의 frame race 로 drop 돼도
 # mineral 이 그리퍼에 영원히 attach 된 채 남는 사례 (2026-05-27 시연)
@@ -641,7 +641,14 @@ def compute(db):
     lin = db.inputs.linearVelocity
     ang = db.inputs.angularVelocity
     mode = _component(ang, 0)  # +1 pickup, -1 release
-    if mode > 0.5:
+    # Edge detection — OnTick 매 tick trigger 와 SubGrasp msg trigger 둘 다
+    # ScriptNode execIn 으로 들어오므로, mode 변화 frame 에만 pickup/release
+    # 분기를 실행 (그 외 tick 은 timer fail-safe 만 검사).
+    prev_mode = _state.get("prev_mode", 0.0)
+    _state["prev_mode"] = mode
+    rising = (mode > 0.5) and (prev_mode <= 0.5)
+    falling = (mode < -0.5) and (prev_mode >= -0.5)
+    if rising:
         stage = omni.usd.get_context().get_stage()
         gripper_path = _state.get("gripper_link_path") or _find_gripper_link(stage)
         if not gripper_path:
@@ -688,7 +695,7 @@ def compute(db):
                   f"requested=({req_x:.2f},{req_y:.2f}), "
                   f"target dist {dist:.2f}m, snapped, collision off)")
         return True
-    elif mode < -0.5:
+    elif falling:
         stage = omni.usd.get_context().get_stage()
         obj = _state.get("attached_obj_path")
         _detach(stage)
@@ -812,6 +819,48 @@ def _patch_topic_names(stage, rover_root: str, ns: str) -> int:
     return patched
 
 
+def _add_tick_to_grasp_edge(stage, rover_root: str) -> int:
+    """OnTick.outputs:tick → GraspScript.inputs:execIn edge 추가.
+
+    build_vehicle_v3.py 의 기본 그래프는 SubGrasp.outputs:execOut →
+    GraspScript.inputs:execIn 만 연결돼있어 ScriptNode 가 메시지 도착 시만
+    호출됨 → release msg drop 시 ScriptNode compute() 자체가 호출 안 되고
+    fail-safe timer 도 발동 못함. OnTick 도 같은 execIn 에 연결해 매 tick
+    호출되도록 보강.
+
+    OmniGraph 의 action graph execIn 은 multi-source OR trigger 허용.
+    return: 추가 성공한 edge 개수 (1 = OK).
+    """
+    root = stage.GetPrimAtPath(rover_root)
+    if not root.IsValid():
+        return 0
+    on_tick_path = None
+    grasp_path = None
+    for prim in Usd.PrimRange(root):
+        if prim.GetTypeName() != "OmniGraphNode":
+            continue
+        name = prim.GetName()
+        if name == "OnTick" and on_tick_path is None:
+            on_tick_path = str(prim.GetPath())
+        elif name == "GraspScript":
+            grasp_path = str(prim.GetPath())
+    if not on_tick_path or not grasp_path:
+        print(f"[run_v3]     edge skip — OnTick={on_tick_path}, "
+              f"GraspScript={grasp_path}")
+        return 0
+    src = on_tick_path + ".outputs:tick"
+    dst = grasp_path + ".inputs:execIn"
+    try:
+        import omni.graph.core as og  # module-level import 없으므로 함수 내부에서
+        og.Controller.connect(src, dst)
+        print(f"[run_v3]     edge OK: {src} → {dst} "
+              f"(ScriptNode 매 tick 호출 보장)")
+        return 1
+    except Exception as exc:
+        print(f"[run_v3]     edge FAILED: {exc}")
+        return 0
+
+
 def _patch_script_nodes(stage, rover_root: str, ns: str) -> int:
     """rover_root 아래 GT/GRASP ScriptNode 의 inputs:script 를 rover-scoped 버전으로 교체.
 
@@ -895,8 +944,10 @@ def main() -> None:
                 app.update()
             n_topics = _patch_topic_names(stage, prim_path, ns)
             n_scripts = _patch_script_nodes(stage, prim_path, ns)
+            n_edges = _add_tick_to_grasp_edge(stage, prim_path)
             print(f"[run_v3]   patched {n_topics} topicName attrs, "
-                  f"{n_scripts} ScriptNode(s) → namespace /{ns}")
+                  f"{n_scripts} ScriptNode(s), {n_edges} tick→grasp edge"
+                  f" → namespace /{ns}")
             # per-rover chase cam + OmniGraph (--no-chase 시 skip)
             if not _a.no_chase:
                 ns_norm = ns.strip("/").strip()
