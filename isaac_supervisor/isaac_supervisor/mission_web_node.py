@@ -90,6 +90,11 @@ class MissionWebRosNode(Node):
         self._last_odom: Dict[str, dict] = {}
         self._last_minimap: Dict[str, dict] = {}
         self._last_path: Dict[str, dict] = {}
+        # explore path (coverage) 와 supervisor path (A* APPROACH/RTB) 를
+        # 분리 캐싱. 같은 slot 공유 시 두 source 가 번갈아 덮어쓰며 미니맵
+        # 경로가 진동했음 (2026-05-27 디버깅).
+        self._last_path_explore: Dict[str, dict] = {}
+        self._last_path_supervisor: Dict[str, dict] = {}
         self._last_target: Dict[str, Optional[dict]] = {}
 
         minimap_qos = QoSProfile(
@@ -224,21 +229,33 @@ class MissionWebRosNode(Node):
             "ang": float(msg.angular.z),
         })
 
+    def _emit_active_path(self, ns: str) -> None:
+        """Phase-aware path 라우터.
+
+        Supervisor (mission_manager) 가 APPROACH/PICK_READY/RTB 시 path 를
+        채워 발행하고 EXPLORE 진입 시 빈 path 를 발행한다. 따라서 supervisor
+        path 가 non-empty 면 그게 active, 빈 path 면 coverage(EXPLORE) path
+        가 active. 두 source 가 같은 slot 을 덮어쓰지 않도록 라우팅.
+        """
+        sup = self._last_path_supervisor.get(ns, {"pts": []})
+        active = sup if sup.get("pts") else self._last_path_explore.get(
+            ns, {"pts": []})
+        self._last_path[ns] = active
+        self._emit("path", ns, active)
+
     def _on_path(self, ns: str, msg: Path) -> None:
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
                for ps in msg.poses]
-        payload = {"pts": pts}
-        self._last_path[ns] = payload
-        self._emit("path", ns, payload)
+        self._last_path_explore[ns] = {"pts": pts}
+        self._emit_active_path(ns)
 
     def _on_supervisor_path(self, ns: str, msg: Path) -> None:
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
                for ps in msg.poses]
-        # supervisor 가 빈 path 발행하면 (EXPLORE 시) lastPath 비워서 화면에서
-        # 사라지게.
-        payload = {"pts": pts}
-        self._last_path[ns] = payload
-        self._emit("path", ns, payload)
+        # supervisor 가 빈 path 발행하면 (EXPLORE 시) supervisor slot 비워서
+        # _emit_active_path 가 coverage path 로 fallback.
+        self._last_path_supervisor[ns] = {"pts": pts}
+        self._emit_active_path(ns)
 
     def _on_supervisor_target(self, ns: str, msg: PointStamped) -> None:
         import math as _math
