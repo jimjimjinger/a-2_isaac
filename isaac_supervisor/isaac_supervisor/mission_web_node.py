@@ -282,7 +282,16 @@ class MissionWebRosNode(Node):
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
                for ps in msg.poses]
         self._last_path_explore[ns] = {"pts": pts}
+        # EXPLORE 별 위치 = path 의 끝점 (sector anchor) 로 결정.
+        # coverage_node 의 current_target marker 는 다음 waypoint (가까운 점)
+        # 라 rover 옆에 별이 보이고 path 만 멀리 그려졌음 (2026-05-27 사용자
+        # 보고). path[-1] 이 진짜 anchor 라 APPROACH 와 동일 패턴 (별이 path
+        # 끝점) 으로 통일.
+        if pts:
+            self._last_target_explore[ns] = {
+                "x": pts[-1][0], "y": pts[-1][1]}
         self._emit_active_path(ns)
+        self._emit_active_target(ns)
 
     def _on_supervisor_path(self, ns: str, msg: Path) -> None:
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
@@ -314,8 +323,14 @@ class MissionWebRosNode(Node):
         # MISSION_COMPLETE 후엔 coverage 의 stale anchor marker 무시.
         if self._last_state.get(ns, {}).get("state") == "MISSION_COMPLETE":
             return
-        # minimap_publisher 의 ns="target" SPHERE 만 추려서 EXPLORE 의 sector
-        # anchor 별 위치로. APPROACH/RTB 중엔 supervisor 가 채워둔 게 우선.
+        # _on_path 가 path 의 끝점을 explore_target 으로 set 하므로 보통은
+        # marker 정보가 필요 없음. path 가 아직 한 번도 안 들어왔거나 비었을
+        # 때만 marker 의 current_target 으로 fallback (그 외엔 무시 — marker
+        # 의 current_target 은 다음 waypoint 라 별이 rover 옆에 그려져 사용자
+        # 직관과 안 맞음).
+        existing_path = self._last_path_explore.get(ns, {}).get("pts", [])
+        if existing_path:
+            return
         target = None
         for m in msg.markers:
             if m.ns == "target":
