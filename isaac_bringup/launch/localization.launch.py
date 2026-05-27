@@ -225,7 +225,9 @@ def _build_nodes(context, *args, **kwargs):
                     "use_sun_yaw": True,
                     "default_sun_yaw_cov": 0.60,
                     "min_sun_yaw_cov": 0.10,
-                    "max_sun_yaw_innovation": 0.90,
+                    # π 로 풀어 큰 보정도 수용 — EKF wheel-drift 누적이 sun_yaw
+                    # innovation 을 1071회 reject 시켰던 2026-05-26 회귀 대응.
+                    "max_sun_yaw_innovation": math.pi,
                     "max_trn_innovation_m": 1.0,
                     # EDL initial pose prior — terrain spawn 으로 시드.
                     **prior,
