@@ -127,7 +127,7 @@
 
     <g transform="translate(20, 105)">
       <rect width="480" height="210" fill="white" stroke="#2E7D32" stroke-width="1.5" rx="6"/>
-      <text x="240" y="92" font-size="26" font-weight="bold" text-anchor="middle">🎯 후보 선정 + 멀티 dedup</text>
+      <text x="240" y="92" font-size="24" font-weight="bold" text-anchor="middle">🎯 후보 선정 (rover 간 중복 방지)</text>
       <text x="240" y="156" font-size="22" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ "어떤 광물부터?"</text>
     </g>
 
