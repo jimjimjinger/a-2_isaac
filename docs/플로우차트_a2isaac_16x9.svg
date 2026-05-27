@@ -47,7 +47,7 @@
     <g transform="translate(40, 68)">
       <rect width="570" height="122" fill="white" stroke="#E65100" stroke-width="1.5" rx="6"/>
       <text x="285" y="52" font-size="22" font-weight="bold" text-anchor="middle">🗺️ Procedural Terrain</text>
-      <text x="285" y="92" font-size="18" font-weight="bold" fill="#BF360C" text-anchor="middle">▶ terrain_00026 · passable 88%</text>
+      <text x="285" y="92" font-size="18" font-weight="bold" fill="#BF360C" text-anchor="middle">▶ 매 미션마다 새 지형 생성</text>
     </g>
 
     <g transform="translate(640, 68)">
@@ -133,7 +133,7 @@
 
     <g transform="translate(20, 330)">
       <rect width="480" height="210" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="240" y="92" font-size="26" font-weight="bold" text-anchor="middle">🛣️ A* 재계획 + P-control</text>
+      <text x="240" y="92" font-size="26" font-weight="bold" text-anchor="middle">🛣️ A* 재계획 + 정밀 제어</text>
       <text x="240" y="156" font-size="22" font-weight="bold" fill="#1B5E20" text-anchor="middle">▶ "정밀 접근"</text>
     </g>
 
