@@ -170,13 +170,17 @@ class ArmExecutorNode(Node):
         # GRASP_CLOSE → ATTACH_LIFT → JS_PRE → RELEASE → JS_POST → DONE) /
         # "scripted" / "wrist_servo". 미지정 시 enable_ik + use_world_target_ik 로 fallback.
         self.declare_parameter("pick_style", "")
-        # rover_yolo_demo 의 HOVER_ABOVE_MINERAL (TCP 가 mineral 위 4cm).
-        self.declare_parameter("hover_above_mineral_z_m", 0.04)
+        # DESCEND 시 TCP 가 mineral_world.z 기준 얼마나 위/아래에 위치할지 (m).
+        # nav cam perception 의 z bias (실측 ~+47cm: perception_z 가 실제 mineral 보다
+        # 높게 추정) 보정을 위해 default 를 음수로.
+        # 주의: -0.40 이하 → M0609 reach 한계 밖 (DESCEND IK 미수렴 abort).
+        # 안정 권장 -0.20 ~ -0.30 (IK 풀림 + 텔레포트 거리 합리적).
+        self.declare_parameter("hover_above_mineral_z_m", -0.30)
         # rover_yolo_demo 의 LIFT_HEIGHT (mineral 위 45cm 까지 들어올림).
         self.declare_parameter("lift_height_m", 0.45)
         # 시연 시각화용 APPROACH phase 높이 (mineral 위 N m hover). 0 이면 phase
-        # skip 하고 곧바로 DESCEND. default 0.20 → 위에서 접근 → 내려가기 단계 가시화.
-        self.declare_parameter("approach_above_mineral_z_m", 0.20)
+        # skip 하고 곧바로 DESCEND. default 0.10 → DESCEND -0.40 가까이 가기 전 위에서 접근.
+        self.declare_parameter("approach_above_mineral_z_m", 0.10)
         # GRASP_CLOSE 후 ATTACH_LIFT 전 dwell (sec). vehicle_v3 의 FixedJoint snap
         # 이 instant 라서 dwell 없으면 grasp 순간이 안 보임. default 1.5s.
         self.declare_parameter("grasp_dwell_sec", 1.5)

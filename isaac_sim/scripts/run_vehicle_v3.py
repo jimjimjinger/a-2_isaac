@@ -198,7 +198,10 @@ def _attach(stage, link_path, obj_path):
     joint = UsdPhysics.FixedJoint.Define(stage, GRASP_JOINT_PATH)
     joint.CreateBody0Rel().SetTargets([Sdf.Path(link_path)])
     joint.CreateBody1Rel().SetTargets([Sdf.Path(obj_path)])
-    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
+    # LocalPos0 = (0, 0.03, 0.12) — finger frame Z (= world 거의 아래) 12cm,
+    # 추가로 finger Y (world +Y 옆쪽 98% + 아래 15%) 3cm. 시각: mineral 이 finger
+    # 보다 아래로 매달리며 살짝 옆/아래 미세 조정.
+    joint.CreateLocalPos0Attr().Set(Gf.Vec3f(0.06, 0.0, 0.14))
     joint.CreateLocalRot0Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
     joint.CreateLocalPos1Attr().Set(Gf.Vec3f(0.0, 0.0, 0.0))
     joint.CreateLocalRot1Attr().Set(Gf.Quatf(1.0, 0.0, 0.0, 0.0))
