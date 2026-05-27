@@ -933,6 +933,15 @@ class MissionManagerNode(Node):
                 self._publish_supervisor_viz(target_xy=None)
             except Exception:
                 pass
+        # phase 전환 즉시 MissionState 도 발행 — _publish_state 의 timer 다음
+        # tick (수십 ms) 까지 기다리면 backend 가 race 로 옛 explore slot
+        # fallback 잔재를 한 frame 그림 (2026-05-27 MISSION_COMPLETE 깜박임
+        # 디버깅). synchronous 발행으로 새 phase 가 path/target 메시지보다
+        # 먼저 backend 에 도달하게 한다.
+        try:
+            self._publish_state()
+        except Exception:
+            pass
         suffix = f" ({reason})" if reason else ""
         self.get_logger().info(f"phase: {prev} -> {new_phase}{suffix}")
 
