@@ -103,6 +103,24 @@ CHASE_INFO_TOPIC = "/camera/chase/camera_info"
 CHASE_OFFSET_LOCAL = (-6.0, 0.0, 3.0)
 CHASE_TARGET_Z_BIAS = 1.0
 
+# 5×5 raycaster (Phase 1 — viewport visualization).
+# avoid_test_new_/flat_env_cfg.py 의 height_scanner 와 동일한 prominence 로직:
+# rover body 위 RAYCAST_HEIGHT_ABOVE_ROVER m 에서 아래로 격자형 ray 를 쏘고,
+# 8-이웃 평균 대비 국소 돌출량(prominence) > height_thresh 셀을 장애물로 판정.
+# rover 자기 자신에 맞는 ray 는 miss 처리 (avoid_test_new_ 의 mesh filter 대용).
+RAYCAST_ENABLED = True
+RAYCAST_SIZE = (8.0, 8.0)            # 8m × 8m
+RAYCAST_RES = 0.2                     # 0.2m → 41×41 = 1681 rays
+RAYCAST_HEIGHT_ABOVE_ROVER = 15.0
+RAYCAST_PROM_RADIUS = 2
+RAYCAST_HEIGHT_THRESH = 0.15
+RAYCAST_UPDATE_EVERY = 6              # 60Hz / 6 = 10Hz
+RAYCAST_POINTS_PRIM = "/World/RaycastDebug"
+RAYCAST_POINT_WIDTH = 0.0   # 0 = 뷰포트에서 안 보임
+# IPC — Isaac Sim PyPI(py3.11) 에선 rclpy 직접 import 불가. raycast 결과를
+# atomic file write 로 노출 → 별도 ROS2 노드(raycast_relay)가 picking 해 publish.
+RAYCAST_IPC_PATH = "/tmp/a2_raycast.npz"
+
 
 def _add_overview_camera(stage) -> str:
     """World prim 에 부감 카메라 prim 추가. visibility=invisible 로 viewport
@@ -262,6 +280,159 @@ def _find_articulation_root(stage, rover_root: str = ""):
         if prim.GetName() == "base_link" and "m0609" in str(prim.GetPath()):
             return prim
     return None
+
+
+def _build_raycast_offsets():
+    """rover-yaw frame 의 격자 cell xy offset 들 (RAYCAST_SIZE × RAYCAST_RES)."""
+    import numpy as np
+    sx, sy = RAYCAST_SIZE
+    res = RAYCAST_RES
+    xs = np.arange(-sx / 2.0, sx / 2.0 + 1e-9, res, dtype=np.float32)
+    ys = np.arange(-sy / 2.0, sy / 2.0 + 1e-9, res, dtype=np.float32)
+    pts = np.array([(x, y) for y in ys for x in xs], dtype=np.float32)
+    return pts, len(ys), len(xs)
+
+
+def _setup_raycaster(stage):
+    """결과 시각화용 UsdGeom.Points prim 생성."""
+    from pxr import UsdGeom, Vt
+    pts = UsdGeom.Points.Define(stage, RAYCAST_POINTS_PRIM)
+    pts.GetPointsAttr().Set(Vt.Vec3fArray([]))
+    pts.GetWidthsAttr().Set(Vt.FloatArray([]))
+    pts.GetDisplayColorAttr().Set(Vt.Vec3fArray([]))
+    # Points 는 기본적으로 raycast 가 영향 안 받지만 명시적으로 invisible-to-physics
+    # 처리 필요 없음 — PhysicsCollisionAPI 안 붙여놓으면 충돌 대상 아님.
+    return pts
+
+
+def _update_raycaster(stage, points_prim, state, sqi, offsets, rows, cols):
+    """매 호출마다 rover 위 RAYCAST_HEIGHT_ABOVE_ROVER m 에서 격자 ray 를 쏘고
+    prominence 계산해 points_prim 색 부여. rover 본체 hit 는 miss 처리."""
+    import numpy as np
+    import carb
+    from pxr import UsdGeom, Vt, Gf
+
+    artic = state.get("artic")
+    if artic is None or not artic.IsValid():
+        artic = _find_articulation_root(stage, state.get("rover_root", ""))
+        state["artic"] = artic
+        if artic is None:
+            return
+
+    cache = UsdGeom.XformCache()
+    m = cache.GetLocalToWorldTransform(artic)
+    rover_pos = m.ExtractTranslation()
+
+    # yaw-aligned ground plane axes (avoid_test_new_ 의 ray_alignment="yaw" 와 동일).
+    rx_raw = Gf.Vec3d(m[0][0], m[0][1], 0.0)
+    rx_len = rx_raw.GetLength()
+    if rx_len < 1e-6:
+        return
+    rx = rx_raw / rx_len
+    ry = Gf.Vec3d(-rx[1], rx[0], 0.0)  # 90° CCW (ground plane)
+
+    n = offsets.shape[0]
+    positions = np.zeros((n, 3), dtype=np.float32)
+    z_hits = np.full(n, np.nan, dtype=np.float32)
+    misses = np.zeros(n, dtype=bool)
+
+    z_start = rover_pos[2] + RAYCAST_HEIGHT_ABOVE_ROVER
+    direction = carb.Float3(0.0, 0.0, -1.0)
+
+    for i in range(n):
+        ox = float(offsets[i, 0])
+        oy = float(offsets[i, 1])
+        wx = rover_pos[0] + rx[0] * ox + ry[0] * oy
+        wy = rover_pos[1] + rx[1] * ox + ry[1] * oy
+        origin = carb.Float3(wx, wy, z_start)
+        hit = sqi.raycast_closest(origin, direction, 100.0)
+        if not hit or not hit.get("hit", False):
+            misses[i] = True
+            positions[i] = (wx, wy, 0.0)
+            continue
+        col = str(hit.get("collision", ""))
+        if "/Rover" in col or "/Vehicle" in col:
+            # 자기 자신 — invalid (avoid_test_new_ 의 mesh filter 대용)
+            misses[i] = True
+            positions[i] = (wx, wy, 0.0)
+            continue
+        if "BoundaryWalls" in col:
+            # 맵 가장자리 invisible wall (rover 추락 방지용 4개 wall 공통 경로) —
+            # 물리 충돌은 유지하되 raycast obstacle 로는 인식 안 함.
+            misses[i] = True
+            positions[i] = (wx, wy, 0.0)
+            continue
+        p = hit["position"]
+        z = float(p[2])
+        z_hits[i] = z
+        positions[i] = (float(p[0]), float(p[1]), z)
+
+    # prominence (avoid_test_new_/mdp/observations.py raycast_prominence 와 동일).
+    r = RAYCAST_PROM_RADIUS
+    is_obs = np.zeros(n, dtype=bool)
+    if rows > 2 * r and cols > 2 * r:
+        z = z_hits.reshape(rows, cols)
+        z_filled = np.where(np.isnan(z), 0.0, z)
+        core = z_filled[r:rows - r, r:cols - r]
+        acc = np.zeros_like(core)
+        cnt = 0
+        for dr in (-r, 0, r):
+            for dc in (-r, 0, r):
+                if dr == 0 and dc == 0:
+                    continue
+                acc = acc + z_filled[r + dr:rows - r + dr, r + dc:cols - r + dc]
+                cnt += 1
+        prom = core - acc / cnt
+        is_obs_core = prom > RAYCAST_HEIGHT_THRESH
+        is_obs_grid = np.zeros((rows, cols), dtype=bool)
+        is_obs_grid[r:rows - r, r:cols - r] = is_obs_core
+        # NaN cell 은 신뢰 못 함 — obs 판정 제외.
+        is_obs_grid &= ~np.isnan(z)
+        is_obs = is_obs_grid.flatten()
+
+    # 색칠 — 빨강 = obstacle, 흰색 = flat ground, 어두운 회색 = miss/self-hit.
+    colors = np.empty((n, 3), dtype=np.float32)
+    colors[:] = (1.0, 1.0, 1.0)
+    colors[is_obs] = (1.0, 0.1, 0.1)
+    colors[misses] = (0.3, 0.3, 0.3)
+
+    pts_attr = points_prim.GetPointsAttr()
+    pts_attr.Set(Vt.Vec3fArray.FromNumpy(positions))
+    widths_attr = points_prim.GetWidthsAttr()
+    widths_attr.Set(Vt.FloatArray.FromNumpy(
+        np.full(n, RAYCAST_POINT_WIDTH, dtype=np.float32)))
+    color_attr = points_prim.GetDisplayColorAttr()
+    color_attr.Set(Vt.Vec3fArray.FromNumpy(colors))
+
+    state["last_obs_count"] = int(is_obs.sum())
+    state["last_miss_count"] = int(misses.sum())
+
+    # IPC — atomic write 로 raycast_relay_node 에 데이터 노출.
+    # rover yaw 도 함께 저장: relay 노드가 cell offset 을 local→world 변환 필요시 사용.
+    import os
+    import tempfile
+    import time as _time
+    try:
+        rover_yaw = math.atan2(rx[1], rx[0])
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=".a2_raycast_", suffix=".npz",
+            dir=os.path.dirname(RAYCAST_IPC_PATH))
+        os.close(tmp_fd)
+        np.savez(
+            tmp_path,
+            timestamp=np.float64(_time.time()),
+            rover_pos=np.array([rover_pos[0], rover_pos[1], rover_pos[2]],
+                               dtype=np.float64),
+            rover_yaw=np.float64(rover_yaw),
+            cell_world_xyz=positions.astype(np.float32),
+            cell_is_obs=is_obs.astype(np.bool_),
+            cell_is_miss=misses.astype(np.bool_),
+            grid_rows=np.int32(rows),
+            grid_cols=np.int32(cols),
+        )
+        os.replace(tmp_path, RAYCAST_IPC_PATH)
+    except Exception as e:
+        state["last_ipc_err"] = str(e)
 
 
 def _update_chase_cam(stage, transform_op, state: dict) -> None:
@@ -895,6 +1066,21 @@ def main() -> None:
         else:
             print("[run_v3] chase cam 비활성 (--no-chase)")
 
+    # 5×5 raycaster (단일 rover 만 우선 — multi 모드는 추후).
+    raycast_pts = None
+    raycast_state: dict = {}
+    raycast_sqi = None
+    raycast_offsets = None
+    raycast_rows = raycast_cols = 0
+    if RAYCAST_ENABLED and not _a.rovers:
+        raycast_offsets, raycast_rows, raycast_cols = _build_raycast_offsets()
+        raycast_pts = _setup_raycaster(stage)
+        print(f"[run_v3] raycaster 활성: "
+              f"{RAYCAST_SIZE[0]:.1f}x{RAYCAST_SIZE[1]:.1f}m "
+              f"({raycast_rows}x{raycast_cols}={raycast_rows*raycast_cols} rays) "
+              f"yaw-aligned, h={RAYCAST_HEIGHT_ABOVE_ROVER}m, "
+              f"every {RAYCAST_UPDATE_EVERY} step")
+
     for _ in range(20):
         app.update()
     world.reset()
@@ -905,6 +1091,15 @@ def main() -> None:
     else:
         print("[run_v3] ready — v3 내장 Action Graph 가 센서 토픽 발행 중 "
               "(/imu/data /joint_states_raw /camera/* /camera/overview/* /camera/chase/*)")
+
+    # PhysX scene query interface — world.play() 후에 PhysX scene 이 활성화돼야 함.
+    if raycast_pts is not None:
+        try:
+            from omni.physx import get_physx_scene_query_interface
+            raycast_sqi = get_physx_scene_query_interface()
+        except Exception as e:
+            print(f"[run_v3] ⚠ raycaster 비활성 — PhysX query 초기화 실패: {e}")
+            raycast_pts = None
 
     step = 0
     chase_state: dict = {}
@@ -920,6 +1115,16 @@ def main() -> None:
             # multi 모드 per-rover chase cams.
             for entry in multi_chase_cams:
                 _update_chase_cam(stage, entry["op"], entry["state"])
+            # 5×5 raycaster — RAYCAST_UPDATE_EVERY step 마다 (RTF 보호).
+            if (raycast_pts is not None and raycast_sqi is not None
+                    and step % RAYCAST_UPDATE_EVERY == 0):
+                _update_raycaster(stage, raycast_pts, raycast_state, raycast_sqi,
+                                  raycast_offsets, raycast_rows, raycast_cols)
+                if step % 600 == 0:
+                    obs = raycast_state.get("last_obs_count", 0)
+                    miss = raycast_state.get("last_miss_count", 0)
+                    print(f"[run_v3] raycaster: {obs} obstacle cells, "
+                          f"{miss} misses (of {raycast_rows*raycast_cols})")
             if step % 600 == 0:
                 now = time.time()
                 dt = now - last_log_wall

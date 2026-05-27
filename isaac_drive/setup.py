@@ -23,6 +23,9 @@ setup(
         "console_scripts": [
             "coverage_node = isaac_drive.coverage_node:main",
             "odom_to_estimated_pose = isaac_drive.odom_to_estimated_pose:main",
+            "raycast_relay_node = isaac_drive.raycast_relay_node:main",
+            "raycast_map_viewer = isaac_drive.raycast_map_viewer:main",
+            "rl_avoid_node = isaac_drive.rl_avoid_node:main",
         ],
     },
 )
