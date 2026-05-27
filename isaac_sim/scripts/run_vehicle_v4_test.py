@@ -42,6 +42,124 @@ _p.add_argument("--spawn-spacing", type=float, default=0.0,
                      "무시하고 spawn[0] 기준 X 방향으로 N 미터씩 배치 (A* 회피 검증용).")
 _a, _ = _p.parse_known_args()
 
+# ── v4_test Tier 1: 화성용 ACK_SCRIPT (WHEEL_VELOCITY_GAIN ↓ + STEERING_GAIN ↓ + LPF) ──
+# vehicle_v3.usd 안에 baked 된 원본 ACK_SCRIPT 를 runtime 에 이 스크립트로
+# 교체. 거동 변화의 원인을 격리하기 위해 다른 파라미터는 동일.
+#
+# 변경 사항:
+#   WHEEL_VELOCITY_GAIN  2.0 → 0.7   (중력 1/3 ↔ 토크 1/3 비례)
+#   STEERING_GAIN        1.1 → 0.8   (조향각 ↓ → 횡력 ↓ → 전복 방지)
+#   /cmd_vel LPF (alpha 0.2)         (급가속 부드럽게, jerk 감쇠)
+MARS_ACK_SCRIPT = '''
+import math
+import omni.graph.core as og
+
+STEER_JOINT_NAMES = ['FL_Steer_Revolute', 'FR_Steer_Revolute', 'RL_Steer_Revolute', 'RR_Steer_Revolute']
+DRIVE_JOINT_NAMES = ['FL_Drive_Continuous', 'FR_Drive_Continuous', 'CL_Drive_Continuous', 'CR_Drive_Continuous', 'RL_Drive_Continuous', 'RR_Drive_Continuous']
+WHEELBASE_LENGTH = 0.849
+MIDDLE_WHEEL_DISTANCE = 0.894
+REAR_FRONT_WHEEL_DISTANCE = 0.77
+WHEEL_RADIUS = 0.1
+OFFSET = -0.0135
+
+# === v4_test Tier 1 변경 ===
+STEERING_GAIN = 0.8           # 1.1 → 0.8
+WHEEL_VELOCITY_GAIN = 0.7     # 2.0 → 0.7
+CMD_LPF_ALPHA = 0.2           # 새 값 가중치 (0=무시, 1=즉시). 작을수록 부드러움.
+
+_lpf_state = {"prev_lin": 0.0, "prev_ang": 0.0}
+
+
+def _component(value, index):
+    try:
+        return float(value[index])
+    except Exception:
+        try:
+            return float(getattr(value, ("x", "y", "z")[index]))
+        except Exception:
+            return 0.0
+
+
+def setup(db):
+    pass
+
+
+def compute(db):
+    # /cmd_vel 받자마자 1차 LPF — 급가속/회전 → 슬립·전복 방지
+    raw_lin = _component(db.inputs.linearVelocity, 0)
+    raw_ang = _component(db.inputs.angularVelocity, 2)
+    lin_vel = CMD_LPF_ALPHA * raw_lin + (1.0 - CMD_LPF_ALPHA) * _lpf_state["prev_lin"]
+    ang_vel = CMD_LPF_ALPHA * raw_ang + (1.0 - CMD_LPF_ALPHA) * _lpf_state["prev_ang"]
+    _lpf_state["prev_lin"] = lin_vel
+    _lpf_state["prev_ang"] = ang_vel
+
+    direction = 1.0 if lin_vel >= 0.0 else -1.0
+    if ang_vel > 0.0:
+        turn_direction = 1.0
+    elif ang_vel < 0.0:
+        turn_direction = -1.0
+    else:
+        turn_direction = 0.0
+
+    lin = abs(lin_vel)
+    ang = abs(ang_vel)
+    turning_radius = float("inf") if ang == 0.0 else lin / ang
+    minimum_radius = MIDDLE_WHEEL_DISTANCE * 0.8
+
+    r_ml = turning_radius - (MIDDLE_WHEEL_DISTANCE / 2.0) * turn_direction
+    r_mr = turning_radius + (MIDDLE_WHEEL_DISTANCE / 2.0) * turn_direction
+    r_fl = math.hypot(r_ml, WHEELBASE_LENGTH / 2.0)
+    r_fr = math.hypot(r_mr, WHEELBASE_LENGTH / 2.0)
+    r_rl = math.hypot(r_ml, WHEELBASE_LENGTH / 2.0)
+    r_rr = math.hypot(r_mr, WHEELBASE_LENGTH / 2.0)
+
+    if turning_radius < minimum_radius:
+        vel_fl = -ang * turn_direction
+        vel_fr = ang * turn_direction
+        vel_rl = -ang * turn_direction
+        vel_rr = ang * turn_direction
+        vel_ml = -ang * turn_direction
+        vel_mr = ang * turn_direction
+    else:
+        vel_fl = (r_fl * ang if ang > 0.0 else lin) * direction
+        vel_fr = (r_fr * ang if ang > 0.0 else lin) * direction
+        vel_rl = (r_rl * ang if ang > 0.0 else lin) * direction
+        vel_rr = (r_rr * ang if ang > 0.0 else lin) * direction
+        vel_ml = (r_ml * ang if ang > 0.0 else lin) * direction
+        vel_mr = (r_mr * ang if ang > 0.0 else lin) * direction
+
+    if turning_radius < minimum_radius:
+        theta_fl = -math.pi / 4.0
+        theta_fr = math.pi / 4.0
+        theta_rl = math.pi / 4.0
+        theta_rr = -math.pi / 4.0
+    else:
+        theta_fl = math.atan2((WHEELBASE_LENGTH / 2.0) - OFFSET, r_fl) * turn_direction
+        theta_fr = math.atan2((WHEELBASE_LENGTH / 2.0) - OFFSET, r_fr) * turn_direction
+        theta_rl = math.atan2((WHEELBASE_LENGTH / 2.0) + OFFSET, r_rl) * -turn_direction
+        theta_rr = math.atan2((WHEELBASE_LENGTH / 2.0) + OFFSET, r_rr) * -turn_direction
+
+    db.outputs.steerJointNames = STEER_JOINT_NAMES
+    db.outputs.driveJointNames = DRIVE_JOINT_NAMES
+    db.outputs.steeringAngles = [
+        STEERING_GAIN * theta_fl,
+        STEERING_GAIN * theta_fr,
+        STEERING_GAIN * theta_rl,
+        STEERING_GAIN * theta_rr,
+    ][:len(STEER_JOINT_NAMES)]
+    db.outputs.wheelVelocities = [
+        WHEEL_VELOCITY_GAIN * vel_fl / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_fr / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_ml / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_mr / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_rl / (WHEEL_RADIUS * 2.0),
+        WHEEL_VELOCITY_GAIN * vel_rr / (WHEEL_RADIUS * 2.0),
+    ][:len(DRIVE_JOINT_NAMES)]
+    db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+    return True
+'''
+
+
 from isaacsim import SimulationApp
 
 app = SimulationApp({"headless": _a.headless})
@@ -939,6 +1057,24 @@ def main() -> None:
     add_reference_to_stage(usd_path=WORLD, prim_path="/World/MarsScene")
     print(f"[run_v3] 씬 로드: {WORLD}")
 
+    # ── v4_test Tier 1: Ackermann ScriptNode 의 ACK_SCRIPT 교체 hook ────
+    # vehicle reference 가 stage 에 들어온 후 (아래 _load_rover/_per_rover_usd_copies
+    # 이후) 호출되어야 함. 함수 정의만 해두고 main 끝부분에서 호출.
+    def _patch_mars_ack_scripts():
+        st = omni.usd.get_context().get_stage()
+        patched = 0
+        for prim in st.Traverse():
+            if prim.GetName() != "Ackermann":
+                continue
+            attr = prim.GetAttribute("inputs:script")
+            if attr and attr.IsValid():
+                attr.Set(MARS_ACK_SCRIPT)
+                patched += 1
+        print(f"[v4_test] ⚠️ ACK_SCRIPT 교체: {patched} 개 Ackermann ScriptNode "
+              f"(WHEEL_VELOCITY_GAIN 2.0→0.7, STEERING_GAIN 1.1→0.8, LPF α=0.2)")
+    # 함수 객체를 모듈-스코프 변수로 expose — main 후반 reference 단계 후 호출.
+    globals()["_patch_mars_ack_scripts"] = _patch_mars_ack_scripts
+
     # spawn 좌표 (terrain meta.json) — 단일/다중 모드 공통
     spots = []
     meta = os.path.join(TERRAIN_DIR, "meta.json")
@@ -1036,6 +1172,8 @@ def main() -> None:
 
     for _ in range(20):
         app.update()
+    # v4_test: vehicle reference 완료 후 ACK_SCRIPT 화성용으로 교체
+    _patch_mars_ack_scripts()
     world.reset()
     world.play()
     if _a.rovers:
