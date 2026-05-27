@@ -5,18 +5,17 @@
   <rect width="2560" height="1440" fill="#ffffff"/>
 
   <defs>
-    <!-- V-style 화살표 — line 끝이 head 의 vertex 에 자연스럽게 닿음 -->
-    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
-      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
+      <path d="M0,0 L0,14 L13,7 z" fill="#444"/>
     </marker>
-    <marker id="arrow-loop" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
-      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#9C27B0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <marker id="arrow-loop" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
+      <path d="M0,0 L0,14 L13,7 z" fill="#9C27B0"/>
     </marker>
-    <marker id="arrow-fail" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
-      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#C62828" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <marker id="arrow-fail" markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
+      <path d="M0,0 L0,14 L13,7 z" fill="#C62828"/>
     </marker>
-    <marker id="arrow-loc" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
-      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#C62828" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <marker id="arrow-loc" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L10,6 z" fill="#C62828"/>
     </marker>
     <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#1565C0"/>
@@ -185,7 +184,7 @@
 
     <g transform="translate(20, 330)">
       <rect width="480" height="210" fill="white" stroke="#1976D2" stroke-width="1.5" rx="6"/>
-      <text x="240" y="92" font-size="26" font-weight="bold" text-anchor="middle">🛣️ A* + 멀티 회피</text>
+      <text x="240" y="92" font-size="26" font-weight="bold" text-anchor="middle">🛣️ A* Path Planner</text>
       <text x="240" y="156" font-size="22" font-weight="bold" fill="#B71C1C" text-anchor="middle">▶ "주행 스택 재사용"</text>
     </g>
 
