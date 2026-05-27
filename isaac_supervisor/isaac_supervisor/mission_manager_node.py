@@ -44,15 +44,18 @@ from isaac_drive.navigation.terrain_loader import load_terrain
 
 
 def _default_terrain_dir() -> str:
-    """A2_ISAAC_ROOT env 우선, 없으면 노드 파일 위치 기준 상대경로."""
-    env = os.environ.get("A2_ISAAC_ROOT")
-    if env:
-        return os.path.join(env, "isaac_sim", "assets",
-                            "generated_terrains", "terrain_00004")
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.normpath(os.path.join(
-        here, "..", "..", "isaac_sim", "assets",
-        "generated_terrains", "terrain_00004"))
+    candidates = [
+        os.path.normpath(os.path.join(here, "..", "..", "..", "..", "src",
+                                      "a2_isaac", "isaac_sim", "assets",
+                                      "generated_terrains", "terrain_00004")),
+        os.path.expanduser("~/dev_ws/rover_ws/src/a2_isaac/isaac_sim/assets/"
+                           "generated_terrains/terrain_00004"),
+    ]
+    for p in candidates:
+        if os.path.isdir(p):
+            return p
+    return candidates[-1]
 
 
 SENSOR_QOS = QoSProfile(
