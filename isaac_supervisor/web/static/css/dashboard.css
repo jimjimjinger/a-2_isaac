@@ -252,17 +252,18 @@ body {
 
 /* ── status (center) ── */
 
-/* hud-status: status(좌) 50% / portrait(우) 50% 균등. portrait 가 cell
-   테두리(상하좌우) 까지 닿도록 hud-cell padding 8 을 margin -8 으로 흡수.
-   status 안쪽은 padding 으로 별도 보장. */
+/* hud-status: status 셀만 padding 0 (다른 hud-cell 의 padding 8 유지).
+   portrait width 는 cell height 와 같게 정사각 (aspect-ratio 1/1 + h:100%)
+   → grid 의 column 2 'auto' 가 portrait 자연 너비만큼만 차지.
+   status-info 는 남은 1fr + 자체 padding 으로 contents 박지 않게. */
+.hud-cell.hud-status { padding: 0; }
 .hud-status {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr auto;
   grid-template-rows: 1fr;
   gap: 0;
   flex: 1 1 auto;
   min-height: 0;
-  margin: -8px;
 }
 .status-portrait {
   display: flex;
@@ -275,13 +276,13 @@ body {
 }
 .status-info {
   grid-column: 1;
-  padding: 8px 12px 8px 8px;
+  padding: 8px;
   min-height: 0;
   min-width: 0;
 }
 .portrait-frame {
-  flex: 1 1 auto;
-  min-height: 0;
+  height: 100%;
+  aspect-ratio: 1 / 1;
   background: #060b16;
   border-left: 1px solid #1f3653;
   overflow: hidden;
