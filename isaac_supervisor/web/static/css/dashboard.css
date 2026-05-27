@@ -157,7 +157,7 @@ body {
 /* ── HUD STRIP ─────────────────────────────────────────────────── */
 
 .hud {
-  flex: 0 0 320px;
+  flex: 0 0 220px;
   display: grid;
   grid-template-columns: 360px 1fr 280px;
   gap: 6px;
@@ -267,7 +267,7 @@ body {
 .status-info { grid-column: 1; }
 .portrait-frame {
   flex: 1 1 auto;
-  min-height: 200px;
+  min-height: 130px;
   background: #060b16;
   border: 1px solid #1f3653;
   border-radius: 2px;
@@ -312,14 +312,14 @@ body {
   opacity: 0.85;
 }
 
-.status-info { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.status-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .status-row {
   display: grid;
   grid-template-columns: 90px 1fr 90px;
   gap: 12px;
   align-items: center;
-  font-size: 15px;
-  min-height: 26px;
+  font-size: 13px;
+  min-height: 20px;
 }
 .status-label { color: #6cd9ff; letter-spacing: 1px; }
 .status-value { text-align: right; color: #e8eef7; font-variant-numeric: tabular-nums; }
@@ -361,10 +361,10 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
   grid-auto-rows: 1fr;
-  gap: 8px 20px;
-  margin-top: 10px;
+  gap: 4px 16px;
+  margin-top: 6px;
   flex: 1 1 auto;
-  font-size: 15px;
+  font-size: 13px;
   align-content: stretch;
 }
 .status-pair {
@@ -372,9 +372,9 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px dotted #1f3653;
-  padding: 10px 4px;
+  padding: 4px 2px;
 }
-.status-pair .v { font-size: 16px; }
+.status-pair .v { font-size: 13px; }
 .status-error { grid-column: span 3; }
 .status-error .v { font-size: 12px; white-space: nowrap; overflow: hidden;
                    text-overflow: ellipsis; }
