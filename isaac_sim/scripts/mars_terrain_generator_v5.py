@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """
-mars_terrain_generator_v4.py — v3 기반 + rock spacing 강화 (v4).
+mars_terrain_generator_v5.py — v4 기반 + slope 완만화 + spawn obstacle 안전 (v5).
 
-v3 와 동일한 I1 규약·출력 포맷. 차이점:
-  - rock_count       80 → 50    (밀도 ↓)
-  - rock_spacing_m  1.0 → 3.5  (center 거리 ↑ — inflation 0.8m × 2 후 통로
-                                 ≈ 1m 확보, max rock size 1.0 까지 안전)
-  - rock_size_m       유지 (0.30 ~ 1.00) — 시각 다양성 유지
-  - place_minerals 의 rock keepout: r.radius + 0.5 → r.radius + 2.0
-    (mineral 옆 rock 차단 → arm 접근 path 확보)
+v4 와 동일한 출력 포맷. 차이점:
+  [A] slope 완만화 — rover 통행 가능 영역 ↑, 영상 시각 깔끔.
+    - base_amp_m       1.0  → 0.7      (광역 기복 ↓)
+    - detail_amp_m     0.22 → 0.10     (미세 노이즈 ↓↓ — mean slope 결정적)
+    - crater_depth_m   (0.20,0.85) → (0.15,0.50)
+    - crater_radius    (0.03,0.10) → (0.05,0.12)
+    - hill_height_m    (0.25,0.90) → (0.20,0.55)
+    - hill_radius      (0.06,0.18) → (0.08,0.22)
+    - ridge_height_m   (0.20,0.60) → (0.15,0.35)
+    - ridge_width      (0.03,0.08) → (0.05,0.10)
+    → mean slope ~30% ↓, obstacle 셀 ~55% ↓
 
-목적: inflation 1.0 으로 키우지 않고도 rock 부딪힘이 사라지도록 terrain
-자체를 더 띄엄띄엄 생성. 통과성 ↑, mineral 접근 ↑, 발표 시각도 깔끔.
+  [B] spawn obstacle 침범 차단 — v4 의 place_spawns 는 spawn 중심 한 점만
+    obstacle 검사 → rover footprint 가장자리가 obstacle 영역 침범 가능
+    (2026-05-27 rover_2 spawn obstacle 안 관찰). disc-check 추가 — spawn
+    중심으로부터 spawn_clear_radius_m (1.0m) 안에 obstacle 셀이 단 하나라도
+    있으면 reject. rover footprint half 0.62m + safety margin 0.38m.
+
+obstacle_slope_deg=25° / rock spec / mineral spec 등 안전 임계 모두 유지.
 
 사용:
-  python3 isaac_sim/scripts/mars_terrain_generator_v4.py \\
-      --seed 24024 --terrain-id terrain_00024 --split train
+  python3 isaac_sim/scripts/mars_terrain_generator_v5.py \\
+      --seed 25025 --terrain-id terrain_00025 --split train
 
 ──── 아래는 v3 원문 docstring (참고용) ────
 v3 docstring: I1 규약 준수 화성 지형 생성기.
@@ -91,20 +100,21 @@ ORIGIN = (-SIZE_M / 2.0, -SIZE_M / 2.0)   # 좌하단 (-25, -25)
 # T1 생성기는 ≈511 m 월드 기준이라 크레이터 반경 10~30 m 등 절대값이었음.
 # 여기서는 모두 월드 span 비율(frac)로 표현 → 50 m 아레나에 일관되게 축소.
 CFG = {
-    "base_amp_m": 1.0,            # 베이스 기복 진폭
+    # v5 [A] slope 완만화 — rover 통행 영역 ↑, 영상 시각 깔끔.
+    "base_amp_m": 0.7,            # 1.0 → 0.7
     "base_octave_cells": 8,
-    "detail_amp_m": 0.22,         # 미세 기복
+    "detail_amp_m": 0.10,         # 0.22 → 0.10 (mean slope 결정적)
     "detail_octave_cells": 24,
     "crater_count": 8,
-    "crater_radius_frac": (0.03, 0.10),   # × 50 m = 1.5~5.0 m
-    "crater_depth_m": (0.20, 0.85),
+    "crater_radius_frac": (0.05, 0.12),   # 약간 넓힘
+    "crater_depth_m": (0.15, 0.50),       # 깊은 크레이터 ↓
     "hill_count": 5,
-    "hill_radius_frac": (0.06, 0.18),     # 3~9 m
-    "hill_height_m": (0.25, 0.90),
+    "hill_radius_frac": (0.08, 0.22),
+    "hill_height_m": (0.20, 0.55),
     "ridge_count": 3,
-    "ridge_length_frac": (0.25, 0.55),    # 12.5~27.5 m
-    "ridge_width_frac": (0.03, 0.08),     # 1.5~4 m
-    "ridge_height_m": (0.20, 0.60),
+    "ridge_length_frac": (0.25, 0.55),    # 유지
+    "ridge_width_frac": (0.05, 0.10),     # 두껍게 (slope ↓)
+    "ridge_height_m": (0.15, 0.35),       # 능선 가파름 결정적 ↓
     "rock_count": 50,
     "rock_size_m": (0.30, 1.00),    # v3 와 동일 (시각 다양성 유지)
     "rock_spacing_m": 3.5,          # v3=1.0 → 3.5. inflation 0.8 후 통로 확보
@@ -112,6 +122,10 @@ CFG = {
     # v3 의 하드코드 0.5 를 명시적 CFG 로 격상 + 0.5→2.0 강화. arm reach
     # ~1.2 m 와 inflation 0.8 합쳐서 광물 접근 path 확보.
     "mineral_clearance_from_rock_m": 2.0,
+    # v5 [B] spawn footprint 보호 — disc-check radius.
+    # rover footprint half ~0.62m + safety margin 0.38m. place_spawns 가
+    # spawn 중심 주변 이 반경 안에 obstacle 셀이 하나라도 있으면 reject.
+    "spawn_clear_radius_m": 1.0,
     "mineral_count": 12,
     "mineral_spacing_m": 3.0,
     "spawn_count": 50,
@@ -515,15 +529,49 @@ def place_minerals(rng, hm, slope_deg, rocks, obstacle=None):
     return minerals
 
 
-def place_spawns(rng, hm, slope_deg, obstacle, minerals=None):
+def _spawn_clear_of_static_obstacles(x: float, y: float,
+                                     rocks, radius_m: float) -> bool:
+    """spawn 위치가 rocks / epic_obstacles / basecamp 의 footprint 와
+    radius_m 마진 이상 떨어졌는지 데이터 기반 직접 검사.
+    obstacle_grid 의 axis convention 추론 불필요 — 가장 robust.
+
+    검사 대상:
+      1. rocks: center 간 거리 < rock.radius + radius_m → reject
+      2. epic obstacles: center 간 거리 < footprint_max/2 + radius_m → reject
+      3. basecamp: center 간 거리 < basecamp_collision_size_m/√2 + radius_m
+    """
+    # rocks
+    for rk in rocks:
+        if math.hypot(x - rk["x"], y - rk["y"]) < rk["radius"] + radius_m:
+            return False
+    # epic obstacles — footprint_m 의 대각 반지름 사용 (회전 무관 보수)
+    for obs in EPIC_OBSTACLES:
+        ox = float(obs["x"])
+        oy = float(obs["y"])
+        fw, fd = float(obs["footprint_m"][0]), float(obs["footprint_m"][1])
+        keepout = 0.5 * math.hypot(fw, fd) + radius_m
+        if math.hypot(x - ox, y - oy) < keepout:
+            return False
+    # basecamp — 8x8m 정사각이라 대각 반지름 ~5.66m + spawn margin
+    bcx, bcy = CFG["basecamp_center"]
+    bc_half = 0.5 * CFG["basecamp_collision_size_m"]
+    bc_keepout = bc_half * math.sqrt(2.0) + radius_m
+    if math.hypot(x - bcx, y - bcy) < bc_keepout:
+        return False
+    return True
+
+
+def place_spawns(rng, hm, slope_deg, obstacle, minerals=None, rocks=None):
     spawns = []
+    rocks = rocks or []
     bcx, bcy = CFG["basecamp_center"]
     lo, hi = ORIGIN[0] + 2.0, ORIGIN[0] + SIZE_M - 2.0
     mineral_pts = [(m["position"]["x"], m["position"]["y"])
                    for m in (minerals or [])]
     spawn_clearance = 1.5   # 로버 간 최소 간격 (m)
     mineral_clearance = 0.8  # 미네랄과 최소 간격 (m)
-    for _ in range(CFG["spawn_count"] * 40):
+    spawn_clear_r = CFG["spawn_clear_radius_m"]
+    for _ in range(CFG["spawn_count"] * 60):
         if len(spawns) >= CFG["spawn_count"]:
             break
         x = float(rng.uniform(lo, hi))
@@ -532,7 +580,10 @@ def place_spawns(rng, hm, slope_deg, obstacle, minerals=None):
             continue
         if sample(slope_deg, x, y) > CFG["spawn_slope_deg"]:
             continue
-        if sample(obstacle, x, y) > 0.5:
+        # v5 [B] spawn footprint 가 rocks / epic obstacles / basecamp 침범 금지.
+        # 데이터 기반 직접 거리 검사 — obstacle_grid 의 axis convention 추론
+        # 불필요. rover footprint half ~0.62 + safety ~0.38 = 1.0m 마진.
+        if not _spawn_clear_of_static_obstacles(x, y, rocks, spawn_clear_r):
             continue
         # 기존 spawn과 최소 간격 체크 (로버끼리 겹침 방지)
         if any(math.hypot(x - s["x"], y - s["y"]) < spawn_clearance
@@ -643,7 +694,7 @@ def build_meta(terrain_id, seed, minerals, spawns, difficulty, epic_obstacles):
                     CFG["mineral_clearance_from_rock_m"],
                 "slope_threshold_deg": CFG["obstacle_slope_deg"],
                 "asset_pool": ["rock_default"],
-                "generator": "v4",
+                "generator": "v5",
             },
             "epic_obstacles": {
                 "count": len(epic_obstacles),
@@ -1349,7 +1400,7 @@ def main() -> int:
     print(f"[5/7] minerals (목표 {CFG['mineral_count']}) "
           f"+ spawns (목표 {CFG['spawn_count']})...")
     minerals = place_minerals(rng, hm, slope, rocks, obstacle=obstacle)
-    spawns = place_spawns(rng, hm, slope, obstacle)
+    spawns = place_spawns(rng, hm, slope, obstacle, minerals=minerals, rocks=rocks)
     print(f"      minerals {len(minerals)}개, spawns {len(spawns)}개")
 
     print("[6/7] difficulty + meta + index...")
