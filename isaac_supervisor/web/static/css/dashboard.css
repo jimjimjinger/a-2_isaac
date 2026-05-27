@@ -254,7 +254,7 @@ body {
 
 .hud-status {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: 1fr 200px;
   gap: 12px;
 }
 .status-portrait {
@@ -262,7 +262,9 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
+  grid-column: 2;
 }
+.status-info { grid-column: 1; }
 .portrait-frame {
   flex: 1 1 auto;
   min-height: 200px;
