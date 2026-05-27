@@ -159,8 +159,10 @@ body {
 .hud {
   flex: 0 0 220px;
   display: grid;
-  /* 4-cell split: terrain | status | portrait | actions */
-  grid-template-columns: 360px 1fr 220px 280px;
+  /* 4-cell split: terrain | status | portrait | actions.
+     portrait column 'auto' + hud-portrait aspect-ratio 1/1 + h:100%
+     → portrait cell width 가 cell height 와 같아져 시각적 정사각 보장. */
+  grid-template-columns: 360px 1fr auto 280px;
   gap: 6px;
   padding: 0 6px 6px 6px;
 }
@@ -256,7 +258,12 @@ body {
 /* 4-split: status 셀은 bars+grid only (hud-cell 기본 padding 8 사용),
    portrait 는 독립 셀 (padding 0, frame 이 셀 가장자리까지). */
 .hud-cell.hud-portrait { padding: 0; }
-.hud-portrait { display: flex; align-items: stretch; }
+.hud-portrait {
+  display: flex;
+  align-items: stretch;
+  aspect-ratio: 1 / 1;
+  height: 100%;
+}
 .portrait-frame {
   flex: 1 1 auto;
   background: #060b16;
