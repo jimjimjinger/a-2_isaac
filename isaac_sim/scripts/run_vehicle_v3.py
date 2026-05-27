@@ -48,7 +48,7 @@ app.update()
 import omni.usd
 from isaacsim.core.api import World
 from isaacsim.core.utils.stage import add_reference_to_stage
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ISAAC_SIM = os.path.dirname(HERE)
@@ -677,6 +677,94 @@ def _ns_to_prim_name(ns: str) -> str:
     return safe[:1].upper() + safe[1:]
 
 
+# ─── Standalone rclpy bridge — OmniGraph SubscribeTwist 우회 ───────────
+# release msg 가 OmniGraph 측 race 로 한쪽 rover 의 SubscribeTwist 에 한 frame
+# 도 안 들어오는 사례 (2026-05-27 rover_1/2 release fail 관찰). standard
+# rclpy subscriber 가 동일 토픽을 별도로 받아 main thread 에서 stage 직접
+# hide. ScriptNode 의 release 분기는 그대로 두므로 dual mechanism — 둘 중
+# 하나만 잡혀도 mineral 사라짐 보장.
+def _force_release_for_ns(stage, ns: str) -> bool:
+    """ns 의 rover 의 grasp FixedJoint 와 attached mineral 강제 hide.
+    ScriptNode 의 release 분기와 동일 효과. 이미 detach 됐으면 no-op.
+    return: True = 실제 hide 수행, False = no-op."""
+    ns_norm = (ns or "").strip("/").strip() or "rover"
+    joint_path = f"/World/grip_fixed_joint_{ns_norm}"
+    joint_prim = stage.GetPrimAtPath(joint_path)
+    if not joint_prim or not joint_prim.IsValid():
+        return False
+    # FixedJoint 의 body1 (mineral) path
+    mineral_path = None
+    try:
+        fj = UsdPhysics.FixedJoint(joint_prim)
+        targets = fj.GetBody1Rel().GetTargets()
+        if targets:
+            mineral_path = str(targets[0])
+    except Exception:
+        mineral_path = None
+    # detach
+    stage.RemovePrim(joint_path)
+    if not mineral_path:
+        print(f"[grasp-bridge] {ns_norm} FORCE-detach (no body1 target)")
+        return True
+    mineral_prim = stage.GetPrimAtPath(mineral_path)
+    if not mineral_prim or not mineral_prim.IsValid():
+        print(f"[grasp-bridge] {ns_norm} FORCE-detach (mineral {mineral_path} not found)")
+        return True
+    # collision 복원
+    if mineral_prim.HasAPI(UsdPhysics.CollisionAPI):
+        attr = UsdPhysics.CollisionAPI(mineral_prim).GetCollisionEnabledAttr()
+        if attr:
+            attr.Set(True)
+    # invisible
+    try:
+        UsdGeom.Imageable(mineral_prim).MakeInvisible()
+    except Exception:
+        pass
+    print(f"[grasp-bridge] {ns_norm} FORCE-release + hide {mineral_path}")
+    return True
+
+
+class GraspBridge:
+    """별도 rclpy node — 모든 rover 의 /grasp/command 를 standard subscriber
+    로 듣고 release 신호를 main thread 의 pending queue 에 push. main loop 가
+    매 step 마다 drain → stage 직접 hide. OmniGraph subscriber 의 single-
+    thread frame race 영향 받지 않음."""
+
+    def __init__(self, namespaces):
+        import rclpy
+        from rclpy.node import Node as _RclpyNode
+        from geometry_msgs.msg import Twist
+        from functools import partial as _partial
+
+        if not rclpy.ok():
+            rclpy.init()
+        node = _RclpyNode("grasp_bridge_listener")
+        self._pending = []
+        for ns in namespaces:
+            ns_norm = (ns or "").strip("/").strip()
+            topic = (f"/{ns_norm}/grasp/command"
+                     if ns_norm else "/grasp/command")
+            node.create_subscription(
+                Twist, topic,
+                _partial(self._on_grasp, ns_norm), 100)
+            node.get_logger().info(
+                f"[grasp-bridge] subscribed: {topic} (depth=100)")
+        self._node = node
+
+    def _on_grasp(self, ns, msg):
+        if msg.angular.x < -0.5:
+            self._pending.append(ns)
+
+    @property
+    def node(self):
+        return self._node
+
+    def drain_releases(self):
+        out = self._pending[:]
+        self._pending.clear()
+        return out
+
+
 def _spawn_for(spots, idx, fallback=(0.0, 0.0, 1.0)):
     if not spots or idx >= len(spots):
         return fallback
@@ -930,6 +1018,24 @@ def main() -> None:
         print("[run_v3] ready — v3 내장 Action Graph 가 센서 토픽 발행 중 "
               "(/imu/data /joint_states_raw /camera/* /camera/overview/* /camera/chase/*)")
 
+    # ── Standalone rclpy GraspBridge — OmniGraph SubscribeTwist 우회 ──
+    # release msg drop race 대비 dual mechanism. init 실패해도 main 진행.
+    grasp_bridge = None
+    grasp_executor = None
+    try:
+        bridge_namespaces = _a.rovers if _a.rovers else [""]
+        grasp_bridge = GraspBridge(bridge_namespaces)
+        from rclpy.executors import SingleThreadedExecutor
+        grasp_executor = SingleThreadedExecutor()
+        grasp_executor.add_node(grasp_bridge.node)
+        print(f"[run_v3] GraspBridge ready — backup release listener "
+              f"for {bridge_namespaces}")
+    except Exception as exc:
+        print(f"[run_v3] GraspBridge init FAILED ({exc}) — "
+              f"기본 ScriptNode release 만으로 동작")
+        grasp_bridge = None
+        grasp_executor = None
+
     step = 0
     chase_state: dict = {}
     # GPU/RTF 부담 측정용 — 600 step 사이 wall-clock 도 함께 출력.
@@ -938,6 +1044,15 @@ def main() -> None:
     try:
         while app.is_running():
             world.step(render=True)
+            # rclpy bridge poll + pending release 처리. main thread 에서
+            # 직접 stage 조작 (안전).
+            if grasp_executor is not None and grasp_bridge is not None:
+                try:
+                    grasp_executor.spin_once(timeout_sec=0.0)
+                    for ns in grasp_bridge.drain_releases():
+                        _force_release_for_ns(stage, ns)
+                except Exception as exc:
+                    print(f"[run_v3] grasp bridge tick error: {exc}")
             # 단일 모드 chase cam.
             if chase_xform_op is not None:
                 _update_chase_cam(stage, chase_xform_op, chase_state)
@@ -957,6 +1072,23 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        # rclpy bridge cleanup (init 실패 시는 None 이라 skip).
+        if grasp_executor is not None:
+            try:
+                grasp_executor.shutdown()
+            except Exception:
+                pass
+        if grasp_bridge is not None:
+            try:
+                grasp_bridge.node.destroy_node()
+            except Exception:
+                pass
+        try:
+            import rclpy as _rclpy
+            if _rclpy.ok():
+                _rclpy.shutdown()
+        except Exception:
+            pass
         app.close()
 
 
