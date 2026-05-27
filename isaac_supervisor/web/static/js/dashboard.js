@@ -30,7 +30,9 @@
   const ROVER_COLORS = {
     "":         { rover: "#6cd9ff", path: "#6cd9ff" }, // 단일 모드 cyan
     "rover_1":  { rover: "#6cd9ff", path: "#6cd9ff" }, // cyan
-    "rover_2":  { rover: "#ffd84a", path: "#ffd84a" }, // yellow
+    // reveal area 가 #ffd84a (yellow) 라 같은 색이면 path 보임 X.
+    // violet 으로 변경해 노란 안개걷힌 영역 위에서도 명확히 식별 (2026-05-27).
+    "rover_2":  { rover: "#a98cff", path: "#a98cff" }, // violet
     "rover_3":  { rover: "#ff5ce0", path: "#ff5ce0" }, // magenta
     "rover_4":  { rover: "#6dffb0", path: "#6dffb0" }, // green
   };

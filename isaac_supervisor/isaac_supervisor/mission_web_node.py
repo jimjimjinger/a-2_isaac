@@ -194,6 +194,8 @@ class MissionWebRosNode(Node):
             "active_task": msg.active_task,
             "last_error": msg.last_error,
         }
+        prev_cached_state = (
+            self._last_state[ns]["state"] if ns in self._last_state else "")
         self._last_state[ns] = payload
         self._emit("state", ns, payload)
         # MISSION_COMPLETE 진입 시 미니맵 잔재 즉시 청소.
@@ -205,6 +207,15 @@ class MissionWebRosNode(Node):
             self._last_path_supervisor[ns] = {"pts": []}
             self._last_target_explore[ns] = None
             self._last_target_supervisor[ns] = None
+            self._emit_active_path(ns)
+            self._emit_active_target(ns)
+        # EXPLORE 진입 시 explore slot 청소 — PICK_READY 동안 coverage 가
+        # 발행했던 sector anchor 가 explore slot 에 남아있어서 EXPLORE 진입
+        # 후 새 markers 도착(다음 sector 결정) 전까지 옛 별이 stale 하게
+        # 보이는 현상 차단 (2026-05-27 사용자 보고).
+        elif payload["state"] == "EXPLORE" and prev_cached_state != "EXPLORE":
+            self._last_path_explore[ns] = {"pts": []}
+            self._last_target_explore[ns] = None
             self._emit_active_path(ns)
             self._emit_active_target(ns)
 
