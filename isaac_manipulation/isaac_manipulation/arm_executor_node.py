@@ -142,7 +142,10 @@ class ArmExecutorNode(Node):
         # ROS joint_command 를 따라가는 visual lag 흡수. ROS 입장 swing 끝나도
         # mineral 이 시각적으로 cargo (back basket) 에 도달하기 전이라면
         # release 시점에 너무 일찍 사라지는 느낌을 줌 (2026-05-27 사용자 보고).
-        self.declare_parameter("cargo_settle_sec", 1.5)
+        # 2.5s — CARGO_SWING 의 실 회전 시간 (~1.3s, joint_1 0→180°) 후 articulation
+        # 의 visual lag 흡수. 1.5s 시 mineral hide 가 cargo 도달 전에 일어나는
+        # 사례 관찰 (2026-05-27 rover_2 시연). 2.5s 로 안정.
+        self.declare_parameter("cargo_settle_sec", 2.5)
 
         self.joint_pub = self.create_publisher(
             JointState, str(self.get_parameter("joint_command_topic").value), 10)
