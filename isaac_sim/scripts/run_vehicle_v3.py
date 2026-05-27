@@ -482,7 +482,7 @@ _state = {"attached_joint_path": None, "attached_obj_path": None,
 ROVER_ROOT = "__ROVER_ROOT__"
 GRASP_JOINT_PATH = "__GRASP_JOINT_PATH__"
 GRIPPER_LINK_NAME = "right_inner_finger"
-SEARCH_RADIUS = 1.5
+SEARCH_RADIUS = 2.5  # m  WRIST_T_LINK6 best-effort 누적 IK 오차 흡수용 cheat (2026-05-27)
 
 
 def _component(v, i):

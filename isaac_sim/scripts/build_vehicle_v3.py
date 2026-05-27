@@ -193,7 +193,7 @@ _state = {"attached_joint_path": None, "attached_obj_path": None,
 GRASP_JOINT_PATH = "/World/grip_fixed_joint"
 # vehicle_v3 reference 시 prefix remap (/Root → /World/Rover) 되므로 이름으로 검색.
 GRIPPER_LINK_NAME = "right_inner_finger"
-SEARCH_RADIUS = 1.5  # m  (supervisor 의 lock_target 좌표 정확도 흡수)
+SEARCH_RADIUS = 2.5  # m  WRIST_T_LINK6 best-effort 누적 IK 오차 흡수용 cheat (2026-05-27)
 
 
 def _component(v, i):
