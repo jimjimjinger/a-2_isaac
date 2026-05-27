@@ -91,20 +91,23 @@ ORIGIN = (-SIZE_M / 2.0, -SIZE_M / 2.0)   # 좌하단 (-25, -25)
 # T1 생성기는 ≈511 m 월드 기준이라 크레이터 반경 10~30 m 등 절대값이었음.
 # 여기서는 모두 월드 span 비율(frac)로 표현 → 50 m 아레나에 일관되게 축소.
 CFG = {
-    "base_amp_m": 1.0,            # 베이스 기복 진폭
+    # 2026-05-27 v4 후속 완만화: rover 통행 가능 영역 확대 위해 slope 기여
+    # feature 들의 height/radius 비율 완화. obstacle_slope_deg=25° 임계는
+    # 유지하되 25° 초과 셀이 1.57% → ~0.3~0.5% 로 줄어들도록 조정.
+    "base_amp_m": 0.7,            # 1.0 → 0.7. 광역 기복 진폭 ↓
     "base_octave_cells": 8,
-    "detail_amp_m": 0.22,         # 미세 기복
+    "detail_amp_m": 0.10,         # 0.22 → 0.10. 미세 노이즈 ↓↓ (mean slope 결정적)
     "detail_octave_cells": 24,
     "crater_count": 8,
-    "crater_radius_frac": (0.03, 0.10),   # × 50 m = 1.5~5.0 m
-    "crater_depth_m": (0.20, 0.85),
+    "crater_radius_frac": (0.05, 0.12),   # (0.03,0.10) → 약간 넓힘 (rim slope ↓)
+    "crater_depth_m": (0.15, 0.50),       # (0.20,0.85) → 깊은 크레이터 ↓
     "hill_count": 5,
-    "hill_radius_frac": (0.06, 0.18),     # 3~9 m
-    "hill_height_m": (0.25, 0.90),
+    "hill_radius_frac": (0.08, 0.22),     # (0.06,0.18) → 살짝 넓힘
+    "hill_height_m": (0.20, 0.55),        # (0.25,0.90) → 높이 max ↓
     "ridge_count": 3,
-    "ridge_length_frac": (0.25, 0.55),    # 12.5~27.5 m
-    "ridge_width_frac": (0.03, 0.08),     # 1.5~4 m
-    "ridge_height_m": (0.20, 0.60),
+    "ridge_length_frac": (0.25, 0.55),    # 유지
+    "ridge_width_frac": (0.05, 0.10),     # (0.03,0.08) → 두껍게 (slope ↓)
+    "ridge_height_m": (0.15, 0.35),       # (0.20,0.60) → 능선 가파름 결정적 ↓
     "rock_count": 50,
     "rock_size_m": (0.30, 1.00),    # v3 와 동일 (시각 다양성 유지)
     "rock_spacing_m": 3.5,          # v3=1.0 → 3.5. inflation 0.8 후 통로 확보
