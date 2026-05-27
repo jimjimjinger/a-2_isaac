@@ -209,13 +209,17 @@ class MissionWebRosNode(Node):
             self._last_target_supervisor[ns] = None
             self._emit_active_path(ns)
             self._emit_active_target(ns)
-        # EXPLORE 진입 시 explore slot 청소 — PICK_READY 동안 coverage 가
-        # 발행했던 sector anchor 가 explore slot 에 남아있어서 EXPLORE 진입
-        # 후 새 markers 도착(다음 sector 결정) 전까지 옛 별이 stale 하게
-        # 보이는 현상 차단 (2026-05-27 사용자 보고).
+        # EXPLORE 진입 시 explore + supervisor slot 모두 청소.
+        # supervisor 도 같이 비우는 이유: state msg 가 mission_manager 의
+        # supervisor NaN msg 보다 먼저 backend 에 도달하는 race 가 있으면
+        # supervisor 의 옛 mineral target 이 fallback 으로 쓰여 별이 옛
+        # APPROACH 위치를 고수함 (2026-05-27 사용자 보고: PICK 후 EXPLORE
+        # 재시작 시 별이 안 바뀌고 path 만 바뀌는 현상).
         elif payload["state"] == "EXPLORE" and prev_cached_state != "EXPLORE":
             self._last_path_explore[ns] = {"pts": []}
+            self._last_path_supervisor[ns] = {"pts": []}
             self._last_target_explore[ns] = None
+            self._last_target_supervisor[ns] = None
             self._emit_active_path(ns)
             self._emit_active_target(ns)
 

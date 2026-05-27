@@ -138,6 +138,11 @@ class ArmExecutorNode(Node):
         # Step delay between grasp publish and arm continuing — gives
         # vehicle_v3 ScriptNode time to attach the FixedJoint.
         self.declare_parameter("grasp_publish_delay_sec", 0.3)
+        # CARGO_SWING 완료 후 release 까지 대기 — Isaac articulation 이
+        # ROS joint_command 를 따라가는 visual lag 흡수. ROS 입장 swing 끝나도
+        # mineral 이 시각적으로 cargo (back basket) 에 도달하기 전이라면
+        # release 시점에 너무 일찍 사라지는 느낌을 줌 (2026-05-27 사용자 보고).
+        self.declare_parameter("cargo_settle_sec", 0.8)
 
         self.joint_pub = self.create_publisher(
             JointState, str(self.get_parameter("joint_command_topic").value), 10)
@@ -343,6 +348,11 @@ class ArmExecutorNode(Node):
         self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.55, 0.8)
         cur_deg = list(CARGO_DEG)
 
+        # 5.5) Visual settle — articulation lag 흡수 (mineral 이 cargo 도착 후 hide).
+        settle = float(self.get_parameter("cargo_settle_sec").value)
+        if settle > 0.0:
+            time.sleep(settle)
+
         # 6) RELEASE — vehicle_v3 detaches + hides the mineral (cargo stowed)
         self._publish_grasp("release")
         fb = ExecuteArmTask.Feedback()
@@ -457,6 +467,11 @@ class ArmExecutorNode(Node):
         # 7) CARGO yaw swing (HOME 의 joint_1 만 180°)
         self._goto(cur_deg, CARGO_DEG, goal_handle, "CARGO_SWING", 0.7, 0.85)
         cur_deg = list(CARGO_DEG)
+
+        # 7.5) Visual settle — arm 이 시각적으로 cargo 도착까지 대기.
+        settle = float(self.get_parameter("cargo_settle_sec").value)
+        if settle > 0.0:
+            time.sleep(settle)
 
         # 8) Release — detach + MakeInvisible
         self._publish_grasp("release")
