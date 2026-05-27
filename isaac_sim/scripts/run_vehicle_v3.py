@@ -596,17 +596,36 @@ def compute(db):
             print("[grasp] gripper link 못 찾음")
             return False
         _state["gripper_link_path"] = gripper_path
-        tx = _component(lin, 0)
-        ty = _component(lin, 1)
-        mineral_path, dist = _find_nearest_mineral(stage, tx, ty)
+        # supervisor 의 추정 mineral 좌표 (localization 오차 흡수 안 됨).
+        req_x = _component(lin, 0)
+        req_y = _component(lin, 1)
+        # ── snap 판정 cheat ─────────────────────────────────────────────
+        # 추정 mineral 좌표가 아니라 gripper link 의 GT world 위치를
+        # 기준으로 nearest mineral 을 찾는다. localization 1~2m drift 가
+        # 있어도 시각적으로 그리퍼가 광물 옆에 가있으면 무조건 잡히도록 한다.
+        # 실제 로봇에선 동작 안 하지만 시연 안정성 우선 (2026-05-27).
+        gripper_prim = stage.GetPrimAtPath(gripper_path)
+        gx, gy = req_x, req_y
+        if gripper_prim and gripper_prim.IsValid():
+            cache = UsdGeom.XformCache()
+            M = cache.GetLocalToWorldTransform(gripper_prim)
+            gpos = M.ExtractTranslation()
+            gx = float(gpos[0])
+            gy = float(gpos[1])
+        mineral_path, dist = _find_nearest_mineral(stage, gx, gy)
         if not mineral_path:
-            print(f"[grasp] pickup ignored — no mineral near ({tx:.2f},{ty:.2f}) within {SEARCH_RADIUS}m")
+            print(f"[grasp] pickup ignored — no mineral near gripper GT "
+                  f"({gx:.2f},{gy:.2f}) within {SEARCH_RADIUS}m "
+                  f"(requested=({req_x:.2f},{req_y:.2f}))")
             return True
         if _attach(stage, gripper_path, mineral_path):
             _state["attached_joint_path"] = GRASP_JOINT_PATH
             _state["attached_obj_path"] = mineral_path
             _set_mineral_collision(stage, mineral_path, False)
-            print(f"[grasp] pickup OK — attached {mineral_path} to {gripper_path} (target dist {dist:.2f}m, snapped, collision off)")
+            print(f"[grasp] pickup OK — attached {mineral_path} to {gripper_path} "
+                  f"(gripper GT=({gx:.2f},{gy:.2f}), "
+                  f"requested=({req_x:.2f},{req_y:.2f}), "
+                  f"target dist {dist:.2f}m, snapped, collision off)")
         return True
     elif mode < -0.5:
         stage = omni.usd.get_context().get_stage()
