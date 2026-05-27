@@ -351,14 +351,16 @@ body {
 .phase-MISSION_COMPLETE  { background: #1a7a4a; }
 .phase-MANUAL            { background: #6a6a1a; }
 
-.status-grid {
+/* status-pairs-row — POS/YAW/SPEED 같은 한 줄에 여러 pair.
+   status-info 의 직접 child 라 PHASE/BAT/COLL 와 함께 6 row 균등 분포. */
+.status-pairs-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
   gap: 4px 16px;
-  margin-top: 0;
-  flex: 0 0 auto;
   font-size: 13px;
+  flex: 0 0 auto;
 }
+.status-pairs-row.pairs-3 { grid-template-columns: 1fr 1fr 1fr; }
+.status-pairs-row.pairs-1 { grid-template-columns: 1fr; }
 .status-pair {
   display: flex;
   justify-content: space-between;
@@ -367,7 +369,6 @@ body {
   padding: 4px 2px;
 }
 .status-pair .v { font-size: 13px; }
-.status-error { grid-column: span 3; }
 .status-error .v { font-size: 12px; white-space: nowrap; overflow: hidden;
                    text-overflow: ellipsis; }
 .status-pair .k { color: #6cd9ff; letter-spacing: 1px; }
