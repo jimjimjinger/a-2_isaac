@@ -196,6 +196,17 @@ class MissionWebRosNode(Node):
         }
         self._last_state[ns] = payload
         self._emit("state", ns, payload)
+        # MISSION_COMPLETE 진입 시 미니맵 잔재 즉시 청소.
+        # coverage_node 가 mission state 를 모르고 sector path/markers 를
+        # 계속 발행하므로 backend 에서 차단해야 minimap 의 옛 sector anchor
+        # 별 + 점선 path 가 사라짐 (2026-05-27 시연 캡처 디버깅).
+        if payload["state"] == "MISSION_COMPLETE":
+            self._last_path_explore[ns] = {"pts": []}
+            self._last_path_supervisor[ns] = {"pts": []}
+            self._last_target_explore[ns] = None
+            self._last_target_supervisor[ns] = None
+            self._emit_active_path(ns)
+            self._emit_active_target(ns)
 
     def _on_odom(self, ns: str, msg: Odometry) -> None:
         p = msg.pose.pose.position
@@ -250,6 +261,9 @@ class MissionWebRosNode(Node):
         self._emit("path", ns, active)
 
     def _on_path(self, ns: str, msg: Path) -> None:
+        # MISSION_COMPLETE 후엔 coverage 가 stale path 계속 보내도 무시.
+        if self._last_state.get(ns, {}).get("state") == "MISSION_COMPLETE":
+            return
         pts = [(float(ps.pose.position.x), float(ps.pose.position.y))
                for ps in msg.poses]
         self._last_path_explore[ns] = {"pts": pts}
@@ -282,6 +296,9 @@ class MissionWebRosNode(Node):
         self._emit_active_target(ns)
 
     def _on_markers(self, ns: str, msg: MarkerArray) -> None:
+        # MISSION_COMPLETE 후엔 coverage 의 stale anchor marker 무시.
+        if self._last_state.get(ns, {}).get("state") == "MISSION_COMPLETE":
+            return
         # minimap_publisher 의 ns="target" SPHERE 만 추려서 EXPLORE 의 sector
         # anchor 별 위치로. APPROACH/RTB 중엔 supervisor 가 채워둔 게 우선.
         target = None
