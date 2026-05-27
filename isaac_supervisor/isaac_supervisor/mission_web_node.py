@@ -96,6 +96,12 @@ class MissionWebRosNode(Node):
         self._last_path_explore: Dict[str, dict] = {}
         self._last_path_supervisor: Dict[str, dict] = {}
         self._last_target: Dict[str, Optional[dict]] = {}
+        # target slot 도 path 와 동일 패턴 — explore (coverage markers) vs
+        # supervisor (APPROACH/RTB) 분리 라우팅. 같은 slot 공유 시 EXPLORE
+        # 중에도 supervisor 의 옛 mineral 별이 stale 하게 보이거나 두 source
+        # 가 번갈아 진동.
+        self._last_target_explore: Dict[str, Optional[dict]] = {}
+        self._last_target_supervisor: Dict[str, Optional[dict]] = {}
 
         minimap_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
@@ -257,19 +263,27 @@ class MissionWebRosNode(Node):
         self._last_path_supervisor[ns] = {"pts": pts}
         self._emit_active_path(ns)
 
+    def _emit_active_target(self, ns: str) -> None:
+        """supervisor 가 채운 target 우선, 비어있으면 explore (coverage marker)
+        target fallback. path 와 같은 분리 라우팅 패턴."""
+        sup = self._last_target_supervisor.get(ns)
+        active = sup if sup else self._last_target_explore.get(ns)
+        self._last_target[ns] = active
+        self._emit("target", ns, dict(active) if active else {})
+
     def _on_supervisor_target(self, ns: str, msg: PointStamped) -> None:
         import math as _math
         x, y = float(msg.point.x), float(msg.point.y)
         if not (_math.isfinite(x) and _math.isfinite(y)):
-            self._last_target[ns] = None
-            self._emit("target", ns, {})
-            return
-        target = {"x": x, "y": y}
-        self._last_target[ns] = target
-        self._emit("target", ns, dict(target))
+            # EXPLORE 진입 시 mission_manager 가 NaN 발행 → supervisor slot 비움.
+            self._last_target_supervisor[ns] = None
+        else:
+            self._last_target_supervisor[ns] = {"x": x, "y": y}
+        self._emit_active_target(ns)
 
     def _on_markers(self, ns: str, msg: MarkerArray) -> None:
-        # minimap_publisher 의 ns="target" SPHERE 만 추려서 분홍색 별 위치로.
+        # minimap_publisher 의 ns="target" SPHERE 만 추려서 EXPLORE 의 sector
+        # anchor 별 위치로. APPROACH/RTB 중엔 supervisor 가 채워둔 게 우선.
         target = None
         for m in msg.markers:
             if m.ns == "target":
@@ -279,8 +293,8 @@ class MissionWebRosNode(Node):
                     target = {"x": float(m.pose.position.x),
                               "y": float(m.pose.position.y)}
                 break
-        self._last_target[ns] = target
-        self._emit("target", ns, dict(target) if target else {})
+        self._last_target_explore[ns] = target
+        self._emit_active_target(ns)
 
     def _on_minimap(self, ns: str, msg: OccupancyGrid) -> None:
         # OccupancyGrid -> compact dict the browser can paint on a canvas.
