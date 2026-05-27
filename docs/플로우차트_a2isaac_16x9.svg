@@ -87,7 +87,7 @@
     <rect width="520" height="770" fill="#E3F2FD" stroke="#1976D2" stroke-width="3" rx="12"/>
     <rect width="520" height="50" fill="#1976D2" rx="12"/>
     <rect width="520" height="26" y="24" fill="#1976D2"/>
-    <text x="22" y="34" font-size="22" font-weight="bold" fill="white">📍 PHASE 1: EXPLORE</text>
+    <text x="22" y="37" font-size="26" font-weight="bold" fill="white">📍 PHASE 1: EXPLORE</text>
     <text x="500" y="34" font-size="13" text-anchor="end" fill="#BBDEFB">FSM: EXPLORE</text>
     <text x="260" y="82" font-size="17" text-anchor="middle" fill="#0D47A1">미지의 화성을 자율 탐사</text>
 
@@ -121,7 +121,7 @@
     <rect width="520" height="770" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
     <rect width="520" height="50" fill="#2E7D32" rx="12"/>
     <rect width="520" height="26" y="24" fill="#2E7D32"/>
-    <text x="22" y="34" font-size="22" font-weight="bold" fill="white">🎯 PHASE 2: APPROACH</text>
+    <text x="22" y="37" font-size="26" font-weight="bold" fill="white">🎯 PHASE 2: APPROACH</text>
     <text x="500" y="34" font-size="13" text-anchor="end" fill="#C8E6C9">FSM: APPROACH</text>
     <text x="260" y="82" font-size="17" text-anchor="middle" fill="#1B5E20">발견한 광물로 정밀 접근</text>
 
@@ -149,7 +149,7 @@
     <rect width="520" height="770" fill="#E8F5E9" stroke="#2E7D32" stroke-width="3" rx="12"/>
     <rect width="520" height="50" fill="#2E7D32" rx="12"/>
     <rect width="520" height="26" y="24" fill="#2E7D32"/>
-    <text x="22" y="34" font-size="22" font-weight="bold" fill="white">🦾 PHASE 3: PICK_READY</text>
+    <text x="22" y="37" font-size="26" font-weight="bold" fill="white">🦾 PHASE 3: PICK_READY</text>
     <text x="500" y="34" font-size="13" text-anchor="end" fill="#C8E6C9">FSM: PICK_READY</text>
     <text x="260" y="82" font-size="17" text-anchor="middle" fill="#1B5E20">광물 채취 및 카고 적재</text>
 
@@ -172,7 +172,7 @@
     <rect width="520" height="770" fill="#FFEBEE" stroke="#C62828" stroke-width="3" rx="12"/>
     <rect width="520" height="50" fill="#C62828" rx="12"/>
     <rect width="520" height="26" y="24" fill="#C62828"/>
-    <text x="22" y="34" font-size="22" font-weight="bold" fill="white">🏠 PHASE 4: RETURN_TO_BASE</text>
+    <text x="22" y="37" font-size="26" font-weight="bold" fill="white">🏠 PHASE 4: RETURN_TO_BASE</text>
     <text x="500" y="34" font-size="13" text-anchor="end" fill="#FFCDD2">FSM: RTB</text>
     <text x="260" y="82" font-size="17" text-anchor="middle" fill="#B71C1C">베이스캠프로 자율 복귀</text>
 
