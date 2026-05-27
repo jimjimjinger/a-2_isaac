@@ -216,18 +216,35 @@
   const cvs = $("minimap");
   const ctx = cvs.getContext("2d");
 
-  function paintMap() {
-    // 어떤 rover 의 minimap 을 백그라운드로 깔지 — active 우선, 없으면 첫
-    // 가용 rover. 둘 다 같은 terrain 이라 obstacle pattern 동일.
-    let bgMap = null;
-    const activeData = byRover[activeRover] || {};
-    if (activeData.minimap) {
-      bgMap = activeData.minimap;
-    } else {
-      for (const rid in byRover) {
-        if (byRover[rid].minimap) { bgMap = byRover[rid].minimap; break; }
-      }
+  // 모든 rover 의 OccupancyGrid 를 셀 단위 머지 — 한 rover 라도 탐색한
+  // 셀은 탐색완료로 표시. obstacle 발견 시 즉시 confirm. 그 결과 탭과
+  // 무관하게 "두 rover 의 탐색 범위 합집합" 이 minimap 에 보인다.
+  function mergeMinimaps() {
+    const maps = [];
+    for (const rid in byRover) {
+      const m = byRover[rid].minimap;
+      if (m && m.data) maps.push(m);
     }
+    if (maps.length === 0) return null;
+    if (maps.length === 1) return maps[0];
+    const ref = maps[0];
+    const n = ref.w * ref.h;
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) {
+      let v = -1;
+      for (const m of maps) {
+        if (m.w !== ref.w || m.h !== ref.h) continue;
+        const mv = m.data[i];
+        if (mv >= 50)            { v = mv; break; }      // obstacle 확정
+        else if (mv >= 0 && v < 0) v = mv;               // 탐색완료 free
+      }
+      out[i] = v;
+    }
+    return { w: ref.w, h: ref.h, res: ref.res, ox: ref.ox, oy: ref.oy, data: out };
+  }
+
+  function paintMap() {
+    const bgMap = mergeMinimaps();
     if (!bgMap) {
       ctx.fillStyle = "#050a14";
       ctx.fillRect(0, 0, cvs.width, cvs.height);
