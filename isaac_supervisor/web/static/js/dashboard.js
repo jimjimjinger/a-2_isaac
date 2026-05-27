@@ -279,7 +279,8 @@
         ctx.strokeStyle = col.path;
         ctx.lineWidth = 2;
         ctx.setLineDash([6, 4]);
-        ctx.globalAlpha = (rid === activeRover) ? 1.0 : 0.5;
+        // coverage map 은 탭과 무관하게 모든 rover 의 trail 을 동등 가시.
+        ctx.globalAlpha = 1.0;
         ctx.beginPath();
         const [x0, y0] = worldToPx(r.path.pts[0][0], r.path.pts[0][1]);
         ctx.moveTo(x0, y0);
@@ -301,7 +302,7 @@
         ctx.fillStyle = "#ff5ce0";
         ctx.strokeStyle = "#000";
         ctx.lineWidth = 1.5;
-        ctx.globalAlpha = (rid === activeRover) ? 1.0 : 0.6;
+        ctx.globalAlpha = 1.0;
         const r1 = 9, r2 = 4;
         ctx.beginPath();
         for (let k = 0; k < 10; k++) {
@@ -331,7 +332,7 @@
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(-yaw);
-      ctx.globalAlpha = (rid === activeRover) ? 1.0 : 0.75;
+      ctx.globalAlpha = 1.0;
       ctx.fillStyle = col.rover;
       ctx.strokeStyle = "#000";
       ctx.lineWidth = 2;

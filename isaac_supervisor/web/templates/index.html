@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Mars Rover Ops — Mission Control</title>
+  <title>DOGECRAFT — Mission Control</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}" />
 </head>
@@ -12,7 +12,7 @@
        └────────────────────────────────────────────────────────────┘ -->
   <header class="topbar">
     <div class="topbar-left">
-      <span class="logo">▲ MARS ROVER OPS</span>
+      <span class="logo">▲ DOGECRAFT</span>
       <span id="conn-pill" class="pill pill-offline">OFFLINE</span>
     </div>
     <div class="topbar-right">
@@ -43,11 +43,13 @@
        └────────────────────────────────────────────────────────────┘ -->
   <main class="viewports">
     <figure class="viewport viewport-overview">
-      <figcaption>Terrain — Overview <span class="vp-tag">preview.png (static)</span></figcaption>
-      <div class="vp-frame">
-        <img id="cam-overview" src="{{ terrain_preview }}" alt="terrain preview"
-             onerror="this.classList.add('cam-down');" />
-        <div class="cam-down-overlay">terrain preview missing</div>
+      <figcaption>Coverage Map <span class="vp-tag">/mission/minimap · all rovers</span></figcaption>
+      <div class="vp-frame vp-frame-canvas">
+        <canvas id="minimap" width="320" height="320"></canvas>
+        <div class="minimap-axes minimap-axes-vp">
+          <span class="axis-x">X →</span>
+          <span class="axis-y">Y ↑</span>
+        </div>
       </div>
     </figure>
     <figure class="viewport viewport-chase">
@@ -72,15 +74,14 @@
        │  MINIMAP (LL)    │  STATUS / PORTRAIT (C)   │ 3x3 GRID (R) │
        └──────────────────┴──────────────────────────┴──────────────┘ -->
   <section class="hud">
-    <!-- 좌하단 — coverage minimap -->
+    <!-- 좌하단 — terrain preview (작은 참고용. coverage map 은 메인 viewport 로 승격됨) -->
     <div class="hud-cell hud-minimap">
-      <div class="hud-cell-title">COVERAGE MAP</div>
+      <div class="hud-cell-title">TERRAIN OVERVIEW</div>
       <div class="minimap-wrap">
-        <canvas id="minimap" width="320" height="320"></canvas>
-        <div class="minimap-axes">
-          <span class="axis-x">X →</span>
-          <span class="axis-y">Y ↑</span>
-        </div>
+        <img id="cam-overview" src="{{ terrain_preview }}" alt="terrain preview"
+             class="terrain-preview-img"
+             onerror="this.classList.add('cam-down');" />
+        <div class="cam-down-overlay">terrain preview missing</div>
       </div>
     </div>
 

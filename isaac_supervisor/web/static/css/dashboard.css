@@ -200,8 +200,34 @@ body {
   image-rendering: pixelated;
   width: 100%;
   height: 100%;
-  max-width: 320px;
-  max-height: 320px;
+}
+/* viewport 안으로 승격된 coverage minimap — vp-frame 가운데 정렬 */
+.vp-frame-canvas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vp-frame-canvas #minimap {
+  max-width: 100%;
+  max-height: 100%;
+}
+.minimap-axes-vp {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #5a7aa0;
+  font-size: 10px;
+}
+.minimap-axes-vp .axis-x { position: absolute; right: 8px; bottom: 6px; }
+.minimap-axes-vp .axis-y { position: absolute; left: 8px; top: 6px; }
+/* hud-cell 로 강등된 terrain preview — vp-frame 의 img 와 동일 정책 */
+.terrain-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  border: 1px solid #1f3653;
+  border-radius: 2px;
 }
 .minimap-axes {
   position: absolute;
