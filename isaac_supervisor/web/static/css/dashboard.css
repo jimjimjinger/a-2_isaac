@@ -252,18 +252,13 @@ body {
 
 /* ── status (center) ── */
 
-/* hud-status: portrait 를 cell 의 모서리(테두리)까지 닿게 하려면
-   hud-cell padding(8px)을 흡수해야 함 → margin: -8px 트릭. portrait
-   는 정사각 (aspect-ratio 1/1) → grid column 2 의 너비를 auto 로 두면
-   frame 의 자연 너비(= cell height) 만큼 차지 = 시각적 정사각. */
 .hud-status {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 200px;
   grid-template-rows: 1fr;
-  gap: 0;
+  gap: 12px;
   flex: 1 1 auto;
   min-height: 0;
-  margin: -8px;
 }
 .status-portrait {
   display: flex;
@@ -271,18 +266,14 @@ body {
   align-items: stretch;
   gap: 0;
   grid-column: 2;
-  min-height: 0;
 }
-.status-info {
-  grid-column: 1;
-  padding: 8px 12px 8px 8px;
-}
+.status-info { grid-column: 1; }
 .portrait-frame {
   flex: 1 1 auto;
-  min-height: 0;
-  aspect-ratio: 1 / 1;
+  min-height: 130px;
   background: #060b16;
-  border-left: 1px solid #1f3653;
+  border: 1px solid #1f3653;
+  border-radius: 2px;
   overflow: hidden;
   position: relative;
 }
@@ -314,21 +305,14 @@ body {
 
 .menu-btn { display: none; }
 
-.status-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-  min-height: 0;
-}
+.status-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .status-row {
   display: grid;
   grid-template-columns: 90px 1fr 90px;
   gap: 12px;
   align-items: center;
   font-size: 13px;
-  flex: 1 1 0;
-  min-height: 0;
+  min-height: 20px;
 }
 .status-label { color: #6cd9ff; letter-spacing: 1px; }
 .status-value { text-align: right; color: #e8eef7; font-variant-numeric: tabular-nums; }
