@@ -299,14 +299,16 @@ class ArmExecutorNode(Node):
             msg.angular.x = 1.0    # pickup mode marker
         else:
             msg.angular.x = -1.0   # release mode marker
-        # Publish multiple times so OmniGraph subscriber is sure to capture it.
-        # 2026-05-27 시연에서 rover_1 의 release burst (3×0.05s) 가 Isaac
-        # ros2_bridge 의 subscription frame 과 race 로 drop 되어 mineral 이
-        # attach 된 채 남는 사례 관찰. 6×0.1s 로 burst window 0.6s 확장해
-        # bridge 가 최소 한 frame 은 받도록 보장.
-        for _ in range(6):
+        # OmniGraph Subscribe Twist 가 한 frame 이라도 받아야 ScriptNode 가
+        # compute() 에서 mode 분기 진입. release 는 못 받으면 mineral 이
+        # attach 된 채 남아 rover 가 들고 다님 (2026-05-27 rover_1/_2 시연
+        # 재발). pickup 은 6×0.1s 로도 충분히 잡혔지만 release 는 두 번
+        # 연속 drop 관찰 — burst 를 release 한정으로 대폭 강화.
+        n_pubs = 20 if cmd == "release" else 6
+        sleep_s = 0.15 if cmd == "release" else 0.1
+        for _ in range(n_pubs):
             self.grasp_pub.publish(msg)
-            time.sleep(0.1)
+            time.sleep(sleep_s)
         delay = float(self.get_parameter("grasp_publish_delay_sec").value)
         if delay > 0.0:
             time.sleep(delay)
