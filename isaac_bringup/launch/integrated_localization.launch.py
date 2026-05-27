@@ -77,7 +77,7 @@ def _build_nodes(context, *args, **kwargs):
                     "cmd_vel_topic": "/coverage/cmd_vel_raw",
                     "max_lin": 1.2,
                     "max_ang": 1.0,
-                    "robot_radius": 1.0,
+                    "robot_radius": 0.8,
                     "enable_minimap": False,
                     "enable_minimap_topics": True,
                 }

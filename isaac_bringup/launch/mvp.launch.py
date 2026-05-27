@@ -25,7 +25,7 @@ GT_SCRIPT 가 발행하는 /ground_truth/odom 을 odom_to_estimated_pose 가
 내장 노드 (8개):
   - odom_to_estimated_pose  (GT cheat: /ground_truth/odom → /rover/estimated_pose)
   - yolo_perception_node    (mineral world XYZ + 이미지 detection)
-  - coverage_node           (robot_radius=1.0 — rock 부딪힘 강화 2026-05-27)
+  - coverage_node           (robot_radius=0.8 — terrain v4 spacing 으로 안전 확보)
   - mission_manager_node    (supervisor: EXPLORE/APPROACH/PICK/RTB/COMPLETE + AUTO/MANUAL mux)
   - arm_executor_node       (T2 IK + ik_descend_dz=-0.40 perception bias 보정)
   - battery_monitor_node    (mock drain → /battery_state, critical 시 RTB 트리거)
@@ -127,8 +127,8 @@ def generate_launch_description() -> LaunchDescription:
             # /cmd_vel → /coverage/cmd_vel_raw remap: supervisor 가 EXPLORE 시
             # 그대로 forward / APPROACH 시 P-control 로 분리 (cmd_vel mux 역할).
             # remap 없으면 supervisor 우회 → mineral 지나침.
-            # robot_radius default=1.0 (2026-05-27 rock 부딪힘 강화 — rover
-            # footprint half ~0.62m + safety margin ~0.38m).
+            # robot_radius default=0.8. 1.0 시도 후 원복 — rock 부딪힘은
+            # terrain v4 의 min_spacing 3.5m + keepout 으로 해결.
             Node(
                 package="isaac_drive",
                 executable="coverage_node",

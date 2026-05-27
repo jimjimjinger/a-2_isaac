@@ -89,9 +89,10 @@ class CoverageNode(Node):
         self.declare_parameter("cmd_vel_topic", "/cmd_vel")
         self.declare_parameter("tick_hz", 30.0)
         self.declare_parameter("cell_size", 0.1)
-        # 팀 표준 1.0 — rover footprint half ~0.62m + safety margin ~0.38m.
-        # 시연 중 일반 rock 부딪힘 잦아 0.8 → 1.0 강화 (2026-05-27).
-        self.declare_parameter("robot_radius", 1.0)
+        # 팀 표준 0.8 — rover footprint half ~0.62m + safety margin ~0.18m.
+        # 1.0 시도 후 0.8 로 원복 — rock 부딪힘은 terrain v4 의 spacing 확보로
+        # 해결 (generator v4: min_spacing 3.5m + mineral/basecamp keepout).
+        self.declare_parameter("robot_radius", 0.8)
         # 5.0 m — 시연 가시성 위해 default 키움 (2026-05-27). 시연 중 launch
         # 인자 reveal_radius:=N 로 override 가능 (mvp / mvp_multi 둘 다 노출).
         self.declare_parameter("reveal_radius", 5.0)

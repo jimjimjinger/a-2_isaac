@@ -53,7 +53,7 @@ def _dilate(mask, r_cells):
     return out
 
 
-def load_terrain(terrain_dir, cell_size=0.1, robot_radius=1.0,
+def load_terrain(terrain_dir, cell_size=0.1, robot_radius=0.8,
                  reveal_radius=2.0, grid_n=3):
     """terrain_dir 의 meta.json + obstacle_grid.npy 로드.
 

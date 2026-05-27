@@ -124,7 +124,7 @@ class MissionManagerNode(Node):
         # 검증). 절충값 0.8m — obstacle 중심에서 0.8m 마진, rover 차체 끝
         # 0.05m 여유. coverage 의 robot_radius 0.7m 와도 가까워 두 grid 간
         # 시각 차이 최소.
-        self.declare_parameter("path_robot_radius", 1.0)
+        self.declare_parameter("path_robot_radius", 0.8)
         # target 이 이 거리 이내로 흔들리면 replan skip — perception 의
         # mineral 위치 jitter 가 0.4m 안으로 흔들리며 1초당 6+ 회 replan
         # 폭주를 만들어 path 진동 보임. 0.5m 로 올려 perception covariance
