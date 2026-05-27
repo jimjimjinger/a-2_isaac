@@ -261,7 +261,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 6px;
+  gap: 0;
   grid-column: 2;
 }
 .status-info { grid-column: 1; }
@@ -300,17 +300,7 @@ body {
 }
 .portrait-sub { font-size: 10px; color: #8aa3c4; letter-spacing: 4px; margin-top: 6px; }
 
-.menu-btn {
-  height: 28px;
-  background: #15263e;
-  border: 1px solid #2a4870;
-  color: #cfe3ff;
-  font-family: inherit;
-  letter-spacing: 3px;
-  font-size: 11px;
-  cursor: not-allowed;
-  opacity: 0.85;
-}
+.menu-btn { display: none; }
 
 .status-info { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .status-row {
