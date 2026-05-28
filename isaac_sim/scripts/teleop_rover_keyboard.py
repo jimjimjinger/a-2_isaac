@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 # 스크립트 위치 기준으로 워크스페이스 루트 유도 (절대경로 하드코딩 금지).
@@ -258,6 +259,12 @@ def main() -> int:
     world.play()
 
     speed, turn = ARGS.speed, ARGS.turn
+    # 순간 반전 시 PhysX가 불안정해질 수 있어서 teleop 도 가속 기울기를 제한한다.
+    cur_v = 0.0
+    cur_w = 0.0
+    linear_accel = 4.0   # m/s^2
+    angular_accel = 3.0   # rad/s^2
+    last_cmd_t = time.monotonic()
     print("\n" + "=" * 64)
     print("  키보드 teleop 준비 완료 — 뷰포트를 클릭해 포커스를 주세요.")
     print("  W/↑ 전진   S/↓ 후진   A/← 좌회전   D/→ 우회전")
@@ -274,13 +281,27 @@ def main() -> int:
             break
 
         # skid-steer 믹싱: v=전후, w=회전 → 좌/우 휠 속도.
-        v = (speed if keys & {"W", "UP"} else 0.0) \
+        target_v = (speed if keys & {"W", "UP"} else 0.0) \
             - (speed if keys & {"S", "DOWN"} else 0.0)
-        w = (turn if keys & {"A", "LEFT"} else 0.0) \
+        target_w = (turn if keys & {"A", "LEFT"} else 0.0) \
             - (turn if keys & {"D", "RIGHT"} else 0.0)
         if "SPACE" in keys:
-            v = w = 0.0
-        v_left, v_right = v - w, v + w
+            target_v = 0.0
+            target_w = 0.0
+
+        now = time.monotonic()
+        dt = min(max(now - last_cmd_t, 0.0), 0.05)
+        last_cmd_t = now
+        max_dv = linear_accel * dt
+        max_dw = angular_accel * dt
+        cur_v += max(-max_dv, min(max_dv, target_v - cur_v))
+        cur_w += max(-max_dw, min(max_dw, target_w - cur_w))
+        if target_v == 0.0 and abs(cur_v) < 0.05:
+            cur_v = 0.0
+        if target_w == 0.0 and abs(cur_w) < 0.05:
+            cur_w = 0.0
+
+        v_left, v_right = cur_v - cur_w, cur_v + cur_w
 
         jv = np.zeros(rover_art.num_dof, dtype=np.float32)
         if len(left_idx):
@@ -288,7 +309,7 @@ def main() -> int:
         if len(right_idx):
             jv[right_idx] = v_right
         if len(other_drive_idx):
-            jv[other_drive_idx] = v          # 미분류 휠은 직진 성분만
+            jv[other_drive_idx] = cur_v      # 미분류 휠은 직진 성분만
         rover_art.apply_action(ArticulationAction(joint_velocities=jv))
 
         world.step(render=True)

@@ -332,11 +332,6 @@ class RewardsCfg:
         func=mdp.time_alive_penalty,
         weight=-0.1,
     )
-    joint_limit_penalty = RewTerm(
-        func=mdp.joint_limit_penalty,
-        weight=-2.0,
-        params={"asset_cfg": SceneEntityCfg("vehicle", joint_names=["joint_[1-6]"])},
-    )
     arm_vel_penalty = RewTerm(
         func=mdp.arm_vel_penalty_conditional,
         weight=-0.005,

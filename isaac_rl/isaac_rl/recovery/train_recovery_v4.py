@@ -35,6 +35,11 @@ parser.add_argument("--eval_interval",  type=int,   default=999999)
 parser.add_argument("--resume_log_dir", type=str,   default=None)
 parser.add_argument("--policy_std_max", type=float, default=2.0)
 parser.add_argument("--policy_std_min", type=float, default=1e-3)
+# fine-tune 안정화 오버라이드
+parser.add_argument("--lr",            type=float, default=None, help="learning rate override (e.g. 5e-5 for fine-tune)")
+parser.add_argument("--clip_param",    type=float, default=None, help="PPO clip param override (e.g. 0.1)")
+parser.add_argument("--entropy_coef",  type=float, default=None, help="entropy coef override (e.g. 0.001)")
+parser.add_argument("--mini_batches",  type=int,   default=None, help="num mini-batches override (e.g. 8)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 
@@ -256,6 +261,13 @@ print(f"{'='*64}\n")
 agent_cfg = RoverRecoveryAgentCfgV4()
 agent_cfg.max_iterations = args.max_iterations
 agent_cfg.seed = args.seed
+
+# fine-tune 오버라이드 적용
+if args.lr           is not None: agent_cfg.algorithm.learning_rate      = args.lr
+if args.clip_param   is not None: agent_cfg.algorithm.clip_param         = args.clip_param
+if args.entropy_coef is not None: agent_cfg.algorithm.entropy_coef       = args.entropy_coef
+if args.mini_batches is not None: agent_cfg.algorithm.num_mini_batches   = args.mini_batches
+
 agent_cfg = handle_deprecated_rsl_rl_cfg(agent_cfg, RSL_RL_VERSION)
 
 log_root = os.path.abspath(os.path.join(
@@ -269,15 +281,28 @@ runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device="cuda:
 
 if args.checkpoint:
     runner.load(args.checkpoint)
-    restored_lr = runner.alg.optimizer.param_groups[0]["lr"]
-    runner.alg.learning_rate = restored_lr
+    if args.lr is not None:
+        # checkpoint LR 무시하고 지정값 사용
+        for pg in runner.alg.optimizer.param_groups:
+            pg["lr"] = args.lr
+        runner.alg.learning_rate = args.lr
+        print(f"[train_v4] LR 오버라이드: {args.lr:.2e}")
+    else:
+        restored_lr = runner.alg.optimizer.param_groups[0]["lr"]
+        runner.alg.learning_rate = restored_lr
+        print(f"[train_v4] LR 복원: {restored_lr:.2e}")
     print(f"[train_v4] checkpoint: {args.checkpoint}")
-    print(f"[train_v4] LR 복원: {restored_lr:.2e}")
 
+_alg = agent_cfg.algorithm
 print(f"\n{'='*60}")
 print(f"  Rover Recovery v4 학습 시작")
 print(f"  num_envs    : {args.num_envs}")
 print(f"  max_iter    : {args.max_iterations}")
+print(f"  lr          : {_alg.learning_rate:.2e}")
+print(f"  clip_param  : {_alg.clip_param}")
+print(f"  entropy_coef: {_alg.entropy_coef}")
+print(f"  mini_batches: {_alg.num_mini_batches}")
+print(f"  std_max     : {args.policy_std_max}")
 print(f"  log_dir     : {log_dir}")
 print(f"  TensorBoard : tensorboard --logdir {log_root}")
 print(f"{'='*60}\n")

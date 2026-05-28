@@ -25,7 +25,7 @@
     justify-content: center;
     background: #0a0a0a;
   }
-  #camera-img {
+  #camera-video {
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -351,7 +351,7 @@
 
 <!-- 카메라 피드 -->
 <div id="camera-view">
-  <img id="camera-img" alt="">
+  <video id="camera-video" autoplay playsinline muted></video>
 </div>
 <div id="scanlines"></div>
 <div id="vignette"></div>
@@ -520,7 +520,7 @@ let ctrlConnected = false;
 let statusConnected = false;
 
 // ── DOM 참조 ──────────────────────────────────────────────────────────────
-const camImg       = document.getElementById('camera-img');
+const videoEl      = document.getElementById('camera-video');
 const noCamera     = document.getElementById('no-camera');
 const statusDot    = document.getElementById('status-dot');
 const statusText   = document.getElementById('status-text');
@@ -531,58 +531,72 @@ const speedArcBack = document.getElementById('speed-arc-back');
 const steeringSpokes = document.getElementById('steering-spokes');
 const estopBanner  = document.getElementById('estop-banner');
 
-// ── 카메라 WebSocket ───────────────────────────────────────────────────────
-let camWs = null;
-let camFrameCount = 0;
-let camFpsTimer = Date.now();
-let camFps = 0;
-let lastFrameTime = 0;
+// ── WebRTC 카메라 ──────────────────────────────────────────────────────────
+let pc = null;
 
-function connectCamera() {
-  camWs = new WebSocket(`${WS_BASE}/ws/camera`);
-  camWs.binaryType = 'arraybuffer';
+async function connectWebRTC() {
+  if (pc) { pc.close(); pc = null; }
 
-  camWs.onopen = () => {
-    camConnected = true;
-    updateConnectionUI();
-  };
+  pc = new RTCPeerConnection({
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  });
 
-  camWs.onmessage = (e) => {
-    const blob = new Blob([e.data], { type: 'image/jpeg' });
-    const url  = URL.createObjectURL(blob);
-    const prev = camImg.src;
-
-    // onload 후에 이전 URL 해제 — 브라우저가 JPEG 디코딩 완료 전에
-    // blob URL이 해제되면 렌더링이 실패하여 화면이 고정되는 현상 방지
-    camImg.onload = () => {
-      if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+  // 비디오 트랙 수신 → <video> 엘리먼트에 연결
+  pc.ontrack = (event) => {
+    if (event.track.kind === 'video') {
+      videoEl.srcObject = event.streams[0];
       noCamera.classList.add('hidden');
-    };
-    camImg.onerror = () => {
-      URL.revokeObjectURL(url);
-    };
-    camImg.src = url;
-
-    // FPS 계산
-    camFrameCount++;
-    const now = Date.now();
-    const elapsed = (now - camFpsTimer) / 1000;
-    if (elapsed >= 1.0) {
-      camFps = (camFrameCount / elapsed).toFixed(1);
-      fpsDisplay.textContent = `CAM: ${camFps} FPS`;
-      camFrameCount = 0;
-      camFpsTimer = now;
     }
   };
 
-  camWs.onclose = () => {
-    camConnected = false;
+  pc.onconnectionstatechange = () => {
+    const s = pc.connectionState;
+    camConnected = (s === 'connected');
     updateConnectionUI();
-    noCamera.classList.remove('hidden');
-    setTimeout(connectCamera, RECONNECT_INTERVAL);
+    if (s === 'failed' || s === 'disconnected' || s === 'closed') {
+      noCamera.classList.remove('hidden');
+      videoEl.srcObject = null;
+      pc = null;
+      setTimeout(connectWebRTC, RECONNECT_INTERVAL);
+    }
   };
 
-  camWs.onerror = () => camWs.close();
+  // 비디오 수신 전용 transceiver
+  pc.addTransceiver('video', { direction: 'recvonly' });
+
+  // Offer 생성
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  // ICE gathering 완료 대기 (최대 3초)
+  await new Promise((resolve) => {
+    if (pc.iceGatheringState === 'complete') { resolve(); return; }
+    const check = () => {
+      if (pc.iceGatheringState === 'complete') {
+        pc.removeEventListener('icegatheringstatechange', check);
+        resolve();
+      }
+    };
+    pc.addEventListener('icegatheringstatechange', check);
+    setTimeout(resolve, 3000);
+  });
+
+  // 서버에 SDP 전송 → answer 수신
+  let res;
+  try {
+    res = await fetch('/rtc/offer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type }),
+    });
+  } catch {
+    setTimeout(connectWebRTC, RECONNECT_INTERVAL);
+    return;
+  }
+  if (!res.ok) { setTimeout(connectWebRTC, RECONNECT_INTERVAL); return; }
+
+  const answer = await res.json();
+  await pc.setRemoteDescription(new RTCSessionDescription(answer));
 }
 
 // ── 조종 WebSocket ─────────────────────────────────────────────────────────
@@ -837,7 +851,7 @@ async function pollRecoveryStatus() {
 setInterval(pollRecoveryStatus, 2000);
 
 // ── 초기화 ────────────────────────────────────────────────────────────────
-connectCamera();
+connectWebRTC();
 connectControl();
 connectStatus();
 </script>

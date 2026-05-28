@@ -41,4 +41,12 @@ echo "======================================================"
 echo ""
 
 cd "$SCRIPT_DIR"
-python3 main.py
+
+# venv에 aiortc/uvicorn 설치되어 있으면 venv 사용
+if [ -f "$SCRIPT_DIR/venv/bin/python3" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python3"
+else
+    PYTHON="python3"
+fi
+
+"$PYTHON" main.py

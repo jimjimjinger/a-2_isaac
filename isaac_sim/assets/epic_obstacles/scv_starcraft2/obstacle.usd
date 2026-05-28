@@ -1,0 +1,32 @@
+#usda 1.0
+(
+    defaultPrim = "Obstacle"
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "Obstacle"
+{
+    def Xform "VisualModel" (
+        prepend references = @./scene.usd@
+    )
+    {
+        float xformOp:rotateX = 90
+        float3 xformOp:scale = (0.032055855, 0.032055855, 0.032055855)
+        double3 xformOp:translate = (-0.09999685884545673, 0.4648976553000945, -0.22865595725896412)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:rotateX", "xformOp:scale"]
+    }
+
+    def Cube "CollisionBox" (
+        prepend apiSchemas = ["PhysicsCollisionAPI"]
+    )
+    {
+        float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+        double size = 1
+        token visibility = "invisible"
+        float3 xformOp:scale = (5, 4.1726704, 4.129848)
+        double3 xformOp:translate = (0, 0, 2.064923943362614)
+        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]
+    }
+}
+

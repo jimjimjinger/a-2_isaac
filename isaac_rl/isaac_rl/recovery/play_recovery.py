@@ -3,8 +3,10 @@
 실행:
   cd ~/dev_ws/rover_ws/src/a2_isaac/isaac_rl/isaac_rl/recovery
   /mnt/data/isaac_sim/IsaacLab/isaaclab.sh -p play_recovery.py \
-      --checkpoint /home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery/20260526_173647/model_800.pt \
-      --num_envs 4
+      --checkpoint /home/kimi/dev_ws/rover_ws/src/a2_isaac/logs/recovery_v4/20260527_160357/model_999.pt \
+      --num_envs 1
+
+  v3 checkpoint 사용 시 --v3 플래그 추가
 """
 from __future__ import annotations
 import argparse
@@ -14,6 +16,7 @@ parser = argparse.ArgumentParser(description="Rover Recovery 정책 시각화")
 parser.add_argument("--checkpoint", type=str, required=True)
 parser.add_argument("--num_envs",   type=int, default=4)
 parser.add_argument("--num_steps",  type=int, default=10000)
+parser.add_argument("--v3", action="store_true", help="v3 checkpoint 재생 (obs=31, action=6)")
 AppLauncher.add_app_launcher_args(parser)
 args = parser.parse_args()
 args.headless = False  # GUI 강제 활성화
@@ -33,7 +36,13 @@ from isaaclab_rl.rsl_rl import (
     handle_deprecated_rsl_rl_cfg,
 )
 from rsl_rl.runners import OnPolicyRunner
-from recovery_env_cfg import RoverRecoveryEnvCfg
+
+if args.v3:
+    from recovery_env_cfg import RoverRecoveryEnvCfg as _EnvCfg
+    print("[play] v3 환경 (obs=31, action=6)")
+else:
+    from recovery_env_cfg_v4 import RoverRecoveryEnvCfgV4 as _EnvCfg
+    print("[play] v4 환경 (obs=43, action=12)")
 
 RSL_RL_VERSION = metadata.version("rsl-rl-lib")
 
@@ -64,9 +73,29 @@ class RoverRecoveryAgentCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
-env_cfg = RoverRecoveryEnvCfg()
+env_cfg = _EnvCfg()
 env_cfg.scene.num_envs = args.num_envs
 env_cfg.seed = 42
+
+# ── play-mode 성능 최적화 ────────────────────────────────────────────────────
+# 1) PhysX GPU 버퍼: 훈련(256 env)용 → play(소수 env)용으로 축소
+env_cfg.sim.physx.gpu_max_rigid_contact_count = 65536
+env_cfg.sim.physx.gpu_max_rigid_patch_count   = 32768
+
+# 2) 절차적 지형 → 평면 (4×4 타일 생성 제거)
+from isaaclab.terrains import TerrainImporterCfg
+from mars_terrain_cfg import MARS_PHYSICS_MATERIAL
+env_cfg.scene.terrain = TerrainImporterCfg(
+    prim_path        = "/World/Terrain",
+    terrain_type     = "plane",
+    collision_group  = -1,
+    physics_material = MARS_PHYSICS_MATERIAL,
+    debug_vis        = False,
+)
+
+# 3) Nucleus 재질 불필요 (이미 plane이므로 해당 없음, 방어적 처리)
+if hasattr(env_cfg.scene.terrain, "visual_material"):
+    env_cfg.scene.terrain.visual_material = None
 
 env = ManagerBasedRLEnv(cfg=env_cfg)
 env = RslRlVecEnvWrapper(env)

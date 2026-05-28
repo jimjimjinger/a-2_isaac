@@ -23,6 +23,7 @@ import threading
 import time
 from pathlib import Path
 
+import av
 import cv2
 import numpy as np
 
@@ -39,7 +40,9 @@ try:
 except ImportError:
     _HAS_ROS = False
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 
@@ -74,6 +77,7 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
         self._cam_fps = 0.0
         self._frame_count = 0
         self._fps_reset_time = time.time()
+        self._last_image_time = 0.0
         # 속도 smoothing — 순간 반전이 PhysX 불안정 유발 방지
         self._cur_linear  = 0.0
         self._cur_angular = 0.0
@@ -137,6 +141,7 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
             self._latest_jpeg = jpeg
             self._frame_id += 1          # 새 프레임 도착 표시
             self._frame_count += 1
+            self._last_image_time = now
             elapsed = now - self._fps_reset_time
             if elapsed >= 1.0:
                 self._cam_fps = self._frame_count / elapsed
@@ -241,6 +246,52 @@ class RoverBridgeNode(Node if _HAS_ROS else object):
             }
 
 
+# ── WebRTC 비디오 트랙 ────────────────────────────────────────────────────────
+
+class CameraVideoTrack(VideoStreamTrack):
+    """ROS2 /camera/rover/image_raw → WebRTC 비디오 트랙 (VP8/H.264)"""
+    kind = "video"
+
+    def __init__(self, node: RoverBridgeNode):
+        super().__init__()
+        self._node = node
+        self._last_frame_id = -1
+        self._cached_yuv: np.ndarray | None = None
+
+    async def recv(self) -> av.VideoFrame:
+        pts, time_base = await self.next_timestamp()
+
+        # 최대 100ms 대기하며 새 프레임 획득
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 0.10
+        new_jpeg: bytes | None = None
+        while True:
+            jpeg, frame_id = self._node.get_jpeg()
+            if jpeg is not None and frame_id != self._last_frame_id:
+                self._last_frame_id = frame_id
+                new_jpeg = jpeg   # 진짜 새 프레임만 캐시 갱신
+                break
+            if loop.time() > deadline:
+                break
+            await asyncio.sleep(0.005)
+
+        # 새 프레임이 도착한 경우에만 YUV 변환
+        if new_jpeg is not None:
+            arr = np.frombuffer(new_jpeg, dtype=np.uint8)
+            bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if bgr is not None:
+                self._cached_yuv = cv2.cvtColor(bgr, cv2.COLOR_BGR2YUV_I420)
+
+        if self._cached_yuv is None:
+            # 아직 카메라 없음 → 검은 프레임
+            self._cached_yuv = np.zeros((480 * 3 // 2, 640), dtype=np.uint8)
+
+        frame = av.VideoFrame.from_ndarray(self._cached_yuv, format="yuv420p")
+        frame.pts = pts
+        frame.time_base = time_base
+        return frame
+
+
 # ── ROS2 스레드 ───────────────────────────────────────────────────────────────
 
 _node: RoverBridgeNode | None = None
@@ -279,10 +330,38 @@ for _ in range(30):
 
 app = FastAPI(title="Rover Web Controller")
 
+_pcs: set[RTCPeerConnection] = set()   # 활성 WebRTC 연결 추적
+
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 
-# ── WebSocket: 카메라 스트림 ──────────────────────────────────────────────────
+# ── WebRTC: SDP 시그널링 ─────────────────────────────────────────────────────
+
+@app.post("/rtc/offer")
+async def rtc_offer(request: Request):
+    params = await request.json()
+    offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+
+    pc = RTCPeerConnection()
+    _pcs.add(pc)
+
+    @pc.on("connectionstatechange")
+    async def on_state_change():
+        if pc.connectionState in ("failed", "closed", "disconnected"):
+            await pc.close()
+            _pcs.discard(pc)
+
+    if _node is not None:
+        pc.addTrack(CameraVideoTrack(_node))
+
+    await pc.setRemoteDescription(offer)
+    answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+
+    return JSONResponse({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+
+
+# ── WebSocket: 카메라 스트림 (레거시 유지) ────────────────────────────────────
 
 @app.websocket("/ws/camera")
 async def ws_camera(ws: WebSocket):
@@ -298,6 +377,10 @@ async def ws_camera(ws: WebSocket):
             t0 = loop.time()
             if _node is not None:
                 jpeg, frame_id = _node.get_jpeg()
+                camera_age = time.time() - _node._last_image_time if _node._last_image_time else None
+                if camera_age is not None and camera_age > 2.5:
+                    await ws.close(code=1013)
+                    return
                 now = loop.time()
                 # 새 프레임이 있거나, 1초 이상 전송이 없으면 keepalive로 재전송
                 if jpeg and (frame_id != last_sent_id or now - last_send_time > 1.0):
@@ -395,9 +478,22 @@ def debug():
         return {
             "frame_id": _node._frame_id,
             "cam_fps": round(_node._cam_fps, 1),
+            "camera_age": round(time.time() - _node._last_image_time, 2) if _node._last_image_time else None,
             "has_jpeg": _node._latest_jpeg is not None,
             "jpeg_bytes": len(_node._latest_jpeg) if _node._latest_jpeg else 0,
         }
+
+@app.get("/snapshot")
+def snapshot():
+    """현재 카메라 프레임을 JPEG으로 반환 — WebRTC 우회 진단용."""
+    from fastapi.responses import Response
+    if _node is None:
+        return JSONResponse({"error": "node not ready"}, status_code=503)
+    jpeg, frame_id = _node.get_jpeg()
+    if jpeg is None:
+        return JSONResponse({"error": "no frame yet"}, status_code=503)
+    return Response(content=jpeg, media_type="image/jpeg",
+                    headers={"X-Frame-Id": str(frame_id)})
 
 # ── 정적 파일 서빙 ────────────────────────────────────────────────────────────
 
