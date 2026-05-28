@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 900 1200"
+     font-family="'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
+  <rect width="900" height="1200" fill="#FAFAFA"/>
+
+  <defs>
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#2E7D32"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ── TITLE ────────────────────────────────────────── -->
+  <rect x="0" y="0" width="900" height="100" fill="url(#title-grad)"/>
+  <text x="450" y="46" text-anchor="middle" font-size="26" font-weight="bold" fill="white">
+    🎓 vehicle_v3 — ROS2 토픽 (졸업 후, no cheat)
+  </text>
+  <text x="450" y="78" text-anchor="middle" font-size="14" fill="#C8E6C9">
+    per rover · USD baked 10 pub + 3 sub  ·  /ground_truth/odom 제거
+  </text>
+
+  <!-- ══════════════ PUBLISH 섹션 ══════════════ -->
+  <rect x="30" y="120" width="840" height="44" fill="#FCE4EC" stroke="#C62828" stroke-width="2" rx="6"/>
+  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">📤 PUBLISH (output) — 10 토픽</text>
+  <text x="850" y="148" text-anchor="end" font-size="12" fill="#C62828">cheat 1개 제거 (10 = 11 − 1)</text>
+
+  <!-- header -->
+  <rect x="30" y="170" width="840" height="32" fill="#FFEBEE" stroke="#C62828" stroke-width="1" rx="3"/>
+  <text x="48" y="190" font-size="13" font-weight="bold" fill="#B71C1C">#</text>
+  <text x="90" y="190" font-size="13" font-weight="bold" fill="#B71C1C">토픽</text>
+  <text x="500" y="190" font-size="13" font-weight="bold" fill="#B71C1C">타입</text>
+  <text x="720" y="190" font-size="13" font-weight="bold" fill="#B71C1C">용도</text>
+
+  <g font-size="13" fill="#333">
+    <rect x="30" y="202" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="222">1</text>
+    <text x="90" y="222" font-family="monospace" fill="#1565C0">/imu/data</text>
+    <text x="500" y="222" font-size="12" fill="#666">sensor_msgs/Imu</text>
+    <text x="720" y="222" font-size="12">EKF 입력 (가속도·각속도)</text>
+
+    <rect x="30" y="234" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="254">2</text>
+    <text x="90" y="254" font-family="monospace" fill="#1565C0">/joint_states_raw</text>
+    <text x="500" y="254" font-size="12" fill="#666">sensor_msgs/JointState</text>
+    <text x="720" y="254" font-size="12">wheel_odom 입력</text>
+
+    <rect x="30" y="266" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="286">3</text>
+    <text x="90" y="286" font-family="monospace" fill="#1565C0">/camera/rover/image_raw</text>
+    <text x="500" y="286" font-size="12" fill="#666">sensor_msgs/Image (RGB)</text>
+    <text x="720" y="286" font-size="12">본체 RGB (YOLO 입력)</text>
+
+    <rect x="30" y="298" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="318">4</text>
+    <text x="90" y="318" font-family="monospace" fill="#1565C0">/camera/rover/depth</text>
+    <text x="500" y="318" font-size="12" fill="#666">sensor_msgs/Image (depth)</text>
+    <text x="720" y="318" font-size="12">본체 깊이 (backproject)</text>
+
+    <rect x="30" y="330" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="350">5</text>
+    <text x="90" y="350" font-family="monospace" fill="#1565C0">/camera/rover/camera_info</text>
+    <text x="500" y="350" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="350" font-size="12">본체 intrinsic</text>
+
+    <rect x="30" y="362" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="382">6</text>
+    <text x="90" y="382" font-family="monospace" fill="#1565C0">/camera/wrist/image_raw</text>
+    <text x="500" y="382" font-size="12" fill="#666">sensor_msgs/Image (RGB)</text>
+    <text x="720" y="382" font-size="12">손목 D455 RGB</text>
+
+    <rect x="30" y="394" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="414">7</text>
+    <text x="90" y="414" font-family="monospace" fill="#1565C0">/camera/wrist/depth</text>
+    <text x="500" y="414" font-size="12" fill="#666">sensor_msgs/Image (depth)</text>
+    <text x="720" y="414" font-size="12">손목 깊이</text>
+
+    <rect x="30" y="426" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="446">8</text>
+    <text x="90" y="446" font-family="monospace" fill="#1565C0">/camera/wrist/camera_info</text>
+    <text x="500" y="446" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="446" font-size="12">손목 intrinsic</text>
+
+    <!-- Sun cam — EKF 핵심 입력으로 강조 -->
+    <rect x="30" y="458" width="840" height="40" fill="#FFF59D" stroke="#F57F17" stroke-width="2" rx="3"/>
+    <text x="48" y="482" font-weight="bold">9</text>
+    <text x="90" y="482" font-family="monospace" fill="#1565C0" font-weight="bold">/camera/sun/image_raw</text>
+    <text x="500" y="482" font-size="12" fill="#666">sensor_msgs/Image (RGB)</text>
+    <text x="720" y="482" font-size="12" font-weight="bold" fill="#BF360C">★ sun_yaw 절대 방위</text>
+    <text x="90" y="494" font-size="10" fill="#888" font-style="italic">cheat 모드에선 시각용. no cheat 모드에서 EKF 의 핵심 보정 입력으로 승격</text>
+
+    <rect x="30" y="498" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="518">10</text>
+    <text x="90" y="518" font-family="monospace" fill="#1565C0">/camera/sun/camera_info</text>
+    <text x="500" y="518" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="518" font-size="12">sun cam intrinsic</text>
+
+    <!-- 삭제됨 표시 -->
+    <rect x="30" y="530" width="840" height="42" fill="#EEEEEE" stroke="#9E9E9E" stroke-width="1.5" stroke-dasharray="6,3" rx="3"/>
+    <text x="48" y="556" fill="#9E9E9E" text-decoration="line-through">11</text>
+    <text x="90" y="556" font-family="monospace" fill="#9E9E9E" text-decoration="line-through">/ground_truth/odom</text>
+    <text x="500" y="556" font-size="12" fill="#9E9E9E">nav_msgs/Odometry</text>
+    <text x="720" y="556" font-size="12" font-weight="bold" fill="#9E9E9E">❌ 제거 (GT cheat)</text>
+    <text x="90" y="568" font-size="10" fill="#9E9E9E" font-style="italic">ScriptNode ReadGtPose + PubGtOdom 두 노드만 graph 에서 제거 후 재bake</text>
+  </g>
+
+  <!-- ══════════════ SUBSCRIBE 섹션 ══════════════ -->
+  <rect x="30" y="588" width="840" height="44" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2" rx="6"/>
+  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">📥 SUBSCRIBE (input) — 3 토픽 (변경 없음)</text>
+  <text x="850" y="616" text-anchor="end" font-size="12" fill="#2E7D32">제어 / manipulation 명령 진입점</text>
+
+  <!-- header -->
+  <rect x="30" y="638" width="840" height="32" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1" rx="3"/>
+  <text x="48" y="658" font-size="13" font-weight="bold" fill="#1B5E20">#</text>
+  <text x="90" y="658" font-size="13" font-weight="bold" fill="#1B5E20">토픽</text>
+  <text x="500" y="658" font-size="13" font-weight="bold" fill="#1B5E20">타입</text>
+  <text x="720" y="658" font-size="13" font-weight="bold" fill="#1B5E20">동작</text>
+
+  <g font-size="13" fill="#333">
+    <rect x="30" y="670" width="840" height="60" fill="white" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="692">1</text>
+    <text x="90" y="692" font-family="monospace" fill="#2E7D32">/cmd_vel</text>
+    <text x="500" y="692" font-size="12" fill="#666">geometry_msgs/Twist</text>
+    <text x="720" y="692" font-size="12">Ackermann ScriptNode</text>
+    <text x="90" y="712" font-size="11" fill="#888" font-style="italic">→ 휠 4 조향각 + 6 구동속도 (6륜 Ackermann 변환)</text>
+
+    <rect x="30" y="730" width="840" height="60" fill="#FAFAFA" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="752">2</text>
+    <text x="90" y="752" font-family="monospace" fill="#2E7D32">/arm/joint_command</text>
+    <text x="500" y="752" font-size="12" fill="#666">sensor_msgs/JointState</text>
+    <text x="720" y="752" font-size="12">m0609 Articulation</text>
+    <text x="90" y="772" font-size="11" fill="#888" font-style="italic">→ Doosan 6축 팔 관절 위치 지령 (I11)</text>
+
+    <rect x="30" y="790" width="840" height="60" fill="white" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="812">3</text>
+    <text x="90" y="812" font-family="monospace" fill="#2E7D32">/grasp/command</text>
+    <text x="500" y="812" font-size="12" fill="#666">geometry_msgs/Twist (hijack)</text>
+    <text x="720" y="812" font-size="12">Grasp ScriptNode</text>
+    <text x="90" y="832" font-size="11" fill="#888" font-style="italic">→ pickup: FixedJoint snap · release: detach + MakeInvisible</text>
+  </g>
+
+  <!-- ══════════════ EKF stack 안내 (cheat 자리 대체) ══════════════ -->
+  <rect x="30" y="876" width="840" height="84" fill="#FFF8E1" stroke="#E65100" stroke-width="2" rx="6"/>
+  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">🎯 /rover/estimated_pose 는 누가 발행?</text>
+  <text x="50" y="930" font-size="13" fill="#555">cheat: odom_to_estimated_pose 어댑터  →  /ground_truth/odom 단순 forward</text>
+  <text x="50" y="950" font-size="13" fill="#555">no cheat: EKF stack 노드들  →  wheel_odom (#2) + IMU (#1) + sun_yaw (#9) + TRN</text>
+
+  <!-- 총합 -->
+  <rect x="30" y="980" width="840" height="100" fill="#1B5E20" rx="8"/>
+  <text x="450" y="1015" text-anchor="middle" font-size="20" font-weight="bold" fill="white">총합 (per rover)</text>
+  <text x="450" y="1050" text-anchor="middle" font-size="16" fill="#C8E6C9">
+    멀티 모드: 11 pub + 3 sub   ·   단일 모드: 12 pub + 3 sub
+  </text>
+  <text x="450" y="1072" text-anchor="middle" font-size="13" fill="#A5D6A7">
+    USD baked 10 pub + 런처 1~2 pub (chase / overview)
+  </text>
+
+  <text x="450" y="1130" text-anchor="middle" font-size="12" fill="#5F5E5A" font-style="italic">
+    졸업 변경: ScriptNode ReadGtPose + PubGtOdom 두 노드만 제거 후 build_vehicle_v3 재실행
+  </text>
+  <text x="450" y="1156" text-anchor="middle" font-size="12" fill="#5F5E5A" font-style="italic">
+    그 외 USD prim / sensor / actuator 그래프 일절 변경 없음 — 안전한 swap
+  </text>
+
+</svg>

@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 900 1200"
+     font-family="'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
+  <rect width="900" height="1200" fill="#FAFAFA"/>
+
+  <defs>
+    <linearGradient id="title-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="100%" stop-color="#E65100"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ── TITLE ────────────────────────────────────────── -->
+  <rect x="0" y="0" width="900" height="100" fill="url(#title-grad)"/>
+  <text x="450" y="46" text-anchor="middle" font-size="26" font-weight="bold" fill="white">
+    🛰️ vehicle_v3 — ROS2 토픽 (현재, GT cheat 모드)
+  </text>
+  <text x="450" y="78" text-anchor="middle" font-size="14" fill="#FFF59D">
+    per rover · USD baked 11 pub + 3 sub  ·  런처 추가 chase cam 별도
+  </text>
+
+  <!-- ══════════════ PUBLISH 섹션 ══════════════ -->
+  <rect x="30" y="120" width="840" height="44" fill="#FCE4EC" stroke="#C62828" stroke-width="2" rx="6"/>
+  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">📤 PUBLISH (output) — 11 토픽</text>
+  <text x="850" y="148" text-anchor="end" font-size="12" fill="#C62828">namespace prefix: /rover_N/</text>
+
+  <!-- header -->
+  <rect x="30" y="170" width="840" height="32" fill="#FFEBEE" stroke="#C62828" stroke-width="1" rx="3"/>
+  <text x="48" y="190" font-size="13" font-weight="bold" fill="#B71C1C">#</text>
+  <text x="90" y="190" font-size="13" font-weight="bold" fill="#B71C1C">토픽</text>
+  <text x="500" y="190" font-size="13" font-weight="bold" fill="#B71C1C">타입</text>
+  <text x="720" y="190" font-size="13" font-weight="bold" fill="#B71C1C">용도</text>
+
+  <!-- rows -->
+  <g font-size="13" fill="#333">
+    <rect x="30" y="202" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="222">1</text>
+    <text x="90" y="222" font-family="monospace" fill="#1565C0">/imu/data</text>
+    <text x="500" y="222" font-size="12" fill="#666">sensor_msgs/Imu</text>
+    <text x="720" y="222" font-size="12">자세·각속도·선가속</text>
+
+    <rect x="30" y="234" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="254">2</text>
+    <text x="90" y="254" font-family="monospace" fill="#1565C0">/joint_states_raw</text>
+    <text x="500" y="254" font-size="12" fill="#666">sensor_msgs/JointState</text>
+    <text x="720" y="254" font-size="12">휠·팔 관절 측정값</text>
+
+    <rect x="30" y="266" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="286">3</text>
+    <text x="90" y="286" font-family="monospace" fill="#1565C0">/camera/rover/image_raw</text>
+    <text x="500" y="286" font-size="12" fill="#666">sensor_msgs/Image (RGB 640×480)</text>
+    <text x="720" y="286" font-size="12">본체 RGB</text>
+
+    <rect x="30" y="298" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="318">4</text>
+    <text x="90" y="318" font-family="monospace" fill="#1565C0">/camera/rover/depth</text>
+    <text x="500" y="318" font-size="12" fill="#666">sensor_msgs/Image (depth)</text>
+    <text x="720" y="318" font-size="12">본체 깊이</text>
+
+    <rect x="30" y="330" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="350">5</text>
+    <text x="90" y="350" font-family="monospace" fill="#1565C0">/camera/rover/camera_info</text>
+    <text x="500" y="350" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="350" font-size="12">본체 intrinsic</text>
+
+    <rect x="30" y="362" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="382">6</text>
+    <text x="90" y="382" font-family="monospace" fill="#1565C0">/camera/wrist/image_raw</text>
+    <text x="500" y="382" font-size="12" fill="#666">sensor_msgs/Image (RGB)</text>
+    <text x="720" y="382" font-size="12">손목 D455 RGB</text>
+
+    <rect x="30" y="394" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="414">7</text>
+    <text x="90" y="414" font-family="monospace" fill="#1565C0">/camera/wrist/depth</text>
+    <text x="500" y="414" font-size="12" fill="#666">sensor_msgs/Image (depth)</text>
+    <text x="720" y="414" font-size="12">손목 깊이</text>
+
+    <rect x="30" y="426" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="446">8</text>
+    <text x="90" y="446" font-family="monospace" fill="#1565C0">/camera/wrist/camera_info</text>
+    <text x="500" y="446" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="446" font-size="12">손목 intrinsic</text>
+
+    <rect x="30" y="458" width="840" height="32" fill="white" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="478">9</text>
+    <text x="90" y="478" font-family="monospace" fill="#1565C0">/camera/sun/image_raw</text>
+    <text x="500" y="478" font-size="12" fill="#666">sensor_msgs/Image (RGB 320×240)</text>
+    <text x="720" y="478" font-size="12">태양 위치 (sun_yaw 입력)</text>
+
+    <rect x="30" y="490" width="840" height="32" fill="#FFFAFA" stroke="#FFCDD2" stroke-width="0.5"/>
+    <text x="48" y="510">10</text>
+    <text x="90" y="510" font-family="monospace" fill="#1565C0">/camera/sun/camera_info</text>
+    <text x="500" y="510" font-size="12" fill="#666">sensor_msgs/CameraInfo</text>
+    <text x="720" y="510" font-size="12">sun cam intrinsic</text>
+
+    <!-- GT cheat row — 강조 -->
+    <rect x="30" y="522" width="840" height="40" fill="#FFE0E0" stroke="#C62828" stroke-width="2" rx="3"/>
+    <text x="48" y="546" font-weight="bold" fill="#B71C1C">11</text>
+    <text x="90" y="546" font-family="monospace" fill="#B71C1C" font-weight="bold">/ground_truth/odom</text>
+    <text x="500" y="546" font-size="12" fill="#B71C1C">nav_msgs/Odometry</text>
+    <text x="720" y="546" font-size="12" fill="#B71C1C" font-weight="bold">⚠️ GT cheat (졸업 시 제거)</text>
+    <text x="90" y="558" font-size="10" fill="#C62828" font-style="italic">ScriptNode 가 articulation world transform 을 직접 읽어 발행</text>
+  </g>
+
+  <!-- ══════════════ SUBSCRIBE 섹션 ══════════════ -->
+  <rect x="30" y="588" width="840" height="44" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2" rx="6"/>
+  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">📥 SUBSCRIBE (input) — 3 토픽</text>
+  <text x="850" y="616" text-anchor="end" font-size="12" fill="#2E7D32">제어 / manipulation 명령 진입점</text>
+
+  <!-- header -->
+  <rect x="30" y="638" width="840" height="32" fill="#E8F5E9" stroke="#2E7D32" stroke-width="1" rx="3"/>
+  <text x="48" y="658" font-size="13" font-weight="bold" fill="#1B5E20">#</text>
+  <text x="90" y="658" font-size="13" font-weight="bold" fill="#1B5E20">토픽</text>
+  <text x="500" y="658" font-size="13" font-weight="bold" fill="#1B5E20">타입</text>
+  <text x="720" y="658" font-size="13" font-weight="bold" fill="#1B5E20">동작</text>
+
+  <g font-size="13" fill="#333">
+    <rect x="30" y="670" width="840" height="60" fill="white" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="692">1</text>
+    <text x="90" y="692" font-family="monospace" fill="#2E7D32">/cmd_vel</text>
+    <text x="500" y="692" font-size="12" fill="#666">geometry_msgs/Twist</text>
+    <text x="720" y="692" font-size="12">Ackermann ScriptNode</text>
+    <text x="90" y="712" font-size="11" fill="#888" font-style="italic">→ 휠 4 조향각 + 6 구동속도 (6륜 Ackermann 변환)</text>
+
+    <rect x="30" y="730" width="840" height="60" fill="#FAFAFA" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="752">2</text>
+    <text x="90" y="752" font-family="monospace" fill="#2E7D32">/arm/joint_command</text>
+    <text x="500" y="752" font-size="12" fill="#666">sensor_msgs/JointState</text>
+    <text x="720" y="752" font-size="12">m0609 Articulation</text>
+    <text x="90" y="772" font-size="11" fill="#888" font-style="italic">→ Doosan 6축 팔 관절 위치 지령 (I11 인터페이스 계약)</text>
+
+    <rect x="30" y="790" width="840" height="60" fill="white" stroke="#C8E6C9" stroke-width="0.5"/>
+    <text x="48" y="812">3</text>
+    <text x="90" y="812" font-family="monospace" fill="#2E7D32">/grasp/command</text>
+    <text x="500" y="812" font-size="12" fill="#666">geometry_msgs/Twist (hijack)</text>
+    <text x="720" y="812" font-size="12">Grasp ScriptNode</text>
+    <text x="90" y="832" font-size="11" fill="#888" font-style="italic">→ pickup: FixedJoint snap · release: detach + MakeInvisible</text>
+  </g>
+
+  <!-- ══════════════ 런처 추가 + 요약 ══════════════ -->
+  <rect x="30" y="876" width="840" height="84" fill="#FFF8E1" stroke="#E65100" stroke-width="2" rx="6"/>
+  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">➕ run_vehicle_v3.py 런처가 별도 add</text>
+  <text x="50" y="930" font-size="13" fill="#555">/camera/chase/image_raw  (3인칭 시연용 cam) — 멀티/단일 모두 활성</text>
+  <text x="50" y="950" font-size="13" fill="#555">/camera/overview/image_raw  (top-down) — 단일 rover 시에만</text>
+
+  <!-- 총합 -->
+  <rect x="30" y="980" width="840" height="100" fill="#212121" rx="8"/>
+  <text x="450" y="1015" text-anchor="middle" font-size="20" font-weight="bold" fill="white">총합 (per rover)</text>
+  <text x="450" y="1050" text-anchor="middle" font-size="16" fill="#FFF59D">
+    멀티 모드: 12 pub + 3 sub   ·   단일 모드: 13 pub + 3 sub
+  </text>
+  <text x="450" y="1072" text-anchor="middle" font-size="13" fill="#BBDEFB">
+    USD baked 11 pub + 런처 1~2 pub (chase / overview)
+  </text>
+
+  <text x="450" y="1130" text-anchor="middle" font-size="12" fill="#5F5E5A" font-style="italic">
+    멀티 rover 시 namespace 격리 — /rover_1/imu/data, /rover_2/cmd_vel 등
+  </text>
+  <text x="450" y="1156" text-anchor="middle" font-size="12" fill="#5F5E5A" font-style="italic">
+    공유 협조 토픽 (ns 없음): /mineral_claims · /rover_positions — supervisor 발행
+  </text>
+
+</svg>
