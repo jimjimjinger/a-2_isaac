@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
      viewBox="0 0 900 1200"
-     font-family="'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', sans-serif">
+     font-family="'Noto Sans CJK KR', 'Noto Color Emoji', sans-serif">
   <rect width="900" height="1200" fill="#FAFAFA"/>
 
   <defs>
