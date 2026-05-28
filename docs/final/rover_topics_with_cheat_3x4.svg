@@ -14,7 +14,7 @@
   <!-- ── TITLE ────────────────────────────────────────── -->
   <rect x="0" y="0" width="900" height="100" fill="url(#title-grad)"/>
   <text x="450" y="46" text-anchor="middle" font-size="26" font-weight="bold" fill="white">
-    🛰️ vehicle_v3 — ROS2 토픽 (현재, GT cheat 모드)
+    vehicle_v3 — ROS2 토픽 (현재, GT cheat 모드)
   </text>
   <text x="450" y="78" text-anchor="middle" font-size="14" fill="#FFF59D">
     per rover · USD baked 11 pub + 3 sub  ·  런처 추가 chase cam 별도
@@ -22,7 +22,7 @@
 
   <!-- ══════════════ PUBLISH 섹션 ══════════════ -->
   <rect x="30" y="120" width="840" height="44" fill="#FCE4EC" stroke="#C62828" stroke-width="2" rx="6"/>
-  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">📤 PUBLISH (output) — 11 토픽</text>
+  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">▲ PUBLISH (output) — 11 토픽</text>
   <text x="850" y="148" text-anchor="end" font-size="12" fill="#C62828">namespace prefix: /rover_N/</text>
 
   <!-- header -->
@@ -99,13 +99,13 @@
     <text x="48" y="546" font-weight="bold" fill="#B71C1C">11</text>
     <text x="90" y="546" font-family="monospace" fill="#B71C1C" font-weight="bold">/ground_truth/odom</text>
     <text x="500" y="546" font-size="12" fill="#B71C1C">nav_msgs/Odometry</text>
-    <text x="720" y="546" font-size="12" fill="#B71C1C" font-weight="bold">⚠️ GT cheat (졸업 시 제거)</text>
+    <text x="720" y="546" font-size="12" fill="#B71C1C" font-weight="bold">⚠ GT cheat (졸업 시 제거)</text>
     <text x="90" y="558" font-size="10" fill="#C62828" font-style="italic">ScriptNode 가 articulation world transform 을 직접 읽어 발행</text>
   </g>
 
   <!-- ══════════════ SUBSCRIBE 섹션 ══════════════ -->
   <rect x="30" y="588" width="840" height="44" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2" rx="6"/>
-  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">📥 SUBSCRIBE (input) — 3 토픽</text>
+  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">▼ SUBSCRIBE (input) — 3 토픽</text>
   <text x="850" y="616" text-anchor="end" font-size="12" fill="#2E7D32">제어 / manipulation 명령 진입점</text>
 
   <!-- header -->
@@ -140,7 +140,7 @@
 
   <!-- ══════════════ 런처 추가 + 요약 ══════════════ -->
   <rect x="30" y="876" width="840" height="84" fill="#FFF8E1" stroke="#E65100" stroke-width="2" rx="6"/>
-  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">➕ run_vehicle_v3.py 런처가 별도 add</text>
+  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">＋ run_vehicle_v3.py 런처가 별도 add</text>
   <text x="50" y="930" font-size="13" fill="#555">/camera/chase/image_raw  (3인칭 시연용 cam) — 멀티/단일 모두 활성</text>
   <text x="50" y="950" font-size="13" fill="#555">/camera/overview/image_raw  (top-down) — 단일 rover 시에만</text>
 

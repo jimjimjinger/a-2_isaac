@@ -14,7 +14,7 @@
   <!-- ── TITLE ────────────────────────────────────────── -->
   <rect x="0" y="0" width="900" height="100" fill="url(#title-grad)"/>
   <text x="450" y="46" text-anchor="middle" font-size="26" font-weight="bold" fill="white">
-    🎓 vehicle_v3 — ROS2 토픽 (졸업 후, no cheat)
+    vehicle_v3 — ROS2 토픽 (졸업 후, no cheat)
   </text>
   <text x="450" y="78" text-anchor="middle" font-size="14" fill="#C8E6C9">
     per rover · USD baked 10 pub + 3 sub  ·  /ground_truth/odom 제거
@@ -22,7 +22,7 @@
 
   <!-- ══════════════ PUBLISH 섹션 ══════════════ -->
   <rect x="30" y="120" width="840" height="44" fill="#FCE4EC" stroke="#C62828" stroke-width="2" rx="6"/>
-  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">📤 PUBLISH (output) — 10 토픽</text>
+  <text x="50" y="148" font-size="18" font-weight="bold" fill="#B71C1C">▲ PUBLISH (output) — 10 토픽</text>
   <text x="850" y="148" text-anchor="end" font-size="12" fill="#C62828">cheat 1개 제거 (10 = 11 − 1)</text>
 
   <!-- header -->
@@ -100,13 +100,13 @@
     <text x="48" y="556" fill="#9E9E9E" text-decoration="line-through">11</text>
     <text x="90" y="556" font-family="monospace" fill="#9E9E9E" text-decoration="line-through">/ground_truth/odom</text>
     <text x="500" y="556" font-size="12" fill="#9E9E9E">nav_msgs/Odometry</text>
-    <text x="720" y="556" font-size="12" font-weight="bold" fill="#9E9E9E">❌ 제거 (GT cheat)</text>
+    <text x="720" y="556" font-size="12" font-weight="bold" fill="#9E9E9E">✗ 제거 (GT cheat)</text>
     <text x="90" y="568" font-size="10" fill="#9E9E9E" font-style="italic">ScriptNode ReadGtPose + PubGtOdom 두 노드만 graph 에서 제거 후 재bake</text>
   </g>
 
   <!-- ══════════════ SUBSCRIBE 섹션 ══════════════ -->
   <rect x="30" y="588" width="840" height="44" fill="#E8F5E9" stroke="#2E7D32" stroke-width="2" rx="6"/>
-  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">📥 SUBSCRIBE (input) — 3 토픽 (변경 없음)</text>
+  <text x="50" y="616" font-size="18" font-weight="bold" fill="#1B5E20">▼ SUBSCRIBE (input) — 3 토픽 (변경 없음)</text>
   <text x="850" y="616" text-anchor="end" font-size="12" fill="#2E7D32">제어 / manipulation 명령 진입점</text>
 
   <!-- header -->
@@ -141,7 +141,7 @@
 
   <!-- ══════════════ EKF stack 안내 (cheat 자리 대체) ══════════════ -->
   <rect x="30" y="876" width="840" height="84" fill="#FFF8E1" stroke="#E65100" stroke-width="2" rx="6"/>
-  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">🎯 /rover/estimated_pose 는 누가 발행?</text>
+  <text x="50" y="904" font-size="16" font-weight="bold" fill="#BF360C">■ /rover/estimated_pose 는 누가 발행?</text>
   <text x="50" y="930" font-size="13" fill="#555">cheat: odom_to_estimated_pose 어댑터  →  /ground_truth/odom 단순 forward</text>
   <text x="50" y="950" font-size="13" fill="#555">no cheat: EKF stack 노드들  →  wheel_odom (#2) + IMU (#1) + sun_yaw (#9) + TRN</text>
 
